@@ -2,3 +2,7 @@
 .build/
 .swiftpm/
 DerivedData/
+*.d
+*.o
+*.swiftdeps
+*.dia
