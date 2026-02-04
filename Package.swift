@@ -13,12 +13,18 @@ let package = Package(
   products: [
     .library(name: "Terra", targets: ["Terra"]),
     .library(name: "TerraCoreML", targets: ["TerraCoreML"]),
-    .executable(name: "TerraSample", targets: ["TerraSample"])
+    .library(name: "TerraTraceKit", targets: ["TerraTraceKit"]),
+    .executable(name: "TerraSample", targets: ["TerraSample"]),
+    .executable(name: "TraceMacApp", targets: ["TraceMacApp"]),
+    .executable(name: "terra", targets: ["TerraCLI"])
   ],
   dependencies: [
+    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
+    .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.25.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", from: "2.3.0"),
-    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.2.0")
+    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.2.0"),
+    .package(url: "https://github.com/apple/swift-testing.git", from: "0.7.0")
   ],
   targets: [
     .target(
@@ -46,6 +52,13 @@ let package = Package(
       ],
       path: "Sources/TerraCoreML"
     ),
+    .target(
+      name: "TerraTraceKit",
+      dependencies: [
+        .product(name: "OpenTelemetryProtocolExporterHTTP", package: "opentelemetry-swift")
+      ],
+      path: "Sources/TerraTraceKit"
+    ),
     .testTarget(
       name: "TerraTests",
       dependencies: [
@@ -55,10 +68,42 @@ let package = Package(
       ],
       path: "Tests/TerraTests"
     ),
+    .testTarget(
+      name: "TerraTraceKitTests",
+      dependencies: [
+        "TerraTraceKit",
+        .product(name: "OpenTelemetryProtocolExporterHTTP", package: "opentelemetry-swift"),
+        .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+        .product(name: "Testing", package: "swift-testing")
+      ],
+      path: "Tests/TerraTraceKitTests"
+    ),
+    .testTarget(
+      name: "TraceMacAppTests",
+      dependencies: [
+        "TraceMacApp",
+        "TerraTraceKit",
+        .product(name: "Testing", package: "swift-testing")
+      ],
+      path: "Tests/TraceMacAppTests"
+    ),
     .executableTarget(
       name: "TerraSample",
       dependencies: ["Terra"],
       path: "Examples/Terra Sample"
+    ),
+    .executableTarget(
+      name: "TerraCLI",
+      dependencies: [
+        "TerraTraceKit",
+        .product(name: "ArgumentParser", package: "swift-argument-parser")
+      ],
+      path: "Sources/terra-cli"
+    ),
+    .executableTarget(
+      name: "TraceMacApp",
+      dependencies: ["TerraTraceKit"],
+      path: "Sources/TraceMacApp"
     )
   ]
 )

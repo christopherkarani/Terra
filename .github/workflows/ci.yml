@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2"
+      - name: Swift Version
+        run: swift --version
+      - name: Run swift test
+        run: swift test
+      - name: Run Swift Testing (explicit)
+        run: swift test --enable-swift-testing
