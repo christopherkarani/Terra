@@ -6,7 +6,7 @@ final class TraceSplitViewController: NSSplitViewController {
   private let viewModel: TraceViewModel
   private let listViewController = TraceListViewController()
   private let timelineViewController = TraceTimelineViewController()
-  private let detailViewController = SpanDetailViewController()
+  private let inspectorViewController = SpanInspectorSplitViewController()
   private let loadingOverlay = ClickThroughView()
   private let loadingIndicator = NSProgressIndicator()
   private let loadingLabel = NSTextField(labelWithString: "Refreshing traces…")
@@ -15,11 +15,14 @@ final class TraceSplitViewController: NSSplitViewController {
   private var refreshTimer: Timer?
   private var isRefreshing = false
   private var isLoading = false
+  private var pendingRefresh = false
 
   init(viewModel: TraceViewModel) {
     self.viewModel = viewModel
     super.init(nibName: nil, bundle: nil)
     listViewController.delegate = self
+    timelineViewController.delegate = self
+    inspectorViewController.spanListViewController.delegate = self
   }
 
   required init?(coder: NSCoder) {
@@ -43,6 +46,11 @@ final class TraceSplitViewController: NSSplitViewController {
     stopRefreshLoop()
   }
 
+  func updateSearchQuery(_ query: String) {
+    viewModel.updateSearchQuery(query)
+    refreshSnapshot()
+  }
+
   private func configureSplitView() {
     splitView.isVertical = true
     splitView.dividerStyle = .thin
@@ -53,7 +61,7 @@ final class TraceSplitViewController: NSSplitViewController {
 
     let timelineItem = NSSplitViewItem(viewController: timelineViewController)
 
-    let detailItem = NSSplitViewItem(viewController: detailViewController)
+    let detailItem = NSSplitViewItem(viewController: inspectorViewController)
     detailItem.minimumThickness = 240
     detailItem.canCollapse = false
 
@@ -79,7 +87,10 @@ final class TraceSplitViewController: NSSplitViewController {
   }
 
   private func refreshSnapshot() {
-    guard !isRefreshing else { return }
+    guard !isRefreshing else {
+      pendingRefresh = true
+      return
+    }
     isRefreshing = true
     setLoading(true)
 
@@ -90,6 +101,10 @@ final class TraceSplitViewController: NSSplitViewController {
         self.applySnapshot()
         self.isRefreshing = false
         self.setLoading(false)
+        if self.pendingRefresh {
+          self.pendingRefresh = false
+          self.refreshSnapshot()
+        }
       }
     }
   }
@@ -103,11 +118,16 @@ final class TraceSplitViewController: NSSplitViewController {
   private func updateDetailViews(snapshot: TraceSnapshot) {
     let selectedTraceID = viewModel.selectedTraceID
     let spans = selectedTraceID.flatMap { snapshot.traces[$0] }
-    timelineViewController.update(selectedTraceID: selectedTraceID, spans: spans)
-    detailViewController.update(
+    timelineViewController.update(
+      selectedTraceID: selectedTraceID,
+      spans: spans,
+      selectedSpanID: viewModel.selectedSpanID
+    )
+    inspectorViewController.update(
       snapshot: snapshot,
       selectedTraceID: selectedTraceID,
-      selectedSpanID: viewModel.selectedSpanID
+      selectedSpanID: viewModel.selectedSpanID,
+      spans: viewModel.spanListItems
     )
   }
 
@@ -163,6 +183,22 @@ final class TraceSplitViewController: NSSplitViewController {
 extension TraceSplitViewController: TraceListViewControllerDelegate {
   func traceListViewController(_ controller: TraceListViewController, didSelectTraceID traceID: TraceID?) {
     viewModel.selectedTraceID = traceID
+    updateDetailViews(snapshot: viewModel.snapshot)
+  }
+}
+
+@MainActor
+extension TraceSplitViewController: TraceTimelineViewControllerDelegate {
+  func traceTimelineViewController(_ controller: TraceTimelineViewController, didSelectSpanID spanID: SpanID?) {
+    viewModel.selectedSpanID = spanID
+    updateDetailViews(snapshot: viewModel.snapshot)
+  }
+}
+
+@MainActor
+extension TraceSplitViewController: SpanListViewControllerDelegate {
+  func spanListViewController(_ controller: SpanListViewController, didSelectSpanID spanID: SpanID?) {
+    viewModel.selectedSpanID = spanID
     updateDetailViews(snapshot: viewModel.snapshot)
   }
 }

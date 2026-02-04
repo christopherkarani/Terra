@@ -5,8 +5,14 @@ import TerraTraceKit
 final class TraceViewModel {
   private let traceStore: TraceStore
   private let filter: TraceFilter?
+  private(set) var searchFilter: TraceFilter?
 
   private(set) var snapshot: TraceSnapshot
+  var spanListItems: [SpanRecord] {
+    guard let selectedTraceID else { return [] }
+    let spans = snapshot.traces[selectedTraceID] ?? []
+    return spans.sorted(by: spanTimelineSort)
+  }
   var selectedTraceID: TraceID? {
     didSet {
       guard selectedTraceID != oldValue else { return }
@@ -22,6 +28,10 @@ final class TraceViewModel {
       }
     }
   }
+  var selectedSpan: SpanRecord? {
+    guard let selectedTraceID, let selectedSpanID else { return nil }
+    return snapshot.traces[selectedTraceID]?.first { $0.spanID == selectedSpanID }
+  }
 
   init(traceStore: TraceStore, filter: TraceFilter? = nil) {
     self.traceStore = traceStore
@@ -29,9 +39,71 @@ final class TraceViewModel {
     self.snapshot = TraceSnapshot(allSpans: [], traces: [:])
   }
 
+  func updateSearchQuery(_ query: String) {
+    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      searchFilter = nil
+      return
+    }
+
+    if trimmed.lowercased().hasPrefix("trace:") {
+      let value = String(trimmed.dropFirst("trace:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+      if let traceID = TraceID(hex: value) {
+        searchFilter = TraceFilter(traceID: traceID)
+      } else {
+        searchFilter = value.isEmpty ? nil : TraceFilter(namePrefix: value)
+      }
+      return
+    }
+
+    if trimmed.lowercased().hasPrefix("name:") {
+      let value = String(trimmed.dropFirst("name:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+      searchFilter = value.isEmpty ? nil : TraceFilter(namePrefix: value)
+      return
+    }
+
+    if let traceID = TraceID(hex: trimmed) {
+      searchFilter = TraceFilter(traceID: traceID)
+    } else {
+      searchFilter = TraceFilter(namePrefix: trimmed)
+    }
+  }
+
+  func selectNextSpan() {
+    guard !spanListItems.isEmpty else { return }
+    guard let selectedSpanID else {
+      self.selectedSpanID = spanListItems.first?.spanID
+      return
+    }
+
+    guard let index = spanListItems.firstIndex(where: { $0.spanID == selectedSpanID }) else {
+      self.selectedSpanID = spanListItems.first?.spanID
+      return
+    }
+
+    let nextIndex = min(index + 1, spanListItems.count - 1)
+    self.selectedSpanID = spanListItems[nextIndex].spanID
+  }
+
+  func selectPreviousSpan() {
+    guard !spanListItems.isEmpty else { return }
+    guard let selectedSpanID else {
+      self.selectedSpanID = spanListItems.last?.spanID
+      return
+    }
+
+    guard let index = spanListItems.firstIndex(where: { $0.spanID == selectedSpanID }) else {
+      self.selectedSpanID = spanListItems.last?.spanID
+      return
+    }
+
+    let previousIndex = max(index - 1, 0)
+    self.selectedSpanID = spanListItems[previousIndex].spanID
+  }
+
   func refresh() async {
-    let latest = await traceStore.snapshot(filter: filter)
-    snapshot = latest
+    let baseSnapshot = await traceStore.snapshot(filter: filter)
+    snapshot = applySearchFilter(baseSnapshot, searchFilter: searchFilter)
     reconcileSelectionAfterRefresh()
   }
 
@@ -55,6 +127,14 @@ final class TraceViewModel {
     guard let spans = snapshot.traces[traceID] else { return false }
     return spans.contains { $0.spanID == spanID }
   }
+
+  private func applySearchFilter(_ snapshot: TraceSnapshot, searchFilter: TraceFilter?) -> TraceSnapshot {
+    guard let searchFilter else { return snapshot }
+    let filtered = snapshot.allSpans.filter { searchFilter.matches($0) }
+    let grouped = Dictionary(grouping: filtered, by: { $0.traceID })
+    let traces = grouped.mapValues { $0.sorted(by: spanTimelineSort) }
+    return TraceSnapshot(allSpans: filtered.sorted(by: spanTimelineSort), traces: traces)
+  }
 }
 
 struct TraceTimelineModel: Sendable {
@@ -64,11 +144,12 @@ struct TraceTimelineModel: Sendable {
     let status: StatusCode
     let normalizedStart: Double
     let normalizedDuration: Double
+    let isSelected: Bool
   }
 
   let items: [Item]
 
-  init(spans: [SpanRecord]) {
+  init(spans: [SpanRecord], selectedSpanID: SpanID? = nil) {
     guard !spans.isEmpty else {
       self.items = []
       return
@@ -95,7 +176,8 @@ struct TraceTimelineModel: Sendable {
         name: span.name,
         status: span.status,
         normalizedStart: normalizedStart,
-        normalizedDuration: normalizedDuration
+        normalizedDuration: normalizedDuration,
+        isSelected: span.spanID == selectedSpanID
       )
     }
   }

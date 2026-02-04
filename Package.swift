@@ -21,8 +21,8 @@ let package = Package(
   dependencies: [
     .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.25.0"),
-    .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
-    .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", from: "2.3.0"),
+    .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", .exact("2.3.0")),
+    .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", .exact("2.3.0")),
     .package(url: "https://github.com/apple/swift-crypto.git", from: "4.2.0"),
     .package(url: "https://github.com/apple/swift-testing.git", from: "0.7.0")
   ],

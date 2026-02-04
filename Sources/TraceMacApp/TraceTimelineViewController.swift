@@ -2,7 +2,13 @@ import AppKit
 import TerraTraceKit
 
 @MainActor
+protocol TraceTimelineViewControllerDelegate: AnyObject {
+  func traceTimelineViewController(_ controller: TraceTimelineViewController, didSelectSpanID spanID: SpanID?)
+}
+
+@MainActor
 final class TraceTimelineViewController: NSViewController {
+  weak var delegate: TraceTimelineViewControllerDelegate?
   private let titleLabel = NSTextField(labelWithString: "Timeline")
   private let detailLabel = NSTextField(labelWithString: "Select a trace to view timeline")
   private let emptyTitleLabel = NSTextField(labelWithString: "No trace selected")
@@ -17,9 +23,13 @@ final class TraceTimelineViewController: NSViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     configureLayout()
+    timelineView.onSelectSpan = { [weak self] spanID in
+      guard let self else { return }
+      self.delegate?.traceTimelineViewController(self, didSelectSpanID: spanID)
+    }
   }
 
-  func update(selectedTraceID: TraceID?, spans: [SpanRecord]?) {
+  func update(selectedTraceID: TraceID?, spans: [SpanRecord]?, selectedSpanID: SpanID?) {
     let spanCount = spans?.count ?? 0
     if let selectedTraceID {
       detailLabel.stringValue = "Trace \(selectedTraceID.short) - \(spanCount) spans"
@@ -28,8 +38,9 @@ final class TraceTimelineViewController: NSViewController {
     }
 
     if let spans, !spans.isEmpty {
-      timelineView.update(model: TraceTimelineModel(spans: spans))
+      timelineView.update(model: TraceTimelineModel(spans: spans, selectedSpanID: selectedSpanID))
       emptyStack.isHidden = true
+      timelineView.setAccessibilityHidden(false)
     } else {
       timelineView.update(model: nil)
       if selectedTraceID == nil {
@@ -40,6 +51,7 @@ final class TraceTimelineViewController: NSViewController {
         emptySubtitleLabel.stringValue = "This trace has no spans yet"
       }
       emptyStack.isHidden = false
+      timelineView.setAccessibilityHidden(true)
     }
   }
 

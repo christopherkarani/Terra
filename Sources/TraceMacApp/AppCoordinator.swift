@@ -7,6 +7,7 @@ final class AppCoordinator {
   private let server: OTLPHTTPServer
   private var window: NSWindow?
   private var toolbarProvider: TraceToolbarProvider?
+  private weak var rootViewController: TraceSplitViewController?
 
   init(host: String = "127.0.0.1", port: UInt16 = 4318) {
     self.traceStore = TraceStore()
@@ -31,6 +32,7 @@ final class AppCoordinator {
   private func showWindow() {
     let viewModel = TraceViewModel(traceStore: traceStore)
     let rootViewController = TraceSplitViewController(viewModel: viewModel)
+    self.rootViewController = rootViewController
 
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
@@ -44,6 +46,9 @@ final class AppCoordinator {
     window.makeKeyAndOrderFront(nil)
 
     let toolbarProvider = TraceToolbarProvider()
+    toolbarProvider.onSearchChange = { [weak rootViewController] query in
+      rootViewController?.updateSearchQuery(query)
+    }
     window.toolbar = toolbarProvider.toolbar
     self.toolbarProvider = toolbarProvider
 

@@ -1,4 +1,5 @@
 import AppKit
+import TerraTraceKit
 
 @MainActor
 final class TraceTimelineView: NSView {
@@ -8,10 +9,12 @@ final class TraceTimelineView: NSView {
     static let horizontalPadding: CGFloat = TraceUIStyle.Spacing.large
     static let verticalPadding: CGFloat = TraceUIStyle.Spacing.large
     static let minimumBarWidth: CGFloat = TraceUIStyle.Sizing.timelineMinimumBarWidth
+    static let selectionStrokeWidth: CGFloat = 2
   }
 
   private var items: [TraceTimelineModel.Item] = []
   private let backgroundColor = TraceUIStyle.Colors.timelineBackground
+  var onSelectSpan: ((SpanID?) -> Void)?
 
   override var isFlipped: Bool {
     true
@@ -82,10 +85,22 @@ final class TraceTimelineView: NSView {
         let barColor = TraceUIStyle.Colors.statusFill(item.status)
         context.setFillColor(barColor.cgColor)
         context.fill(barRect)
+
+        if item.isSelected {
+          context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+          context.setLineWidth(Constants.selectionStrokeWidth)
+          context.stroke(barRect.insetBy(dx: 1, dy: 1))
+        }
       }
 
       y += rowStride
       index += 1
     }
+  }
+
+  override func mouseDown(with event: NSEvent) {
+    let localPoint = convert(event.locationInWindow, from: nil)
+    let hit = TraceTimelineHitTester.spanID(at: localPoint, in: bounds, items: items)
+    onSelectSpan?(hit)
   }
 }

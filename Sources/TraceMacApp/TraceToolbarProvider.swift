@@ -9,6 +9,7 @@ final class TraceToolbarProvider: NSObject, NSToolbarDelegate {
   }
 
   let toolbar: NSToolbar
+  var onSearchChange: ((String) -> Void)?
 
   override init() {
     self.toolbar = NSToolbar(identifier: "TraceToolbar")
@@ -45,6 +46,9 @@ final class TraceToolbarProvider: NSObject, NSToolbarDelegate {
     case ItemIdentifier.search:
       let item = NSSearchToolbarItem(itemIdentifier: itemIdentifier)
       item.searchField.placeholderString = "Search traces"
+      item.searchField.target = self
+      item.searchField.action = #selector(searchFieldChanged(_:))
+      item.searchField.sendsSearchStringImmediately = true
       return item
     case ItemIdentifier.filter:
       return makeButtonItem(identifier: itemIdentifier, title: "Filter")
@@ -67,5 +71,10 @@ final class TraceToolbarProvider: NSObject, NSToolbarDelegate {
   @objc
   private func toolbarPlaceholderAction(_ sender: Any?) {
     // Placeholder for future toolbar actions.
+  }
+
+  @objc
+  private func searchFieldChanged(_ sender: NSSearchField) {
+    onSearchChange?(sender.stringValue)
   }
 }
