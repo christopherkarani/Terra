@@ -13,12 +13,14 @@ let package = Package(
   products: [
     .library(name: "Terra", targets: ["Terra"]),
     .library(name: "TerraCoreML", targets: ["TerraCoreML"]),
+    .library(name: "TerraTraceKit", targets: ["TerraTraceKit"]),
     .executable(name: "TerraSample", targets: ["TerraSample"])
   ],
   dependencies: [
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", from: "2.3.0"),
-    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.2.0")
+    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.2.0"),
+    .package(url: "https://github.com/apple/swift-testing.git", from: "0.99.0"),
   ],
   targets: [
     .target(
@@ -46,6 +48,23 @@ let package = Package(
       ],
       path: "Sources/TerraCoreML"
     ),
+    .target(
+      name: "TerraTraceKit",
+      dependencies: [
+        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+      ],
+      path: "Sources/TerraTraceKit"
+    ),
+    .target(
+      name: "TraceMacAppUI",
+      dependencies: [
+        "TerraTraceKit",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+      ],
+      path: "Sources/TraceMacApp",
+      exclude: ["TraceMacApp.swift"]
+    ),
     .testTarget(
       name: "TerraTests",
       dependencies: [
@@ -54,6 +73,27 @@ let package = Package(
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core")
       ],
       path: "Tests/TerraTests"
+    ),
+    .testTarget(
+      name: "TraceMacAppTests",
+      dependencies: [
+        "TerraTraceKit",
+        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+        .product(name: "Testing", package: "swift-testing"),
+      ],
+      path: "Tests/TraceMacAppTests"
+    ),
+    .testTarget(
+      name: "TraceMacAppUITests",
+      dependencies: [
+        "TraceMacAppUI",
+        "TerraTraceKit",
+        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+        .product(name: "Testing", package: "swift-testing"),
+      ],
+      path: "Tests/TraceMacAppUITests"
     ),
     .executableTarget(
       name: "TerraSample",
