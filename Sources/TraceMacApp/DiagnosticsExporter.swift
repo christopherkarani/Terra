@@ -14,7 +14,7 @@ enum DiagnosticsExporter {
       guard response == .OK, let destinationURL = panel.url else { return }
       Task { @MainActor in
         do {
-          try Self.writeDiagnosticsZip(
+          try await Self.writeDiagnosticsZip(
             to: destinationURL,
             tracesDirectoryURL: tracesDirectoryURL,
             licenseStatus: licenseStatus
@@ -24,7 +24,7 @@ enum DiagnosticsExporter {
           alert.alertStyle = .warning
           alert.messageText = "Could not export diagnostics."
           alert.informativeText = error.localizedDescription
-          alert.beginSheetModal(for: window)
+          await alert.beginSheetModal(for: window)
         }
       }
     }
@@ -34,7 +34,7 @@ enum DiagnosticsExporter {
     to destinationURL: URL,
     tracesDirectoryURL: URL,
     licenseStatus: LicenseManager.Status
-  ) throws {
+  ) async throws {
     let fileManager = FileManager.default
     let tempDir = fileManager.temporaryDirectory
       .appendingPathComponent("TraceMacAppDiagnostics-\(UUID().uuidString)", isDirectory: true)
@@ -56,7 +56,7 @@ enum DiagnosticsExporter {
       try? fileManager.copyItem(at: logURL, to: dest)
     }
 
-    try makeZip(from: tempDir, to: destinationURL)
+    try await makeZip(from: tempDir, to: destinationURL)
   }
 
   private static func listTraceFiles(in directoryURL: URL) -> [TraceFileInfo] {
@@ -80,15 +80,21 @@ enum DiagnosticsExporter {
     .sorted { ($0.modifiedAt ?? .distantPast) > ($1.modifiedAt ?? .distantPast) }
   }
 
-  private static func makeZip(from directoryURL: URL, to destinationURL: URL) throws {
+  private static func makeZip(from directoryURL: URL, to destinationURL: URL) async throws {
     // Prefer `ditto` (built-in on macOS) to avoid extra dependencies.
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
     process.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent", directoryURL.path, destinationURL.path]
 
     try process.run()
-    process.waitUntilExit()
-    guard process.terminationStatus == 0 else {
+
+    let terminationStatus: Int32 = await withCheckedContinuation { continuation in
+      process.terminationHandler = { process in
+        continuation.resume(returning: process.terminationStatus)
+      }
+    }
+
+    guard terminationStatus == 0 else {
       throw CocoaError(.fileWriteUnknown)
     }
   }

@@ -75,6 +75,18 @@ let package = Package(
       path: "Tests/TerraTests"
     ),
     .testTarget(
+      name: "TerraCoreMLTests",
+      dependencies: [
+        "TerraCoreML",
+        "Terra",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+        .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
+        .product(name: "Testing", package: "swift-testing"),
+      ],
+      path: "Tests/TerraCoreMLTests"
+    ),
+    .testTarget(
       name: "TraceMacAppTests",
       dependencies: [
         "TerraTraceKit",

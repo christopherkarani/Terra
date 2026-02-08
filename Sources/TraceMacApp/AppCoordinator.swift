@@ -450,7 +450,13 @@ extension AppCoordinator: NSMenuItemValidation {
       menuItem.state = AppSettings.isAutomaticUpdateChecksEnabled ? .on : .off
       return true
     case #selector(checkForUpdates(_:)):
-      return updaterController.isAvailable
+      let feedURL = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String
+      let hasFeedURL = !(feedURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+      return updaterController.isAvailable && hasFeedURL
+    case #selector(openPrivacyPolicy(_:)):
+      return LegalDocs.privacyPolicyURL() != nil
+    case #selector(openEULA(_:)):
+      return LegalDocs.eulaURL() != nil
     case #selector(deactivateLicense(_:)):
       return {
         if case .licensed = licenseManager.status { return true }

@@ -10,7 +10,14 @@ enum AppSettings {
     static let automaticUpdateChecksEnabled = "traceMacApp.automaticUpdateChecksEnabled"
   }
 
-  private static let defaults = UserDefaults.standard
+  private static let defaults: UserDefaults = {
+    let ud = UserDefaults.standard
+    ud.register(defaults: [
+      Key.crashReportingEnabled: false,
+      Key.automaticUpdateChecksEnabled: false
+    ])
+    return ud
+  }()
 
   static var tracesDirectoryURL: URL {
     get {

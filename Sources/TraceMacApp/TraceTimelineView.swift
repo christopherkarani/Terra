@@ -3,11 +3,12 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 import TerraTraceKit
 
-final class TraceTimelineView: NSView {
+final class TraceTimelineView: NSView, NSAccessibilityGroup {
   var onSelectSpan: ((SpanData) -> Void)?
 
   private var viewModel: TimelineViewModel?
   private var layouts: [SpanLayout] = []
+  private var cachedExpectedSize: NSSize = .zero
   private var selectedSpanId: SpanId?
 
   private let rowHeight: CGFloat = 20
@@ -18,16 +19,40 @@ final class TraceTimelineView: NSView {
 
   override var isFlipped: Bool { true }
 
+  // MARK: - Accessibility
+
+  override func accessibilityRole() -> NSAccessibility.Role? {
+    .group
+  }
+
+  override func accessibilityChildren() -> [Any]? {
+    layouts.map { layout in
+      let element = NSAccessibilityElement()
+      element.setAccessibilityLabel(layout.span.name)
+      element.setAccessibilityRole(.cell)
+      let screenRect = window.map { window in
+        let windowRect = convert(layout.rect, to: nil)
+        return window.convertToScreen(windowRect)
+      } ?? layout.rect
+      element.setAccessibilityFrame(screenRect)
+      element.setAccessibilityParent(self)
+      return element
+    }
+  }
+
+  // MARK: - Public Methods
+
   func update(with viewModel: TimelineViewModel) {
     self.viewModel = viewModel
-    self.layouts = []
     self.selectedSpanId = nil
+    rebuildLayouts()
     needsDisplay = true
   }
 
   func clear() {
     viewModel = nil
     layouts = []
+    cachedExpectedSize = .zero
     selectedSpanId = nil
     needsDisplay = true
   }
@@ -42,72 +67,102 @@ final class TraceTimelineView: NSView {
     TraceUI.timelineCanvasColor.setFill()
     dirtyRect.fill()
 
-    guard let viewModel else {
+    guard viewModel != nil else {
       drawPlaceholder(in: dirtyRect)
+      return
+    }
+
+    guard !layouts.isEmpty else {
+      drawPlaceholder(in: dirtyRect)
+      return
+    }
+
+    if frame.size != cachedExpectedSize {
+      frame.size = cachedExpectedSize
+    }
+
+    let availableWidth = cachedExpectedSize.width - leftPadding - rightPadding
+
+    // Draw lane backgrounds
+    if let viewModel {
+      for (laneIndex, _) in viewModel.lanes.enumerated() {
+        let y = topPadding + CGFloat(laneIndex) * (rowHeight + rowSpacing)
+        let laneRect = NSRect(x: leftPadding, y: y - 2, width: availableWidth, height: rowHeight + 4)
+        TraceUI.timelineLaneColor.setFill()
+        NSBezierPath(roundedRect: laneRect, xRadius: 6, yRadius: 6).fill()
+      }
+    }
+
+    // Draw cached span layouts
+    for layout in layouts {
+      let fillColor: NSColor
+      if layout.isError {
+        fillColor = .systemRed
+      } else if layout.isCritical {
+        fillColor = .systemOrange
+      } else {
+        fillColor = .systemBlue
+      }
+
+      let barPath = NSBezierPath(roundedRect: layout.rect, xRadius: 5, yRadius: 5)
+      fillColor.withAlphaComponent(0.88).setFill()
+      barPath.fill()
+      TraceUI.timelineStrokeColor.setStroke()
+      barPath.lineWidth = 1
+      barPath.stroke()
+
+      if layout.span.spanId == selectedSpanId {
+        NSColor.controlAccentColor.setStroke()
+        let strokePath = NSBezierPath(roundedRect: layout.rect.insetBy(dx: -1, dy: -1), xRadius: 4, yRadius: 4)
+        strokePath.lineWidth = 2
+        strokePath.stroke()
+      }
+
+      drawLabel(layout.span.name, in: layout.rect)
+    }
+  }
+
+  // MARK: - Private Methods
+
+  private func rebuildLayouts() {
+    guard let viewModel else {
+      layouts = []
+      cachedExpectedSize = .zero
       return
     }
 
     let lanes = viewModel.lanes
     guard !lanes.isEmpty else {
-      drawPlaceholder(in: dirtyRect)
+      layouts = []
+      cachedExpectedSize = .zero
       return
     }
 
-    layouts = []
+    var newLayouts: [SpanLayout] = []
 
     let totalHeight = topPadding
       + CGFloat(lanes.count) * rowHeight
       + CGFloat(max(0, lanes.count - 1)) * rowSpacing
       + topPadding
     let totalWidth = max(bounds.width, 600)
-    let expectedSize = NSSize(width: totalWidth, height: totalHeight)
-    if frame.size != expectedSize {
-      frame.size = expectedSize
-    }
+    cachedExpectedSize = NSSize(width: totalWidth, height: totalHeight)
 
     let availableWidth = totalWidth - leftPadding - rightPadding
     let traceDuration = max(viewModel.trace.duration, 0.001)
 
     for (laneIndex, lane) in lanes.enumerated() {
       let y = topPadding + CGFloat(laneIndex) * (rowHeight + rowSpacing)
-      let laneRect = NSRect(x: leftPadding, y: y - 2, width: availableWidth, height: rowHeight + 4)
-      TraceUI.timelineLaneColor.setFill()
-      NSBezierPath(roundedRect: laneRect, xRadius: 6, yRadius: 6).fill()
-
       for item in lane.items {
         let startOffset = item.start.timeIntervalSince(viewModel.trace.startTime)
         let duration = max(item.duration, 0.001)
         let x = leftPadding + CGFloat(startOffset / traceDuration) * availableWidth
         let width = max(2, CGFloat(duration / traceDuration) * availableWidth)
         let rect = NSRect(x: x, y: y, width: width, height: rowHeight)
-        layouts.append(SpanLayout(span: item.span, rect: rect, isError: item.isError, isCritical: item.isCritical))
-
-        let fillColor: NSColor
-        if item.isError {
-          fillColor = .systemRed
-        } else if item.isCritical {
-          fillColor = .systemOrange
-        } else {
-          fillColor = .systemBlue
-        }
-
-        let barPath = NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5)
-        fillColor.withAlphaComponent(0.88).setFill()
-        barPath.fill()
-        TraceUI.timelineStrokeColor.setStroke()
-        barPath.lineWidth = 1
-        barPath.stroke()
-
-        if item.span.spanId == selectedSpanId {
-          NSColor.controlAccentColor.setStroke()
-          let strokePath = NSBezierPath(roundedRect: rect.insetBy(dx: -1, dy: -1), xRadius: 4, yRadius: 4)
-          strokePath.lineWidth = 2
-          strokePath.stroke()
-        }
-
-        drawLabel(item.span.name, in: rect)
+        newLayouts.append(SpanLayout(span: item.span, rect: rect, isError: item.isError, isCritical: item.isCritical))
       }
     }
+
+    layouts = newLayouts
   }
 
   override func mouseDown(with event: NSEvent) {

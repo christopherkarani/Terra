@@ -10,6 +10,7 @@ final class TraceSplitViewController: NSSplitViewController {
 
   private var traces: [Trace] = []
   private var selectedTrace: Trace?
+  private var isLoading = false
 
   init(tracesDirectoryURL: URL = AppSettings.tracesDirectoryURL) {
     self.tracesDirectoryURL = tracesDirectoryURL
@@ -62,20 +63,37 @@ final class TraceSplitViewController: NSSplitViewController {
   }
 
   func reloadTraces() {
-    do {
-      traces = try loader.loadTraces()
-    } catch {
-      traces = []
-      selectedTrace = nil
-    }
+    guard !isLoading else { return }
+    isLoading = true
 
-    traceListViewController.updateTraces(traces)
-    if let selectedTrace, let refreshedSelection = traceListViewController.trace(withID: selectedTrace.id) {
-      selectTrace(refreshedSelection)
-    } else if let trace = traceListViewController.firstTrace {
-      selectTrace(trace)
-    } else {
-      clearSelection()
+    let loader = self.loader
+    Task.detached {
+      let loadedTraces: [Trace]
+      do {
+        loadedTraces = try loader.loadTraces()
+      } catch {
+        loadedTraces = []
+      }
+
+      await MainActor.run { [weak self] in
+        guard let self else { return }
+        self.isLoading = false
+
+        self.traces = loadedTraces
+        if loadedTraces.isEmpty {
+          self.selectedTrace = nil
+        }
+
+        self.traceListViewController.updateTraces(self.traces)
+        if let selectedTrace = self.selectedTrace,
+           let refreshedSelection = self.traceListViewController.trace(withID: selectedTrace.id) {
+          self.selectTrace(refreshedSelection)
+        } else if let trace = self.traceListViewController.firstTrace {
+          self.selectTrace(trace)
+        } else {
+          self.clearSelection()
+        }
+      }
     }
   }
 

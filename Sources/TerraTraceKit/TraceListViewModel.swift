@@ -31,7 +31,7 @@ public final class TraceListViewModel {
 
   /// Selects a trace by identifier.
   public func selectTrace(id: String) {
-    selectedTrace = traces.first { $0.id == id }
+    selectedTrace = filteredTraces.first { $0.id == id }
   }
 
   private func applyFilter() {

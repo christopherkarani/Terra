@@ -5,6 +5,8 @@ actor AppLog {
 
   private let fileURL: URL
   private var handle: FileHandle?
+  private let formatter = ISO8601DateFormatter()
+  private let maxLogSize: UInt64 = 5_000_000
 
   init(fileURL: URL = AppLog.defaultLogFileURL()) {
     self.fileURL = fileURL
@@ -29,8 +31,9 @@ actor AppLog {
 
   private func writeLine(_ line: String) {
     do {
+      rotateIfNeeded()
       let handle = try ensureHandle()
-      let timestamp = ISO8601DateFormatter().string(from: Date())
+      let timestamp = formatter.string(from: Date())
       let text = "\(timestamp) \(line)\n"
       if let data = text.data(using: .utf8) {
         try handle.seekToEnd()
@@ -39,6 +42,30 @@ actor AppLog {
     } catch {
       // Best-effort: logging must never crash the app.
     }
+  }
+
+  private func rotateIfNeeded() {
+    let fm = FileManager.default
+    let path = fileURL.path
+    guard fm.fileExists(atPath: path),
+          let attrs = try? fm.attributesOfItem(atPath: path),
+          let size = attrs[.size] as? UInt64,
+          size > maxLogSize
+    else { return }
+
+    // Close the current handle before rotating.
+    try? handle?.close()
+    handle = nil
+
+    let backup1 = fileURL.path.appending(".1")
+    let backup2 = fileURL.path.appending(".2")
+
+    // Delete .2 if it exists, then rename .1 -> .2, current -> .1.
+    try? fm.removeItem(atPath: backup2)
+    if fm.fileExists(atPath: backup1) {
+      try? fm.moveItem(atPath: backup1, toPath: backup2)
+    }
+    try? fm.moveItem(atPath: path, toPath: backup1)
   }
 
   private func ensureHandle() throws -> FileHandle {
