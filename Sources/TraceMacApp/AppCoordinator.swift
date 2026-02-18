@@ -1,20 +1,19 @@
 import AppKit
+import SwiftUI
 import TerraTraceKit
 
 @MainActor
 final class AppCoordinator: NSObject, MainMenuCoordinating {
   private let window: NSWindow
-  private let splitViewController: TraceSplitViewController
+  private let appState = AppState()
   private let toolbarProvider: TraceToolbarProvider
 
-  private var watcher: TraceDirectoryWatcher?
   private var onboardingWindowController: OnboardingWindowController?
   private var quickstartWindowController: QuickstartWindowController?
   private let licenseManager = LicenseManager()
   private let updaterController = UpdaterController()
 
   override init() {
-    splitViewController = TraceSplitViewController(tracesDirectoryURL: AppSettings.tracesDirectoryURL)
     toolbarProvider = TraceToolbarProvider()
     window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1200, height: 720),
@@ -25,7 +24,11 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     window.title = "Terra Trace Viewer"
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
-    window.contentViewController = splitViewController
+
+    let hosting = NSHostingController(
+      rootView: DashboardView().environment(appState)
+    )
+    window.contentViewController = hosting
     window.isReleasedWhenClosed = false
     window.backgroundColor = .windowBackgroundColor
 
@@ -36,16 +39,15 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     window.toolbar = toolbar
     window.toolbarStyle = .unifiedCompact
 
-    toolbarProvider.onSearchChange = { [weak splitViewController] query in
-      splitViewController?.updateSearchQuery(query)
+    toolbarProvider.onSearchChange = { [weak appState] query in
+      appState?.searchQuery = query
     }
-    toolbarProvider.onReload = { [weak splitViewController] in
-      splitViewController?.reloadTraces()
+    toolbarProvider.onReload = { [weak appState] in
+      appState?.loadTraces()
     }
 
     super.init()
     MainMenuBuilder.install(coordinator: self)
-    applyWatchSetting()
     updateWindowTitle()
   }
 
@@ -64,7 +66,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
   }
 
   @objc func reloadTraces(_ sender: Any? = nil) {
-    splitViewController.reloadTraces()
+    appState.loadTraces()
   }
 
   @objc func openTracesFolder(_ sender: Any? = nil) {
@@ -93,9 +95,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
       guard response == .OK, let url = panel.url else { return }
       Task { @MainActor in
         await AppLog.shared.info("traces.choose_folder path=\(url.path)")
-        AppSettings.tracesDirectoryURL = url
-        self.splitViewController.updateTracesDirectoryURL(url)
-        self.applyWatchSetting()
+        self.appState.configureTracesDirectory(url)
       }
     }
   }
@@ -106,18 +106,16 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
       return
     }
     Task { await AppLog.shared.info("traces.toggle_watch enabled=\(!AppSettings.isWatchingTracesDirectory)") }
-    AppSettings.isWatchingTracesDirectory.toggle()
-    applyWatchSetting()
+    if AppSettings.isWatchingTracesDirectory {
+      appState.stopWatching()
+    } else {
+      appState.startWatching()
+    }
   }
 
   @objc func loadSampleTraces(_ sender: Any? = nil) {
-    do {
-      Task { await AppLog.shared.info("traces.load_sample") }
-      try SampleTraces.writeSampleTrace(to: AppSettings.tracesDirectoryURL)
-      splitViewController.reloadTraces()
-    } catch {
-      presentErrorAlert(message: "Could not write sample traces.", error: error)
-    }
+    Task { await AppLog.shared.info("traces.load_sample") }
+    appState.loadSampleTraces()
   }
 
   @objc func showQuickstart(_ sender: Any? = nil) {
@@ -191,30 +189,6 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     NSWorkspace.shared.open(url)
   }
 
-  private func applyWatchSetting() {
-    watcher?.stop()
-    watcher = nil
-
-    guard AppSettings.isWatchingTracesDirectory else { return }
-    guard licenseManager.isFeatureEnabled(.watchFolder) else {
-      AppSettings.isWatchingTracesDirectory = false
-      return
-    }
-
-    let directoryURL = AppSettings.tracesDirectoryURL
-    do {
-      try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-      let watcher = TraceDirectoryWatcher(directoryURL: directoryURL) { [weak splitViewController] in
-        splitViewController?.reloadTraces()
-      }
-      try watcher.start()
-      self.watcher = watcher
-    } catch {
-      AppSettings.isWatchingTracesDirectory = false
-      presentErrorAlert(message: "Could not watch traces folder.", error: error)
-    }
-  }
-
   private func showOnboarding() {
     if onboardingWindowController != nil { return }
 
@@ -275,7 +249,6 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
           try self.licenseManager.activate(licenseKey: key)
           await AppLog.shared.info("license.activate_success")
           self.updateWindowTitle()
-          self.applyWatchSetting()
         } catch {
           await AppLog.shared.error("license.activate_failed error=\(String(describing: error))")
           self.presentLicenseErrorAlert(error)
@@ -302,7 +275,6 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
           try self.licenseManager.deactivate()
           await AppLog.shared.info("license.deactivate")
           self.updateWindowTitle()
-          self.applyWatchSetting()
         } catch {
           self.presentErrorAlert(message: "Could not deactivate license.", error: error)
         }

@@ -2,6 +2,12 @@ import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
 
+/// Result of loading traces, including any per-file failures.
+public struct TraceLoadResult {
+  public let traces: [Trace]
+  public let failures: [(file: URL, error: Error)]
+}
+
 /// Loads traces from persisted files using a locator, reader, and decoder.
 public struct TraceLoader {
   public let locator: TraceFileLocator
@@ -19,10 +25,11 @@ public struct TraceLoader {
     self.decoder = decoder
   }
 
-  /// Loads and groups spans into trace models.
-  public func loadTraces() throws -> [Trace] {
+  /// Loads and groups spans into trace models, reporting per-file failures.
+  public func loadTracesWithFailures() throws -> TraceLoadResult {
     let files = try locator.listTraceFiles()
     var traces = [Trace]()
+    var failures = [(file: URL, error: Error)]()
 
     for file in files {
       let spans: [SpanData]
@@ -30,7 +37,7 @@ public struct TraceLoader {
         let data = try reader.read(file: file)
         spans = try decoder.decodeSpans(from: data)
       } catch {
-        // Skip unreadable/corrupt files so one bad trace does not hide valid traces.
+        failures.append((file: file.url, error: error))
         continue
       }
 
@@ -47,6 +54,11 @@ public struct TraceLoader {
       }
     }
 
-    return traces
+    return TraceLoadResult(traces: traces, failures: failures)
+  }
+
+  /// Loads and groups spans into trace models (legacy convenience; discards failures).
+  public func loadTraces() throws -> [Trace] {
+    try loadTracesWithFailures().traces
   }
 }

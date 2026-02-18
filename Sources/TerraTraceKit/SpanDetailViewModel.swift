@@ -3,19 +3,31 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 
 /// Display-ready attribute entry.
-public struct AttributeItem: Hashable {
+public struct AttributeItem: Hashable, Identifiable {
+  public var id: String { key }
   public let key: String
   public let value: String
 }
 
 /// Display-ready event entry.
-public struct EventItem: Hashable {
+public struct EventItem: Hashable, Identifiable {
+  public let id = UUID()
   public let name: String
   public let timestamp: Date
+
+  public static func == (lhs: EventItem, rhs: EventItem) -> Bool {
+    lhs.name == rhs.name && lhs.timestamp == rhs.timestamp
+  }
+
+  public func hash(into hasher: inout Hasher) {
+    hasher.combine(name)
+    hasher.combine(timestamp)
+  }
 }
 
 /// Display-ready link entry.
-public struct LinkItem: Hashable {
+public struct LinkItem: Hashable, Identifiable {
+  public var id: String { "\(traceId.hexString)-\(spanId.hexString)" }
   public let traceId: TraceId
   public let spanId: SpanId
 }

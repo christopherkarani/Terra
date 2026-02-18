@@ -21,7 +21,7 @@ public struct TraceDecoder {
       let decoded = try decoder.decode([[SpanData]?].self, from: wrapped)
       return decoded.compactMap { $0 }.flatMap { $0 }
     } catch {
-      throw TraceDecodingError.decodingFailed
+      throw TraceDecodingError.decodingFailed(context: "\(error)")
     }
   }
 }

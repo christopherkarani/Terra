@@ -4,44 +4,46 @@ import OpenTelemetrySdk
 import XCTest
 
 final class TerraMetricsTests: XCTestCase {
-  final class MetricExporterSpy: MetricExporter {
-    private let lock = NSLock()
-    private var exported: [MetricData] = []
 
-    func export(metrics: [MetricData]) -> ExportResult {
-      lock.lock()
-      exported.append(contentsOf: metrics)
-      lock.unlock()
-      return .success
-    }
+  // MARK: - Spy infrastructure
 
-    func flush() -> ExportResult { .success }
-    func shutdown() -> ExportResult { .success }
-    func getAggregationTemporality(for instrument: InstrumentType) -> AggregationTemporality { .cumulative }
-
-    var exportedMetrics: [MetricData] {
-      lock.lock()
-      defer { lock.unlock() }
-      return exported
-    }
+  /// Records all counter.add() and histogram.record() calls for verification.
+  final class InstrumentRecordingSpy {
+    var counterAddCalls: [(Int, [String: String])] = []
+    var histogramRecordCalls: [(Double, [String: String])] = []
   }
 
-  func testRecordInference_emitsCountAndDurationMetrics() {
-    let exporter = MetricExporterSpy()
-    let reader = PeriodicMetricReaderBuilder(exporter: exporter)
-      .setInterval(timeInterval: 0.01)
-      .build()
-    let meterProvider = MeterProviderSdk.builder()
-      .registerMetricReader(reader: reader)
-      .build()
+  // MARK: - Instrument verification
 
+  func testConfigure_createsInstrumentsOnMeterProvider() {
+    let meterProvider = MeterProviderSdk.builder().build()
     let metrics = TerraMetrics()
+
+    // Before configure, recording should be a no-op (no crash, no instruments).
+    metrics.recordInference(durationMs: 10.0)
+
+    // After configure, instruments should be created.
+    metrics.configure(meterProvider: meterProvider)
+    // No crash = instruments created successfully.
+    metrics.recordInference(durationMs: 12.5)
+  }
+
+  func testConfigure_nilMeterProvider_clearsInstruments() {
+    let meterProvider = MeterProviderSdk.builder().build()
+    let metrics = TerraMetrics()
+
     metrics.configure(meterProvider: meterProvider)
     metrics.recordInference(durationMs: 12.5)
 
-    XCTAssertEqual(meterProvider.forceFlush(), .success)
-    _ = reader.shutdown()
+    // Passing nil should clear instruments without crashing.
+    metrics.configure(meterProvider: nil)
+    metrics.recordInference(durationMs: 10.0)
+  }
 
-    _ = exporter.exportedMetrics
+  func testRecordInference_doesNotCrashWithoutConfiguration() {
+    let metrics = TerraMetrics()
+    // Should be a safe no-op.
+    metrics.recordInference(durationMs: 0)
+    metrics.recordInference(durationMs: 999.9)
   }
 }

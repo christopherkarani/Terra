@@ -46,7 +46,7 @@ final class SpanListViewController: NSViewController {
   }
 
   func updateTrace(_ trace: Trace) {
-    rows = SpanTreeBuilder.buildRows(spans: trace.orderedSpans)
+    rows = SpanRowBuilder.buildRows(spans: trace.orderedSpans)
     updateHeader()
     tableView.reloadData()
   }
@@ -138,7 +138,7 @@ private struct SpanRow {
   let depth: Int
 }
 
-private enum SpanTreeBuilder {
+private enum SpanRowBuilder {
   static func buildRows(spans: [SpanData]) -> [SpanRow] {
     let spanIds = Set(spans.map { $0.spanId })
     var childrenByParent: [SpanId?: [SpanData]] = Dictionary(grouping: spans, by: { $0.parentSpanId })

@@ -25,8 +25,8 @@ public final class TerraSpanEnrichmentProcessor: SpanProcessor {
   }
 
   public func onEnd(span: ReadableSpan) {}
-  public func shutdown(explicitTimeout: TimeInterval?) {}
-  public func forceFlush(timeout: TimeInterval?) {}
+  public func shutdown(explicitTimeout: TimeInterval?) { /* stateless — nothing to flush */ }
+  public func forceFlush(timeout: TimeInterval?) { /* stateless — nothing to flush */ }
 }
 
 private extension Terra.ContentPolicy {

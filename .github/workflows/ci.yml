@@ -19,10 +19,24 @@ jobs:
           swift --version
           xcodebuild -version
 
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: SwiftLint
+        run: swiftlint lint --reporter github-actions-logging
+
       - name: SwiftPM tests
         run: |
           set -euo pipefail
           swift test
+
+      - name: API breaking changes (SDK targets, PRs only)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          swift package diagnose-api-breaking-changes Terra
+          swift package diagnose-api-breaking-changes TerraTraceKit
 
       - name: TraceMacApp (unsigned) build
         run: |

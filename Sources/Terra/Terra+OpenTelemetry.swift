@@ -113,15 +113,16 @@ extension Terra {
   /// - Throws: `InstallOpenTelemetryError.alreadyInstalled` if called more than once with a different configuration.
   public static func installOpenTelemetry(_ configuration: OpenTelemetryConfiguration) throws {
     openTelemetryInstallLock.lock()
+    defer { openTelemetryInstallLock.unlock() }
+
     if let installed = installedOpenTelemetryConfiguration {
-      openTelemetryInstallLock.unlock()
       if installed == configuration {
         return
       }
       throw InstallOpenTelemetryError.alreadyInstalled
     }
+
     installedOpenTelemetryConfiguration = configuration
-    openTelemetryInstallLock.unlock()
 
     do {
       if let persistence = configuration.persistence {
@@ -145,13 +146,10 @@ extension Terra {
 
       if configuration.enableMetrics {
         let meterProvider = try installMetrics(configuration: configuration)
-        // Ensure Terra records into the same meter pipeline.
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
     } catch {
-      openTelemetryInstallLock.lock()
       installedOpenTelemetryConfiguration = nil
-      openTelemetryInstallLock.unlock()
       throw error
     }
   }
@@ -239,6 +237,7 @@ extension Terra {
 
     let provider = MeterProviderSdk.builder()
       .registerMetricReader(reader: reader)
+      .registerView(selector: InstrumentSelectorBuilder().build(), view: View.builder().build())
       .build()
 
     OpenTelemetry.registerMeterProvider(meterProvider: provider)
@@ -277,8 +276,8 @@ extension Terra {
 extension Terra {
   static func resetOpenTelemetryForTesting() {
     openTelemetryInstallLock.lock()
+    defer { openTelemetryInstallLock.unlock() }
     installedOpenTelemetryConfiguration = nil
-    openTelemetryInstallLock.unlock()
   }
 }
 #endif

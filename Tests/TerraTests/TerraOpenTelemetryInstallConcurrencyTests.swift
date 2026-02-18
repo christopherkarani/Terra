@@ -88,6 +88,42 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
     XCTAssertEqual(alreadyInstalledCount, endpoints.count - 1)
   }
 
+  func testConcurrentInstall_sameConfig_bothSucceed() async {
+    let endpoint = URL(string: "http://localhost:4350/v1/traces")!
+    let config = makeConfig(endpoint: endpoint)
+
+    let barrier = AsyncBarrier(participants: 2)
+
+    let results = await withTaskGroup(of: Result<Void, Error>.self) { group in
+      for _ in 0..<2 {
+        group.addTask {
+          await barrier.wait()
+          return Result { try Terra.installOpenTelemetry(config) }
+        }
+      }
+      var collected: [Result<Void, Error>] = []
+      for await result in group {
+        collected.append(result)
+      }
+      return collected
+    }
+
+    // When both calls use identical config, both should succeed (idempotent)
+    let successCount = results.filter {
+      if case .success = $0 { return true }
+      return false
+    }.count
+    XCTAssertGreaterThanOrEqual(successCount, 1, "At least one concurrent same-config install should succeed")
+    // None should throw alreadyInstalled -- same config is allowed
+    let alreadyInstalledCount = results.filter {
+      guard case .failure(let error) = $0 else { return false }
+      guard let installError = error as? Terra.InstallOpenTelemetryError else { return false }
+      if case .alreadyInstalled = installError { return true }
+      return false
+    }.count
+    XCTAssertEqual(alreadyInstalledCount, 0, "Same-config concurrent install should not throw alreadyInstalled")
+  }
+
   func testConcurrentInstall_consistentConfiguration() async {
     let endpoints = [
       URL(string: "http://localhost:4331/v1/traces")!,

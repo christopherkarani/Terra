@@ -45,6 +45,7 @@ final class Runtime {
 
   func install(_ installation: Terra.Installation) {
     lock.lock()
+    defer { lock.unlock() }
     privacyValue = installation.privacy
     if let tracerProvider = installation.tracerProvider {
       tracerProviderOverride = tracerProvider
@@ -52,7 +53,6 @@ final class Runtime {
     if let loggerProvider = installation.loggerProvider {
       loggerProviderOverride = loggerProvider
     }
-    lock.unlock()
 
     if installation.registerProvidersAsGlobal {
       if let tracerProvider = installation.tracerProvider {
@@ -128,6 +128,10 @@ final class TerraMetrics {
   }
 
   func recordInference(durationMs: Double) {
+    // Copy references under the lock. OTel SDK instruments are thread-safe,
+    // so we release the lock before calling add/record to avoid holding it
+    // across external SDK calls (which could introduce lock-ordering issues).
+    // `var` is required because add/record are mutating on protocol existentials.
     lock.lock()
     var inferenceCount = inferenceCount
     var inferenceDurationMs = inferenceDurationMs

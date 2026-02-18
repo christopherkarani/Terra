@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
   name: "Terra",
   platforms: [
-    .macOS(.v12),
+    .macOS(.v14),
     .iOS(.v13),
     .tvOS(.v13),
     .watchOS(.v6),
@@ -85,6 +85,16 @@ let package = Package(
         .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraCoreMLTests"
+    ),
+    .testTarget(
+      name: "TerraTraceKitTests",
+      dependencies: [
+        "TerraTraceKit",
+        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+        .product(name: "Testing", package: "swift-testing"),
+      ],
+      path: "Tests/TerraTraceKitTests"
     ),
     .testTarget(
       name: "TraceMacAppTests",

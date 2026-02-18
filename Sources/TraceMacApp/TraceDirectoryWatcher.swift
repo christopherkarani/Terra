@@ -4,14 +4,16 @@ import Darwin
 final class TraceDirectoryWatcher {
   private let directoryURL: URL
   private let onChange: @MainActor () -> Void
+  private let debounceMilliseconds: Int
 
   private let queue = DispatchQueue(label: "com.terra.TraceMacApp.TraceDirectoryWatcher")
   private var fileDescriptor: Int32 = -1
   private var source: DispatchSourceFileSystemObject?
   private var pendingCallback: DispatchWorkItem?
 
-  init(directoryURL: URL, onChange: @escaping @MainActor () -> Void) {
+  init(directoryURL: URL, debounceMilliseconds: Int = 250, onChange: @escaping @MainActor () -> Void) {
     self.directoryURL = directoryURL
+    self.debounceMilliseconds = debounceMilliseconds
     self.onChange = onChange
   }
 
@@ -60,7 +62,7 @@ final class TraceDirectoryWatcher {
       }
     }
     pendingCallback = work
-    queue.asyncAfter(deadline: .now() + .milliseconds(250), execute: work)
+    queue.asyncAfter(deadline: .now() + .milliseconds(debounceMilliseconds), execute: work)
   }
 
   deinit {

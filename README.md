@@ -1,42 +1,54 @@
 # Terra
 
-Terra is an **on-device GenAI observability façade** for Swift 6.2 model runtimes and agents, built on **OpenTelemetry Swift**.
+Terra is observability for on-device GenAI apps in Swift.
 
-It gives you a small, misuse-resistant API to instrument inference/agent boundaries, while keeping export/wiring and backend-specific enrichment (Core ML, MLX, etc.) optional.
+It helps you instrument model inference, embeddings, agent steps, tool calls, and safety checks with a focused API, strong privacy defaults, and export/persistence wiring designed for real production environments.
 
-## Requirements
+## Why Terra
 
-- Swift 6.2 (or newer toolchain)
-- Platforms: macOS 12+, iOS 13+, tvOS 13+, watchOS 6+, visionOS 1+
-- An OTLP-capable backend (for remote export), usually via an OpenTelemetry Collector
+### For Developers
 
-## Add Terra to Your Project (SwiftPM)
+- Add instrumentation quickly with a small API surface.
+- Keep code readable by wrapping only the boundaries you own.
+- Use typed helpers for inference, embeddings, agents, tools, and safety checks.
+- Extend spans when needed via `Terra.Scope` without dropping to boilerplate everywhere.
 
-In your app/package `Package.swift`:
+### For Enterprise Teams
+
+- Start privacy-safe by default (`contentPolicy: .never`) and enable capture only where explicitly approved.
+- Keep telemetry cardinality bounded for predictable backend cost and query performance.
+- Route data through OTLP/HTTP into existing observability pipelines.
+- Enable on-device persistence for intermittent connectivity and buffered export.
+- Standardize GenAI telemetry semantics across apps and model runtimes.
+
+> **Note:** The bullet points above describe **Terra SDK** (the Swift library) capabilities. **Trace** (the macOS viewer app) provides local trace visualization. Network ingestion and trace re-export from the viewer are planned features.
+
+## Quickstart
+
+### 1) Add Terra via SwiftPM
 
 ```swift
 dependencies: [
-  // Pin to a tag/branch/commit in your own integration.
-  .package(url: "https://github.com/your-org/Terra.git", branch: "main"),
+  .package(url: "https://github.com/YOUR_ORG/Terra.git", branch: "main"), // replace with your actual repository URL
 ],
 targets: [
   .target(
     name: "YourApp",
     dependencies: [
       .product(name: "Terra", package: "Terra"),
-      // Optional Core ML helpers:
+      // Optional:
       // .product(name: "TerraCoreML", package: "Terra"),
+      // .product(name: "TerraTraceKit", package: "Terra"),
     ]
   )
 ]
 ```
 
-## Quickstart (2 Calls at App Startup)
+### 2) Install at startup
 
 ```swift
 import Terra
 
-// 1) One-call OpenTelemetry wiring (OTLP/HTTP + optional on-device persistence + Signposts + Sessions).
 try Terra.installOpenTelemetry(
   .init(
     enableLogs: false,
@@ -44,17 +56,17 @@ try Terra.installOpenTelemetry(
   )
 )
 
-// 2) Terra privacy defaults (recommended).
 Terra.install(.init(privacy: .default))
 ```
 
 Notes:
-- Call `Terra.installOpenTelemetry(_:)` **once** per process; calling it again with a different configuration throws `Terra.InstallOpenTelemetryError.alreadyInstalled`.
-- `Terra.install(_:)` is safe to call to update Terra’s in-process configuration (privacy/provider overrides).
+- Call `Terra.installOpenTelemetry(_:)` once per process.
+- Reinstalling with a different config throws `Terra.InstallOpenTelemetryError.alreadyInstalled`.
+- `Terra.install(_:)` is safe to call again when you want to update privacy/provider overrides in-process.
 
-## Instrument the Boundaries You Own
+## Instrumentation API
 
-Terra’s public API is a small set of span helpers:
+Use the span helpers around the boundaries you own:
 
 - `Terra.withInferenceSpan(_:_:)`
 - `Terra.withEmbeddingSpan(_:_:)`
@@ -62,12 +74,11 @@ Terra’s public API is a small set of span helpers:
 - `Terra.withToolExecutionSpan(tool:call:_:)`
 - `Terra.withSafetyCheckSpan(_:_:)`
 
-Each closure receives a `Terra.Scope` with:
+Each closure gets a `Terra.Scope`:
+
 - `scope.addEvent(_:)`
 - `scope.recordError(_:)`
 - `scope.setAttributes(_:)`
-
-Example:
 
 ```swift
 import Terra
@@ -78,22 +89,25 @@ try await Terra.withAgentInvocationSpan(agent: agent) { scope in
   scope.addEvent("agent.start")
 
   try await Terra.withInferenceSpan(.init(model: "local/llama-3.2-1b")) { _ in
-    // ... run your model/runtime
+    // run model
   }
 
   try await Terra.withToolExecutionSpan(tool: .init(name: "search"), call: .init(id: "call-1")) { _ in
-    // ... run your tool
+    // run tool
   }
 
   scope.addEvent("agent.end")
 }
 ```
 
-## Privacy (Default Safe)
+## Privacy Defaults
 
-By default, prompt-like fields are **not captured** (`Terra.Privacy(contentPolicy: .never)`).
+Terra defaults to `Terra.Privacy(contentPolicy: .never)`.
 
-To enable *opt-in* capture (recommended), configure Terra once and then opt in per request:
+- Raw prompt-like content is not emitted as attributes.
+- If capture is enabled, Terra emits bounded metadata (length and optional SHA-256 hash), not raw content.
+
+Opt-in capture pattern:
 
 ```swift
 Terra.install(.init(privacy: .init(contentPolicy: .optIn, redaction: .hashSHA256)))
@@ -103,63 +117,81 @@ let request = Terra.InferenceRequest(
   prompt: "Hello",
   promptCapture: .optIn
 )
+
 await Terra.withInferenceSpan(request) { _ in }
 ```
 
-Terra never emits raw prompt content as attributes; it emits bounded metadata like length and (when available) SHA-256.
+## Metrics and Data Flow
 
-## Where Data Goes
-
-- **Local dev:** when `enableSignposts` is on (default), Terra installs Signpost processors so spans are visible in Instruments (where supported by OS version).
-- **Remote export:** traces/metrics/logs (optional) are exported via **OTLP/HTTP** to the configured endpoints; on-device persistence can buffer data across restarts/offline periods.
-
-## Metrics
-
-Terra records lightweight, low-cardinality metrics (when OpenTelemetry metrics are enabled), including:
+Terra emits lightweight metrics such as:
 
 - `terra.inference.count`
 - `terra.inference.duration_ms`
 
-## Sample App
+Telemetry destinations:
 
-Run the included sample (macOS only):
+- Local: signposts for Instruments (when enabled/supported).
+- Remote: OTLP/HTTP endpoints for traces/metrics/logs.
+- Optional: on-device persistence for offline buffering and later export.
 
-```bash
-swift run TerraSample
-```
+## Enterprise Rollout Patterns
 
-The sample lives at `Examples/Terra Sample/main.swift` and demonstrates agent + inference + tool spans.
+- Set privacy globally once at startup, then use per-request opt-in capture only for approved paths.
+- Choose `tracerProviderStrategy: .registerNew` for greenfield apps.
+- Choose `tracerProviderStrategy: .augmentExisting` when integrating into an app that already configures tracing.
+- Keep sessions enabled when you need cross-span session context.
+- Keep `Task.detached` out of instrumented paths that require parent/child trace relationships.
 
 ## Integrations
 
-- Core ML helpers: `TerraCoreML` (see `Sources/TerraCoreML/TerraCoreML.swift`)
-- Recommended attribute patterns for Core ML + MLX: `Docs/Integrations.md`
+- `TerraCoreML`: attach normalized Core ML runtime metadata (`terra.runtime`, `terra.coreml.compute_units`).
+- MLX: set low-cardinality runtime attributes (see `Docs/Integrations.md`).
+- `TerraTraceKit`: load and model persisted trace files for custom tooling or UIs.
 
-## Concurrency Expectations
+## Trace — macOS Viewer App
 
-Terra relies on OpenTelemetry Swift context propagation:
+Trace is a native macOS app (in `Apps/TraceMacApp/`) for visualizing on-device traces produced by Terra SDK.
 
-- Structured child tasks (e.g. `async let`, `Task {}`) inherit the active span context.
-- `Task.detached` does **not** inherit span context (it starts a new trace root).
+**Current capabilities:**
+- Load and display traces from a local directory (default: `~/Documents/Terra Traces`).
+- Timeline visualization with span hierarchy, lane layout, and duration annotations.
+- Dashboard with KPI cards: total traces, spans, error rate, unique agents, p50/p95/p99 latency.
+- File system watching for live reload when new traces arrive on disk.
+- Diagnostics export (app metadata and file listing for support).
+- Configurable trace retention with automatic pruning.
 
-## Semantic Conventions (Span Names + Keys)
+**Not yet implemented (planned):**
+- Trace content export (re-emit spans as OTLP JSON for external tools).
+- Network-based trace ingestion (OTLP/HTTP receiver for multi-machine workflows).
+- Advanced filtering by date range, duration, error status, or span attributes.
 
-Span names:
-- `gen_ai.inference`, `gen_ai.embeddings`, `gen_ai.agent`, `gen_ai.tool`, `terra.safety_check`
+> **Important:** The "Enterprise Teams" bullets at the top of this README describe **Terra SDK** library features (OTLP/HTTP export, on-device persistence, privacy controls). Trace reads persisted traces from disk — it does not currently re-export them or accept network ingestion.
 
-Key prefixes:
-- Prefer `gen_ai.*` when applicable (model, operation, agent/tool identity).
-- Use `terra.*` for device/runtime/privacy extensions.
+## Included Products in This Repo
+
+- `Terra`: core instrumentation and runtime install APIs.
+- `TerraCoreML`: optional Core ML span attribute helpers.
+- `TerraTraceKit`: trace-file discovery, decoding, and view models.
+- `TerraSample`: runnable macOS sample app (`swift run TerraSample`).
+- `TraceMacApp` / `TraceMacAppUI`: the Trace viewer app and its reusable UI layer.
+
+## Concurrency Behavior
+
+- Structured child tasks inherit active span context.
+- `Task.detached` starts without parent span context.
+
+## Requirements
+
+- Swift 6.2 or newer toolchain.
+- Platforms: macOS 14+, iOS 13+, tvOS 13+, watchOS 6+, visionOS 1+.
+- OTLP-capable backend only if you want remote export.
 
 ## Troubleshooting
 
-- `alreadyInstalled`: ensure `Terra.installOpenTelemetry(_:)` is only called once per process (or called repeatedly with the exact same configuration).
-- No remote data: confirm your OTLP/HTTP endpoints are reachable from the device/simulator and match your collector/backend configuration.
-- Missing parent/child relationships: avoid `Task.detached` when you want spans to share context; prefer structured concurrency.
+- `alreadyInstalled`: ensure `Terra.installOpenTelemetry(_:)` is called once, or repeatedly with the exact same configuration.
+- Missing remote data: verify endpoint reachability and collector/backend config.
+- Missing parent/child spans: replace `Task.detached` with structured concurrency where needed.
 
----
+## Standards Compatibility
 
-- Provides a small Swift 6.2 API for on-device GenAI observability on OpenTelemetry Swift.
-- Supports turnkey OTLP/HTTP export with optional persistence, signposts, and sessions via `Terra.installOpenTelemetry(_:)`.
-- Defaults to privacy-safe behavior; prompt-like capture is explicit opt-in with redaction.
-- Includes a macOS sample and integration guidance for Core ML and MLX.
+Terra is compatible with OpenTelemetry-based pipelines and semantic conventions, so you can route data to standard collectors/backends without locking into a Terra-specific format.
