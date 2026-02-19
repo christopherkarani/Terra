@@ -6,10 +6,12 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
   override func setUp() {
     super.setUp()
     Terra.resetOpenTelemetryForTesting()
+    Terra.installOpenTelemetryTestHook = nil
   }
 
   override func tearDown() {
     Terra.resetOpenTelemetryForTesting()
+    Terra.installOpenTelemetryTestHook = nil
     super.tearDown()
   }
 
@@ -145,5 +147,60 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
       if case .alreadyInstalled = installError { return }
       XCTFail("Expected alreadyInstalled but got: \(installError)")
     }
+  }
+
+  func testConcurrentInstall_waitsForMatchingConfiguration() async {
+    let endpoint = URL(string: "http://localhost:4341/v1/traces")!
+    let config = makeConfig(endpoint: endpoint)
+
+    let installEntered = DispatchSemaphore(value: 0)
+    let continueInstall = DispatchSemaphore(value: 0)
+
+    Terra.installOpenTelemetryTestHook = {
+      installEntered.signal()
+      continueInstall.wait()
+    }
+
+    let firstTask = Task {
+      Result { try Terra.installOpenTelemetry(config) }
+    }
+
+    XCTAssertEqual(installEntered.wait(timeout: .now() + 1), .success)
+
+    final class CompletionFlag {
+      private let lock = NSLock()
+      private var completed = false
+
+      func markCompleted() {
+        lock.lock()
+        completed = true
+        lock.unlock()
+      }
+
+      func isCompleted() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return completed
+      }
+    }
+
+    let flag = CompletionFlag()
+
+    let secondTask = Task {
+      let result = Result { try Terra.installOpenTelemetry(config) }
+      flag.markCompleted()
+      return result
+    }
+
+    try? await Task.sleep(nanoseconds: 200_000_000)
+    XCTAssertFalse(flag.isCompleted(), "Expected matching configuration to wait for in-flight install.")
+
+    continueInstall.signal()
+    Terra.installOpenTelemetryTestHook = nil
+
+    _ = await firstTask.value
+    _ = await secondTask.value
+
+    XCTAssertTrue(flag.isCompleted())
   }
 }

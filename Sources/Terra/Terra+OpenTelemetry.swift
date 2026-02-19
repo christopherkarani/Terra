@@ -87,6 +87,22 @@ extension Terra {
     }
   }
 
+  public static func defaultOltpHttpTracesEndpoint() -> URL {
+    defaultOtlpHttpEndpoint().appendingPathComponent("v1/traces")
+  }
+
+  public static func defaultOtlpHttpMetricsEndpoint() -> URL {
+    defaultOtlpHttpEndpoint().appendingPathComponent("v1/metrics")
+  }
+
+  public static func defaultOtlpHttpLoggingEndpoint() -> URL {
+    defaultOtlpHttpEndpoint().appendingPathComponent("v1/logs")
+  }
+
+  private static func defaultOtlpHttpEndpoint() -> URL {
+    URL(string: "http://localhost:4318")!
+  }
+
   public static func defaultPersistenceStorageURL() -> URL {
     let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
       ?? FileManager.default.temporaryDirectory
@@ -99,8 +115,18 @@ extension Terra {
     case alreadyInstalled
   }
 
-  private static let openTelemetryInstallLock = NSLock()
-  private static var installedOpenTelemetryConfiguration: OpenTelemetryConfiguration?
+  private enum OpenTelemetryInstallState {
+    case idle
+    case installing(configuration: OpenTelemetryConfiguration)
+    case installed(configuration: OpenTelemetryConfiguration)
+  }
+
+  private static let openTelemetryInstallCondition = NSCondition()
+  private static var openTelemetryInstallState: OpenTelemetryInstallState = .idle
+
+#if DEBUG
+  static var installOpenTelemetryTestHook: (() -> Void)?
+#endif
 
   /// Convenience for end-to-end OpenTelemetry wiring:
   /// - Traces exported via OTLP/HTTP (optionally persisted on-device).
@@ -112,16 +138,33 @@ extension Terra {
   ///
   /// - Throws: `InstallOpenTelemetryError.alreadyInstalled` if called more than once with a different configuration.
   public static func installOpenTelemetry(_ configuration: OpenTelemetryConfiguration) throws {
-    openTelemetryInstallLock.lock()
-    if let installed = installedOpenTelemetryConfiguration {
-      openTelemetryInstallLock.unlock()
-      if installed == configuration {
-        return
+    while true {
+      openTelemetryInstallCondition.lock()
+      switch openTelemetryInstallState {
+      case .idle:
+        openTelemetryInstallState = .installing(configuration: configuration)
+        openTelemetryInstallCondition.unlock()
+#if DEBUG
+        installOpenTelemetryTestHook?()
+#endif
+        break
+      case .installing(let installed):
+        if installed == configuration {
+          openTelemetryInstallCondition.wait()
+          openTelemetryInstallCondition.unlock()
+          continue
+        }
+        openTelemetryInstallCondition.unlock()
+        throw InstallOpenTelemetryError.alreadyInstalled
+      case .installed(let installed):
+        openTelemetryInstallCondition.unlock()
+        if installed == configuration {
+          return
+        }
+        throw InstallOpenTelemetryError.alreadyInstalled
       }
-      throw InstallOpenTelemetryError.alreadyInstalled
+      break
     }
-    installedOpenTelemetryConfiguration = configuration
-    openTelemetryInstallLock.unlock()
 
     do {
       if let persistence = configuration.persistence {
@@ -148,10 +191,15 @@ extension Terra {
         // Ensure Terra records into the same meter pipeline.
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
+      openTelemetryInstallCondition.lock()
+      openTelemetryInstallState = .installed(configuration: configuration)
+      openTelemetryInstallCondition.broadcast()
+      openTelemetryInstallCondition.unlock()
     } catch {
-      openTelemetryInstallLock.lock()
-      installedOpenTelemetryConfiguration = nil
-      openTelemetryInstallLock.unlock()
+      openTelemetryInstallCondition.lock()
+      openTelemetryInstallState = .idle
+      openTelemetryInstallCondition.broadcast()
+      openTelemetryInstallCondition.unlock()
       throw error
     }
   }
@@ -276,9 +324,10 @@ extension Terra {
 #if DEBUG
 extension Terra {
   static func resetOpenTelemetryForTesting() {
-    openTelemetryInstallLock.lock()
-    installedOpenTelemetryConfiguration = nil
-    openTelemetryInstallLock.unlock()
+    openTelemetryInstallCondition.lock()
+    openTelemetryInstallState = .idle
+    openTelemetryInstallCondition.broadcast()
+    openTelemetryInstallCondition.unlock()
   }
 }
 #endif
