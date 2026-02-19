@@ -66,9 +66,9 @@ final class Runtime {
       }
     }
 
-    if let meterProvider = installation.meterProvider {
-      metrics.configure(meterProvider: meterProvider)
-    }
+    // Prefer the explicitly supplied provider, but fall back to the active global provider
+    // so Terra metrics still work when apps configure OpenTelemetry globally first.
+    metrics.configure(meterProvider: installation.meterProvider ?? OpenTelemetry.instance.meterProvider)
   }
 
   var privacy: Terra.Privacy {

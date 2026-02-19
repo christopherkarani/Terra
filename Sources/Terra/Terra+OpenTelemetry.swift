@@ -99,8 +99,13 @@ extension Terra {
     case alreadyInstalled
   }
 
+  private enum OpenTelemetryInstallState {
+    case notInstalled
+    case installed(OpenTelemetryConfiguration)
+  }
+
   private static let openTelemetryInstallLock = NSLock()
-  private static var installedOpenTelemetryConfiguration: OpenTelemetryConfiguration?
+  private static var openTelemetryInstallState: OpenTelemetryInstallState = .notInstalled
 
   /// Convenience for end-to-end OpenTelemetry wiring:
   /// - Traces exported via OTLP/HTTP (optionally persisted on-device).
@@ -113,24 +118,26 @@ extension Terra {
   /// - Throws: `InstallOpenTelemetryError.alreadyInstalled` if called more than once with a different configuration.
   public static func installOpenTelemetry(_ configuration: OpenTelemetryConfiguration) throws {
     openTelemetryInstallLock.lock()
-    if let installed = installedOpenTelemetryConfiguration {
-      openTelemetryInstallLock.unlock()
-      if installed == configuration {
+    defer { openTelemetryInstallLock.unlock() }
+
+    switch openTelemetryInstallState {
+    case .installed(let installedConfiguration):
+      if installedConfiguration == configuration {
         return
       }
       throw InstallOpenTelemetryError.alreadyInstalled
+    case .notInstalled:
+      break
     }
-    installedOpenTelemetryConfiguration = configuration
-    openTelemetryInstallLock.unlock()
 
     do {
       if let persistence = configuration.persistence {
         try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
       }
 
-      let tracerProviderSdk = try installTracing(configuration: configuration)
+      let tracerProvider = try installTracing(configuration: configuration)
 
-      if configuration.enableSignposts {
+      if configuration.enableSignposts, let tracerProviderSdk = tracerProvider as? TracerProviderSdk {
         installSignposts(tracerProviderSdk: tracerProviderSdk)
       }
 
@@ -138,7 +145,7 @@ extension Terra {
         _ = try installLogs(configuration: configuration)
       }
 
-      if configuration.enableSessions {
+      if configuration.enableSessions, let tracerProviderSdk = tracerProvider as? TracerProviderSdk {
         tracerProviderSdk.addSpanProcessor(TerraSessionSpanProcessor())
         SessionEventInstrumentation.install()
       }
@@ -148,17 +155,22 @@ extension Terra {
         // Ensure Terra records into the same meter pipeline.
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
+      openTelemetryInstallState = .installed(configuration)
     } catch {
-      openTelemetryInstallLock.lock()
-      installedOpenTelemetryConfiguration = nil
-      openTelemetryInstallLock.unlock()
+      openTelemetryInstallState = .notInstalled
       throw error
     }
   }
 
   // MARK: - Tracing
 
-  private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> TracerProviderSdk {
+  private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> any TracerProvider {
+    guard configuration.enableTraces else {
+      let provider = DefaultTracerProvider.instance
+      OpenTelemetry.registerTracerProvider(tracerProvider: provider)
+      return provider
+    }
+
     func makeExporter() throws -> any SpanExporter {
       let baseExporter = OtlpHttpTraceExporter(endpoint: configuration.otlpTracesEndpoint)
       guard let persistence = configuration.persistence else {
@@ -172,30 +184,21 @@ extension Terra {
       )
     }
 
-    let spanProcessor: SpanProcessor?
-    if configuration.enableTraces {
-      let exporter = try makeExporter()
-      spanProcessor = SimpleSpanProcessor(spanExporter: exporter)
-    } else {
-      spanProcessor = nil
-    }
+    let exporter = try makeExporter()
+    let spanProcessor = SimpleSpanProcessor(spanExporter: exporter)
 
     switch configuration.tracerProviderStrategy {
     case .augmentExisting:
       if let existing = OpenTelemetry.instance.tracerProvider as? TracerProviderSdk {
         existing.addSpanProcessor(TerraSpanEnrichmentProcessor())
-        if let spanProcessor {
-          existing.addSpanProcessor(spanProcessor)
-        }
+        existing.addSpanProcessor(spanProcessor)
         return existing
       }
       fallthrough
     case .registerNew:
       var builder = TracerProviderBuilder()
       builder = builder.add(spanProcessor: TerraSpanEnrichmentProcessor())
-      if let spanProcessor {
-        builder = builder.add(spanProcessor: spanProcessor)
-      }
+      builder = builder.add(spanProcessor: spanProcessor)
       let provider = builder.build()
       OpenTelemetry.registerTracerProvider(tracerProvider: provider)
       return provider
@@ -277,7 +280,7 @@ extension Terra {
 extension Terra {
   static func resetOpenTelemetryForTesting() {
     openTelemetryInstallLock.lock()
-    installedOpenTelemetryConfiguration = nil
+    openTelemetryInstallState = .notInstalled
     openTelemetryInstallLock.unlock()
   }
 }

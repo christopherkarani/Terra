@@ -44,4 +44,28 @@ final class TerraMetricsTests: XCTestCase {
 
     _ = exporter.exportedMetrics
   }
+
+  func testInstall_withoutExplicitMeterProvider_usesGlobalMeterProvider() async {
+    let exporter = MetricExporterSpy()
+    let reader = PeriodicMetricReaderBuilder(exporter: exporter)
+      .setInterval(timeInterval: 0.01)
+      .build()
+    let meterProvider = MeterProviderSdk.builder()
+      .registerMetricReader(reader: reader)
+      .build()
+
+    let previousMeterProvider = OpenTelemetry.instance.meterProvider
+    OpenTelemetry.registerMeterProvider(meterProvider: meterProvider)
+    defer {
+      OpenTelemetry.registerMeterProvider(meterProvider: previousMeterProvider)
+      Terra.install(.init(meterProvider: nil, registerProvidersAsGlobal: false))
+      _ = reader.shutdown()
+    }
+
+    Terra.install(.init(meterProvider: nil, registerProvidersAsGlobal: false))
+    await Terra.withInferenceSpan(.init(model: "local/llama-3.2-1b")) { _ in }
+
+    XCTAssertEqual(meterProvider.forceFlush(), .success)
+    XCTAssertFalse(exporter.exportedMetrics.isEmpty)
+  }
 }
