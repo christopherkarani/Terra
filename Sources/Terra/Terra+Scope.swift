@@ -26,15 +26,30 @@ extension Terra {
 
     public func recordError(_ error: any Error) {
       let message = String(describing: error)
-      underlyingSpan.status = .error(description: message)
-      underlyingSpan.addEvent(
-        name: "exception",
-        attributes: [
-          "exception.message": .string(message),
-          "exception.type": .string(String(reflecting: type(of: error))),
-        ],
-        timestamp: Date()
-      )
+      let errorType = String(reflecting: type(of: error))
+
+      var attributes: [String: AttributeValue] = [
+        "exception.type": .string(errorType)
+      ]
+
+      let privacy = Runtime.shared.privacy
+      if privacy.contentPolicy == .always {
+        switch privacy.redaction {
+        case .drop:
+          break
+        case .lengthOnly:
+          attributes[Terra.Keys.Terra.errorMessageLength] = .int(message.count)
+        case .hashSHA256:
+          attributes[Terra.Keys.Terra.errorMessageLength] = .int(message.count)
+          if Runtime.isSHA256Available, let hash = Runtime.sha256Hex(message) {
+            attributes[Terra.Keys.Terra.errorMessageSHA256] = .string(hash)
+          }
+        }
+      }
+
+      // Keep status description non-sensitive unless explicit message capture is supported.
+      underlyingSpan.status = .error(description: errorType)
+      underlyingSpan.addEvent(name: "exception", attributes: attributes, timestamp: Date())
     }
 
     public func setAttributes(_ attributes: [String: AttributeValue]) {
@@ -42,4 +57,3 @@ extension Terra {
     }
   }
 }
-

@@ -20,7 +20,7 @@ public enum Terra {
     _ body: @Sendable (Scope<InferenceSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
-    let startTime = Date()
+    let startTime = ProcessInfo.processInfo.systemUptime
 
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.inference.rawValue),
@@ -49,7 +49,8 @@ public enum Terra {
     }
 
     defer {
-      let durationMs = Date().timeIntervalSince(startTime) * 1000
+      let elapsedSeconds = ProcessInfo.processInfo.systemUptime - startTime
+      let durationMs = max(0, elapsedSeconds * 1000)
       Runtime.shared.metrics.recordInference(durationMs: durationMs)
     }
 

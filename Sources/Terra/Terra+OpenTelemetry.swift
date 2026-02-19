@@ -113,19 +113,31 @@ extension Terra {
   /// - Throws: `InstallOpenTelemetryError.alreadyInstalled` if called more than once with a different configuration.
   public static func installOpenTelemetry(_ configuration: OpenTelemetryConfiguration) throws {
     openTelemetryInstallLock.lock()
+    defer { openTelemetryInstallLock.unlock() }
+
     if let installed = installedOpenTelemetryConfiguration {
-      openTelemetryInstallLock.unlock()
       if installed == configuration {
         return
       }
       throw InstallOpenTelemetryError.alreadyInstalled
     }
-    installedOpenTelemetryConfiguration = configuration
-    openTelemetryInstallLock.unlock()
+
+    let previousTracerProvider = OpenTelemetry.instance.tracerProvider
+    let previousMeterProvider = OpenTelemetry.instance.meterProvider
+    let previousLoggerProvider = OpenTelemetry.instance.loggerProvider
 
     do {
       if let persistence = configuration.persistence {
         try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
+      }
+
+      if configuration.enableLogs {
+        _ = try installLogs(configuration: configuration)
+      }
+
+      var meterProvider: (any MeterProvider)?
+      if configuration.enableMetrics {
+        meterProvider = try installMetrics(configuration: configuration)
       }
 
       let tracerProviderSdk = try installTracing(configuration: configuration)
@@ -134,26 +146,44 @@ extension Terra {
         installSignposts(tracerProviderSdk: tracerProviderSdk)
       }
 
-      if configuration.enableLogs {
-        _ = try installLogs(configuration: configuration)
-      }
-
       if configuration.enableSessions {
         tracerProviderSdk.addSpanProcessor(TerraSessionSpanProcessor())
         SessionEventInstrumentation.install()
       }
 
-      if configuration.enableMetrics {
-        let meterProvider = try installMetrics(configuration: configuration)
+      if let meterProvider {
         // Ensure Terra records into the same meter pipeline.
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
+
+      installedOpenTelemetryConfiguration = configuration
     } catch {
-      openTelemetryInstallLock.lock()
       installedOpenTelemetryConfiguration = nil
-      openTelemetryInstallLock.unlock()
+      OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+      OpenTelemetry.registerMeterProvider(meterProvider: previousMeterProvider)
+      OpenTelemetry.registerLoggerProvider(loggerProvider: previousLoggerProvider)
       throw error
     }
+  }
+
+  public static func defaultOtlpHttpTracesEndpoint() -> URL {
+    URL(string: "http://localhost:4318/v1/traces")!
+  }
+
+  public static func defaultOltpHttpTracesEndpoint() -> URL {
+    defaultOtlpHttpTracesEndpoint()
+  }
+
+  public static func defaultOtlpHttpMetricsEndpoint() -> URL {
+    URL(string: "http://localhost:4318/v1/metrics")!
+  }
+
+  public static func defaultOtlpHttpLoggingEndpoint() -> URL {
+    URL(string: "http://localhost:4318/v1/logs")!
+  }
+
+  public static func defaultOltpHttpLoggingEndpoint() -> URL {
+    defaultOtlpHttpLoggingEndpoint()
   }
 
   // MARK: - Tracing

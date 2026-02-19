@@ -60,6 +60,9 @@ extension Terra {
       public static let safetyCheckName = "terra.safety.check.name"
       public static let safetySubjectLength = "terra.safety.subject.length"
       public static let safetySubjectSHA256 = "terra.safety.subject.sha256"
+
+      public static let errorMessageLength = "terra.error.message.length"
+      public static let errorMessageSHA256 = "terra.error.message.sha256"
     }
   }
 }
