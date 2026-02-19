@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 
 @testable import Terra
@@ -145,5 +146,45 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
       if case .alreadyInstalled = installError { return }
       XCTFail("Expected alreadyInstalled but got: \(installError)")
     }
+  }
+
+  func testConcurrentInstall_whenInstallFails_doesNotReturnFalseSuccess() async throws {
+    let fileURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString)
+    try Data("not-a-directory".utf8).write(to: fileURL)
+    defer { try? FileManager.default.removeItem(at: fileURL) }
+
+    let config = Terra.OpenTelemetryConfiguration(
+      enableMetrics: false,
+      enableLogs: false,
+      enableSignposts: false,
+      enableSessions: false,
+      otlpTracesEndpoint: URL(string: "http://localhost:4318/v1/traces")!,
+      persistence: .init(storageURL: fileURL)
+    )
+
+    let barrier = AsyncBarrier(participants: 2)
+    let results = await withTaskGroup(of: Result<Void, Error>.self) { group in
+      group.addTask {
+        await barrier.wait()
+        return Result { try Terra.installOpenTelemetry(config) }
+      }
+      group.addTask {
+        await barrier.wait()
+        return Result { try Terra.installOpenTelemetry(config) }
+      }
+
+      var collected: [Result<Void, Error>] = []
+      for await result in group {
+        collected.append(result)
+      }
+      return collected
+    }
+
+    let successCount = results.filter {
+      if case .success = $0 { return true }
+      return false
+    }.count
+    XCTAssertEqual(successCount, 0)
   }
 }
