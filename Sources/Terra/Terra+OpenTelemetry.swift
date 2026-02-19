@@ -113,47 +113,44 @@ extension Terra {
   /// - Throws: `InstallOpenTelemetryError.alreadyInstalled` if called more than once with a different configuration.
   public static func installOpenTelemetry(_ configuration: OpenTelemetryConfiguration) throws {
     openTelemetryInstallLock.lock()
+    defer { openTelemetryInstallLock.unlock() }
+
     if let installed = installedOpenTelemetryConfiguration {
-      openTelemetryInstallLock.unlock()
       if installed == configuration {
         return
       }
       throw InstallOpenTelemetryError.alreadyInstalled
     }
-    installedOpenTelemetryConfiguration = configuration
-    openTelemetryInstallLock.unlock()
 
-    do {
-      if let persistence = configuration.persistence {
-        try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
-      }
-
-      let tracerProviderSdk = try installTracing(configuration: configuration)
-
-      if configuration.enableSignposts {
-        installSignposts(tracerProviderSdk: tracerProviderSdk)
-      }
-
-      if configuration.enableLogs {
-        _ = try installLogs(configuration: configuration)
-      }
-
-      if configuration.enableSessions {
-        tracerProviderSdk.addSpanProcessor(TerraSessionSpanProcessor())
-        SessionEventInstrumentation.install()
-      }
-
-      if configuration.enableMetrics {
-        let meterProvider = try installMetrics(configuration: configuration)
-        // Ensure Terra records into the same meter pipeline.
-        Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
-      }
-    } catch {
-      openTelemetryInstallLock.lock()
-      installedOpenTelemetryConfiguration = nil
-      openTelemetryInstallLock.unlock()
-      throw error
+    if let persistence = configuration.persistence {
+      try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
     }
+
+    let tracerProviderSdk = try installTracing(configuration: configuration)
+
+    if configuration.enableSignposts {
+      installSignposts(tracerProviderSdk: tracerProviderSdk)
+    }
+
+    if configuration.enableLogs {
+      _ = try installLogs(configuration: configuration)
+    }
+
+    if configuration.enableSessions {
+      tracerProviderSdk.addSpanProcessor(TerraSessionSpanProcessor())
+      SessionEventInstrumentation.install()
+    }
+
+    if configuration.enableMetrics {
+      let meterProvider = try installMetrics(configuration: configuration)
+      // Ensure Terra records into the same meter pipeline.
+      Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
+    } else {
+      // Explicitly clear any previous meter wiring when metrics are disabled.
+      Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: nil, registerProvidersAsGlobal: false))
+    }
+
+    installedOpenTelemetryConfiguration = configuration
   }
 
   // MARK: - Tracing

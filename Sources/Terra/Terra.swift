@@ -20,7 +20,8 @@ public enum Terra {
     _ body: @Sendable (Scope<InferenceSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
-    let startTime = Date()
+    let clock = ContinuousClock()
+    let start = clock.now
 
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.inference.rawValue),
@@ -49,7 +50,7 @@ public enum Terra {
     }
 
     defer {
-      let durationMs = Date().timeIntervalSince(startTime) * 1000
+      let durationMs = max(0, milliseconds(from: start.duration(to: clock.now)))
       Runtime.shared.metrics.recordInference(durationMs: durationMs)
     }
 
@@ -218,5 +219,10 @@ public enum Terra {
       }
       return attributes
     }
+  }
+
+  private static func milliseconds(from duration: Duration) -> Double {
+    let components = duration.components
+    return (Double(components.seconds) * 1_000) + (Double(components.attoseconds) / 1_000_000_000_000_000)
   }
 }

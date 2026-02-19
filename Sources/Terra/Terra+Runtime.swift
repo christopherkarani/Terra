@@ -46,12 +46,8 @@ final class Runtime {
   func install(_ installation: Terra.Installation) {
     lock.lock()
     privacyValue = installation.privacy
-    if let tracerProvider = installation.tracerProvider {
-      tracerProviderOverride = tracerProvider
-    }
-    if let loggerProvider = installation.loggerProvider {
-      loggerProviderOverride = loggerProvider
-    }
+    tracerProviderOverride = installation.tracerProvider
+    loggerProviderOverride = installation.loggerProvider
     lock.unlock()
 
     if installation.registerProvidersAsGlobal {
@@ -66,9 +62,7 @@ final class Runtime {
       }
     }
 
-    if let meterProvider = installation.meterProvider {
-      metrics.configure(meterProvider: meterProvider)
-    }
+    metrics.configure(meterProvider: installation.meterProvider)
   }
 
   var privacy: Terra.Privacy {
@@ -129,8 +123,8 @@ final class TerraMetrics {
 
   func recordInference(durationMs: Double) {
     lock.lock()
-    var inferenceCount = inferenceCount
-    var inferenceDurationMs = inferenceDurationMs
+    let inferenceCount = inferenceCount
+    let inferenceDurationMs = inferenceDurationMs
     lock.unlock()
 
     inferenceCount?.add(value: 1, attributes: [:])
