@@ -185,8 +185,14 @@ extension LicenseVerifier {
 
     // Unconfigured: verification is disabled — verify() throws .notConfigured.
     // Uses a deterministic zero-byte placeholder (no ephemeral key generation).
-    let zeroKey = try! Curve25519.Signing.PublicKey(rawRepresentation: Data(repeating: 1, count: 32))
-    return LicenseVerifier(publicKey: zeroKey, isConfigured: false)
+    let placeholderData = Data(repeating: 1, count: 32)
+    if let zeroKey = try? Curve25519.Signing.PublicKey(rawRepresentation: placeholderData) {
+      return LicenseVerifier(publicKey: zeroKey, isConfigured: false)
+    }
+
+    // Defensive fallback: should never happen, but avoids crashing in production.
+    let fallback = Curve25519.Signing.PrivateKey().publicKey
+    return LicenseVerifier(publicKey: fallback, isConfigured: false)
   }
 }
 

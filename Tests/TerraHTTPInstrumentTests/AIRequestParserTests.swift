@@ -80,6 +80,24 @@ func integerTemperatureIsCoerced() throws {
   #expect(result.temperature == 1.0)
 }
 
+@Test("Integral floating max_tokens is accepted")
+func floatingMaxTokensIsAccepted() throws {
+  let body = #"{"model": "gpt-4", "max_tokens": 128.0}"#
+  let data = try #require(body.data(using: .utf8))
+  let result = try #require(AIRequestParser.parse(body: data))
+
+  #expect(result.maxTokens == 128)
+}
+
+@Test("Boolean max_tokens is ignored")
+func booleanMaxTokensIsIgnored() throws {
+  let body = #"{"max_tokens": true}"#
+  let data = try #require(body.data(using: .utf8))
+  let result = AIRequestParser.parse(body: data)
+
+  #expect(result == nil)
+}
+
 @Test("Request body larger than 10 MiB is rejected")
 func oversizedRequestBodyReturnsNil() throws {
   let oversizedPayload = Data(repeating: 0x61, count: AIRequestParser.maxBodySizeBytes + 1)
@@ -164,4 +182,22 @@ func anthropicTokensOverrideOpenAI() throws {
   // Anthropic keys take precedence over OpenAI keys per parser logic
   #expect(result.inputTokens == 15)
   #expect(result.outputTokens == 25)
+}
+
+@Test("Integral floating usage tokens are accepted")
+func floatingUsageTokensAreAccepted() throws {
+  let body = #"{"model": "gpt-4", "usage": {"prompt_tokens": 5.0, "completion_tokens": 7.0}}"#
+  let data = try #require(body.data(using: .utf8))
+  let result = try #require(AIResponseParser.parse(data: data))
+
+  #expect(result.inputTokens == 5)
+  #expect(result.outputTokens == 7)
+}
+
+@Test("Boolean usage tokens are ignored")
+func booleanUsageTokensAreIgnored() throws {
+  let body = #"{"usage": {"prompt_tokens": true}}"#
+  let data = try #require(body.data(using: .utf8))
+  let result = AIResponseParser.parse(data: data)
+  #expect(result == nil)
 }
