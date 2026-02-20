@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 import OpenTelemetryApi
 
@@ -20,7 +21,7 @@ public enum Terra {
     _ body: @Sendable (Scope<InferenceSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
-    let startTime = Date()
+    let startTime = DispatchTime.now().uptimeNanoseconds
 
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.inference.rawValue),
@@ -49,7 +50,8 @@ public enum Terra {
     }
 
     defer {
-      let durationMs = Date().timeIntervalSince(startTime) * 1000
+      let endTime = DispatchTime.now().uptimeNanoseconds
+      let durationMs = Double(endTime - startTime) / 1_000_000
       Runtime.shared.metrics.recordInference(durationMs: durationMs)
     }
 
