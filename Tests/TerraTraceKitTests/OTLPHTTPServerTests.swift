@@ -4,6 +4,151 @@ import XCTest
 @testable import TerraTraceKit
 
 final class OTLPHTTPServerTests: XCTestCase {
+  func testOTLPHTTPServerEnforcesRuntimeAllowlist() async throws {
+    let body = try OTLPTestFixtures.serializedRequest()
+    let decoder = OTLPRequestDecoder(
+      maxBodyBytes: body.count + 1024,
+      maxDecompressedBytes: body.count + 1024
+    )
+    let store = TraceStore(maxSpans: 50)
+
+    let server = OTLPHTTPServer(
+      host: "127.0.0.1",
+      port: 0,
+      decoder: decoder,
+      traceStore: store,
+      ingestPolicy: .init(
+        enforceRuntimeAllowlist: true,
+        allowedRuntimes: ["coreml"]
+      )
+    )
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = Int(server.port)
+    XCTAssertGreaterThan(actualPort, 0)
+
+    let requestBytes = makeRawRequest(host: "127.0.0.1", port: actualPort, body: body)
+    let response = try await sendRawRequest(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      request: requestBytes
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 403)
+    XCTAssertTrue(parseBody(from: response).contains("runtime_not_allowed"))
+
+    let snapshot = await store.snapshot(filter: nil)
+    XCTAssertEqual(snapshot.allSpans.count, 0)
+  }
+
+  func testOTLPHTTPServerAcceptsAllowedRuntimeBeforeIngest() async throws {
+    let body = try OTLPTestFixtures.serializedRequest()
+    let decoder = OTLPRequestDecoder(
+      maxBodyBytes: body.count + 1024,
+      maxDecompressedBytes: body.count + 1024
+    )
+    let store = TraceStore(maxSpans: 50)
+
+    let server = OTLPHTTPServer(
+      host: "127.0.0.1",
+      port: 0,
+      decoder: decoder,
+      traceStore: store,
+      ingestPolicy: .init(
+        enforceRuntimeAllowlist: true,
+        allowedRuntimes: ["http_api"]
+      )
+    )
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = Int(server.port)
+    XCTAssertGreaterThan(actualPort, 0)
+
+    let requestBytes = makeRawRequest(host: "127.0.0.1", port: actualPort, body: body)
+    let response = try await sendRawRequest(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      request: requestBytes
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 200)
+    let snapshot = await store.snapshot(filter: nil)
+    XCTAssertEqual(snapshot.allSpans.count, 2)
+  }
+
+  func testOTLPHTTPServerEmitsAuditForMajorSchemaMismatch() async throws {
+    let body = try OTLPTestFixtures.serializedRequest(
+      resourceAttributes: [
+        "service.name": "demo-service",
+        "service.version": "1.0.0",
+        "terra.semantic.version": "v2",
+        "terra.schema.family": "terra",
+        "terra.runtime": "http_api",
+        "terra.request.id": "request-123",
+        "terra.session.id": "session-456",
+        "terra.model.fingerprint": "model:gpt-4o:quant:v1",
+      ]
+    )
+    let decoder = OTLPRequestDecoder(
+      maxBodyBytes: body.count + 1024,
+      maxDecompressedBytes: body.count + 1024
+    )
+    let store = TraceStore(maxSpans: 50)
+
+    let lock = NSLock()
+    var audits: [OTLPHTTPServer.IngestAuditEvent] = []
+    let server = OTLPHTTPServer(
+      host: "127.0.0.1",
+      port: 0,
+      decoder: decoder,
+      traceStore: store,
+      onAudit: { event in
+        lock.lock()
+        audits.append(event)
+        lock.unlock()
+      }
+    )
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = Int(server.port)
+    XCTAssertGreaterThan(actualPort, 0)
+
+    let requestBytes = makeRawRequest(host: "127.0.0.1", port: actualPort, body: body)
+    let response = try await sendRawRequest(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      request: requestBytes
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 400)
+    XCTAssertTrue(parseBody(from: response).contains("unsupported terra semantic major version"))
+    let snapshot = await store.snapshot(filter: nil)
+    XCTAssertEqual(snapshot.allSpans.count, 0)
+
+    lock.lock()
+    let capturedAudits = audits
+    lock.unlock()
+    XCTAssertTrue(capturedAudits.contains { $0.kind == .majorVersionMismatch })
+  }
+
   func testOTLPHTTPServerEndToEnd() async throws {
     let body = try OTLPTestFixtures.serializedRequest()
     let decoder = OTLPRequestDecoder(

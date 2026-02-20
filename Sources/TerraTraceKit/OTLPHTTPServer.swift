@@ -12,6 +12,81 @@ import OpenTelemetryProtocolExporterHTTP
 #endif
 
 public final class OTLPHTTPServer {
+  public struct IngestPolicy: Sendable, Hashable {
+    public var enforceRuntimeAllowlist: Bool
+    public var allowedRuntimes: Set<String>
+
+    public init(
+      enforceRuntimeAllowlist: Bool = true,
+      allowedRuntimes: Set<String> = IngestPolicy.defaultAllowedRuntimes
+    ) {
+      self.enforceRuntimeAllowlist = enforceRuntimeAllowlist
+      self.allowedRuntimes = Set(allowedRuntimes.compactMap { Self.canonicalRuntimeValue($0) })
+    }
+
+    public static let defaultAllowedRuntimes: Set<String> = [
+      "coreml",
+      "foundation_models",
+      "mlx",
+      "ollama",
+      "lm_studio",
+      "llama_cpp",
+      "openclaw_gateway",
+      "http_api"
+    ]
+
+    static func canonicalRuntimeValue(_ value: String) -> String? {
+      let normalized = value
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+      switch normalized {
+      case "coreml":
+        return "coreml"
+      case "foundation_models", "foundation-models", "foundation models":
+        return "foundation_models"
+      case "mlx":
+        return "mlx"
+      case "ollama":
+        return "ollama"
+      case "lm_studio", "lmstudio", "lm-studio":
+        return "lm_studio"
+      case "llama_cpp", "llamacpp", "llama-cpp":
+        return "llama_cpp"
+      case "openclaw_gateway", "openclaw-gateway", "openclaw gateway", "gateway":
+        return "openclaw_gateway"
+      case "http_api", "http", "httpapi":
+        return "http_api"
+      default:
+        return nil
+      }
+    }
+  }
+
+  public struct IngestAuditEvent: Sendable, Hashable {
+    public enum Kind: String, Sendable, Hashable {
+      case policyReject = "policy_reject"
+      case schemaReject = "schema_reject"
+      case majorVersionMismatch = "major_version_mismatch"
+    }
+
+    public var kind: Kind
+    public var message: String
+    public var attributes: [String: String]
+    public var timestamp: Date
+
+    public init(
+      kind: Kind,
+      message: String,
+      attributes: [String: String] = [:],
+      timestamp: Date = Date()
+    ) {
+      self.kind = kind
+      self.message = message
+      self.attributes = attributes
+      self.timestamp = timestamp
+    }
+  }
+
   public struct Limits: Sendable {
     public var maxHeaderBytes: Int
     public var maxBodyBytes: Int
@@ -29,7 +104,9 @@ public final class OTLPHTTPServer {
   private let limits: Limits
   private let host: String
   private let configuredPort: UInt16
+  private let ingestPolicy: IngestPolicy
   private let onSpans: (([SpanRecord]) -> Void)?
+  private let onAudit: ((IngestAuditEvent) -> Void)?
 
   private let queue = DispatchQueue(label: "terra.trace.otlp.httpserver")
   private var listener: NWListener?
@@ -45,6 +122,8 @@ public final class OTLPHTTPServer {
     decoder: OTLPRequestDecoder = OTLPRequestDecoder(),
     traceStore: TraceStore,
     limits: Limits = Limits(),
+    ingestPolicy: IngestPolicy = .init(),
+    onAudit: ((IngestAuditEvent) -> Void)? = nil,
     onSpans: (([SpanRecord]) -> Void)? = nil
   ) {
     self.host = host
@@ -52,6 +131,8 @@ public final class OTLPHTTPServer {
     self.decoder = decoder
     self.traceStore = traceStore
     self.limits = limits
+    self.ingestPolicy = ingestPolicy
+    self.onAudit = onAudit
     self.onSpans = onSpans
   }
 
@@ -251,15 +332,134 @@ public final class OTLPHTTPServer {
       guard let self else { return }
       do {
         let spans = try decoder.decode(headers: head.headers, body: body)
+        if let policyReject = evaluateIngestPolicy(for: spans) {
+          emitAudit(policyReject.auditEvent)
+          self.queue.async {
+            self.sendError(
+              on: connection,
+              status: .forbidden,
+              message: policyReject.message
+            )
+          }
+          return
+        }
         let accepted = await traceStore.ingest(spans)
         if let onSpans {
           onSpans(accepted)
         }
         self.queue.async { self.sendSuccess(on: connection) }
+      } catch let decodeError as OTLPRequestDecoderError {
+        let decoderFailure = classifyDecoderFailure(decodeError)
+        if let auditEvent = decoderFailure.auditEvent {
+          emitAudit(auditEvent)
+        }
+        self.queue.async {
+          self.sendError(
+            on: connection,
+            status: decoderFailure.status,
+            message: decoderFailure.message
+          )
+        }
       } catch {
-        self.queue.async { self.sendError(on: connection, status: .badRequest, message: "Invalid OTLP payload") }
+        self.queue.async {
+          self.sendError(on: connection, status: .badRequest, message: "Invalid OTLP payload")
+        }
       }
     }
+  }
+
+  private func evaluateIngestPolicy(for spans: [SpanRecord]) -> PolicyReject? {
+    guard ingestPolicy.enforceRuntimeAllowlist else { return nil }
+    guard !spans.isEmpty else { return nil }
+
+    for span in spans {
+      guard let rawRuntime = span.attributes[string: "terra.runtime"],
+            let canonicalRuntime = IngestPolicy.canonicalRuntimeValue(rawRuntime) else {
+        let message = "Policy rejected OTLP payload: runtime_unresolvable"
+        return PolicyReject(
+          message: message,
+          auditEvent: IngestAuditEvent(
+            kind: .policyReject,
+            message: message,
+            attributes: [
+              "reason": "runtime_unresolvable",
+              "trace_id": span.traceID.hex,
+              "span_id": span.spanID.hex
+            ]
+          )
+        )
+      }
+
+      if !ingestPolicy.allowedRuntimes.contains(canonicalRuntime) {
+        let message = "Policy rejected OTLP payload: runtime_not_allowed (\(canonicalRuntime))"
+        return PolicyReject(
+          message: message,
+          auditEvent: IngestAuditEvent(
+            kind: .policyReject,
+            message: message,
+            attributes: [
+              "reason": "runtime_not_allowed",
+              "runtime": canonicalRuntime,
+              "trace_id": span.traceID.hex,
+              "span_id": span.spanID.hex
+            ]
+          )
+        )
+      }
+    }
+
+    return nil
+  }
+
+  private func classifyDecoderFailure(_ error: OTLPRequestDecoderError) -> DecoderFailure {
+    switch error {
+    case .unsupportedTerraSchema(let version):
+      if isMajorVersionMismatch(version) {
+        let message = "Rejected unsupported terra semantic major version: \(version)"
+        return DecoderFailure(
+          status: .badRequest,
+          message: message,
+          auditEvent: IngestAuditEvent(
+            kind: .majorVersionMismatch,
+            message: message,
+            attributes: ["terra.semantic.version": version]
+          )
+        )
+      }
+      let message = "Rejected unsupported terra schema: \(version)"
+      return DecoderFailure(
+        status: .badRequest,
+        message: message,
+        auditEvent: IngestAuditEvent(
+          kind: .schemaReject,
+          message: message,
+          attributes: ["schema": version]
+        )
+      )
+    case .missingTerraSchemaAttributes(let missing):
+      return DecoderFailure(
+        status: .badRequest,
+        message: "Missing required terra schema attributes: \(missing.joined(separator: ", "))",
+        auditEvent: IngestAuditEvent(
+          kind: .schemaReject,
+          message: "Rejected payload with missing required terra attributes",
+          attributes: ["missing": missing.joined(separator: ",")]
+        )
+      )
+    default:
+      return DecoderFailure(status: .badRequest, message: "Invalid OTLP payload: \(error.description)")
+    }
+  }
+
+  private func isMajorVersionMismatch(_ value: String) -> Bool {
+    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard normalized.hasPrefix("v") else { return false }
+    guard let major = Int(normalized.dropFirst().split(separator: ".").first ?? "") else { return false }
+    return major != 1
+  }
+
+  private func emitAudit(_ event: IngestAuditEvent) {
+    onAudit?(event)
   }
 
   private func sendSuccess(on connection: NWConnection) {
@@ -416,6 +616,7 @@ private struct HTTPStatus {
 
   static let ok = HTTPStatus(code: 200, reason: "OK")
   static let badRequest = HTTPStatus(code: 400, reason: "Bad Request")
+  static let forbidden = HTTPStatus(code: 403, reason: "Forbidden")
   static let notFound = HTTPStatus(code: 404, reason: "Not Found")
   static let methodNotAllowed = HTTPStatus(code: 405, reason: "Method Not Allowed")
   static let lengthRequired = HTTPStatus(code: 411, reason: "Length Required")
@@ -469,5 +670,26 @@ private enum HTTPParseError: Error {
     default:
       return [:]
     }
+  }
+}
+
+private struct PolicyReject {
+  let message: String
+  let auditEvent: OTLPHTTPServer.IngestAuditEvent
+}
+
+private struct DecoderFailure {
+  let status: HTTPStatus
+  let message: String
+  let auditEvent: OTLPHTTPServer.IngestAuditEvent?
+
+  init(
+    status: HTTPStatus,
+    message: String,
+    auditEvent: OTLPHTTPServer.IngestAuditEvent? = nil
+  ) {
+    self.status = status
+    self.message = message
+    self.auditEvent = auditEvent
   }
 }

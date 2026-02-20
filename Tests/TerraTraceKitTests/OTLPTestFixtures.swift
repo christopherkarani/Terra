@@ -155,6 +155,27 @@ enum OTLPTestFixtures {
     try makeSiblingExportRequest().serializedData()
   }
 
+  static func serializedRequestWithNullSpanAttribute(
+    key: String = "terra.optional.metric"
+  ) throws -> Data {
+    var request = makeExportRequest(resourceAttributes: resourceAttributes)
+    guard
+      !request.resourceSpans.isEmpty,
+      !request.resourceSpans[0].scopeSpans.isEmpty,
+      !request.resourceSpans[0].scopeSpans[0].spans.isEmpty
+    else {
+      return try request.serializedData()
+    }
+
+    var rootSpan = request.resourceSpans[0].scopeSpans[0].spans[0]
+    var keyValue = Opentelemetry_Proto_Common_V1_KeyValue()
+    keyValue.key = key
+    keyValue.value = Opentelemetry_Proto_Common_V1_AnyValue() // `.none` preserves explicit null semantics.
+    rootSpan.attributes.append(keyValue)
+    request.resourceSpans[0].scopeSpans[0].spans[0] = rootSpan
+    return try request.serializedData()
+  }
+
   static func makeSpan(
     traceIDHex: String,
     spanIDHex: String,

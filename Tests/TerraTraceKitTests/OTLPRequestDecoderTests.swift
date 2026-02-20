@@ -117,6 +117,24 @@ final class OTLPRequestDecoderTests: XCTestCase {
       }
     }
   }
+
+  func testDecodePreservesNullSpanAttributes() throws {
+    let body = try OTLPTestFixtures.serializedRequestWithNullSpanAttribute(
+      key: "terra.optional.metric"
+    )
+    let decoder = OTLPRequestDecoder(
+      maxBodyBytes: body.count + 64,
+      maxDecompressedBytes: body.count + 64
+    )
+
+    let spans = try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    let root = try XCTUnwrap(spans.first { $0.name == "root" })
+    let value = root.attributes["terra.optional.metric"]
+    guard case .null = value else {
+      XCTFail("Expected .null for terra.optional.metric, got \(String(describing: value))")
+      return
+    }
+  }
 }
 
 private extension OTLPRequestDecoderTests {
