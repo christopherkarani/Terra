@@ -1,7 +1,13 @@
 import Foundation
 
 struct AIResponseParser {
+    static let maxBodySizeBytes = 10 * 1_048_576 // 10 MiB
+
     static func parse(data: Data) -> ParsedResponse? {
+        guard data.count <= maxBodySizeBytes else {
+            return nil
+        }
+
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }

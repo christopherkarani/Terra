@@ -144,6 +144,13 @@ func emptyResponseBodyReturnsNil() throws {
   #expect(result == nil)
 }
 
+@Test("Response body larger than 10 MiB is rejected")
+func oversizedResponseBodyReturnsNil() {
+  let oversizedPayload = Data(repeating: 0x61, count: AIResponseParser.maxBodySizeBytes + 1)
+  let result = AIResponseParser.parse(data: oversizedPayload)
+  #expect(result == nil)
+}
+
 @Test("Response with only model field is returned")
 func responseWithOnlyModelField() throws {
   let body = #"{"model": "gpt-4"}"#
