@@ -9,7 +9,7 @@ import OpenTelemetryApi
 private func makeSpan(
   name: String,
   traceId: TraceId = TraceId(),
-  spanId: SpanId = SpanId(),
+  spanId: SpanId = SpanId.random(),
   parentSpanId: SpanId? = nil,
   start: Date = Date(timeIntervalSince1970: 1000),
   end: Date = Date(timeIntervalSince1970: 1001),
@@ -137,6 +137,17 @@ func traceRejectsMismatchedIds() {
   }
 }
 
+@Test("Trace.init throws duplicateSpanIds when spans reuse the same span ID")
+func traceRejectsDuplicateSpanIds() {
+  let traceId = TraceId.random()
+  let duplicateSpanID = SpanId.random()
+  let span1 = makeSpan(name: "a", traceId: traceId, spanId: duplicateSpanID)
+  let span2 = makeSpan(name: "b", traceId: traceId, spanId: duplicateSpanID)
+  #expect(throws: TraceModelError.duplicateSpanIds) {
+    _ = try Trace(fileName: "123456", spans: [span1, span2])
+  }
+}
+
 @Test("Trace.init throws invalidFileName for non-numeric name")
 func traceRejectsInvalidFileName() {
   let span = makeSpan(name: "root")
@@ -206,6 +217,28 @@ func loaderHandlesMixedFiles() throws {
   #expect(result.traces[0].spans[0].name == "root")
   #expect(result.failures.count == 1)
   #expect(result.failures[0].file.lastPathComponent == "2000000")
+  #expect(result.loadedFileCount == 2)
+  #expect(result.totalFileCount == 2)
+}
+
+@Test("TraceLoader maxFiles loads only the newest files")
+func loaderRespectsMaxFilesNewestFirst() throws {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  let traceIdOld = TraceId()
+  let traceIdNew = TraceId()
+  try writeSpanFile(spans: [makeSpan(name: "old", traceId: traceIdOld)], to: dir.appendingPathComponent("1000"))
+  try writeSpanFile(spans: [makeSpan(name: "new", traceId: traceIdNew)], to: dir.appendingPathComponent("2000"))
+
+  let loader = TraceLoader(locator: TraceFileLocator(tracesDirectoryURL: dir))
+  let result = try loader.loadTracesWithFailures(maxFiles: 1)
+  #expect(result.traces.count == 1)
+  #expect(result.traces.first?.spans.first?.name == "new")
+  #expect(result.loadedFileCount == 1)
+  #expect(result.totalFileCount == 2)
 }
 
 @Test("TraceLoader returns empty for non-existent directory")

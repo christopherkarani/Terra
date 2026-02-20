@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Terra
+@testable import TerraCore
 
 final class TerraInstrumentationNameTests: XCTestCase {
   func testInstrumentationName_isStable() {

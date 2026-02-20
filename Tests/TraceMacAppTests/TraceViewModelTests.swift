@@ -7,7 +7,7 @@ import OpenTelemetryApi
 private func makeSpan(
   name: String,
   traceId: TraceId,
-  spanId: SpanId = SpanId(),
+  spanId: SpanId = SpanId.random(),
   parentSpanId: SpanId? = nil,
   start: Date,
   end: Date,
@@ -154,7 +154,7 @@ func spanDetailViewModelSelection() throws {
   )
   span = span.settingAttributes(["http.method": .string("GET")])
   span = span.settingEvents([SpanData.Event(name: "event", timestamp: Date())])
-  let linkContext = SpanContext.create(traceId: traceId, spanId: SpanId(), traceFlags: TraceFlags(), traceState: TraceState())
+  let linkContext = SpanContext.create(traceId: traceId, spanId: SpanId.random(), traceFlags: TraceFlags(), traceState: TraceState())
   span = span.settingLinks([SpanData.Link(context: linkContext)])
 
   let detail = SpanDetailViewModel()
@@ -168,4 +168,52 @@ func spanDetailViewModelSelection() throws {
   #expect(detail.attributeItems.isEmpty)
   #expect(detail.eventItems.isEmpty)
   #expect(detail.linkItems.isEmpty)
+}
+
+@Test("TimelineViewModel handles 1000 spans efficiently")
+func timelineViewModelPerformance1000() throws {
+    let traceId = TraceId()
+    let base = Date(timeIntervalSince1970: 0)
+    var spans: [SpanData] = []
+    for i in 0..<1000 {
+        let start = base.addingTimeInterval(Double(i) * 0.01)
+        let end = start.addingTimeInterval(Double.random(in: 0.005...0.05))
+        spans.append(makeSpan(
+            name: "op_\(i % 20)",
+            traceId: traceId,
+            start: start,
+            end: end
+        ))
+    }
+    let trace = try Trace(fileName: "1000000", spans: spans)
+
+    let clock = ContinuousClock()
+    let elapsed = clock.measure {
+        let _ = TimelineViewModel(trace: trace)
+    }
+    #expect(elapsed < .seconds(2), "Lane packing 1000 spans should complete in under 2 seconds")
+}
+
+@Test("TimelineViewModel handles 5000 spans efficiently")
+func timelineViewModelPerformance5000() throws {
+    let traceId = TraceId()
+    let base = Date(timeIntervalSince1970: 0)
+    var spans: [SpanData] = []
+    for i in 0..<5000 {
+        let start = base.addingTimeInterval(Double(i) * 0.002)
+        let end = start.addingTimeInterval(Double.random(in: 0.001...0.01))
+        spans.append(makeSpan(
+            name: "op_\(i % 50)",
+            traceId: traceId,
+            start: start,
+            end: end
+        ))
+    }
+    let trace = try Trace(fileName: "5000000", spans: spans)
+
+    let clock = ContinuousClock()
+    let elapsed = clock.measure {
+        let _ = TimelineViewModel(trace: trace)
+    }
+    #expect(elapsed < .seconds(5), "Lane packing 5000 spans should complete in under 5 seconds")
 }

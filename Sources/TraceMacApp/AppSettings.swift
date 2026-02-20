@@ -11,6 +11,11 @@ enum AppSettings {
     static let traceRetentionDays = "traceMacApp.traceRetentionDays"
     static let otlpReceiverEnabled = "traceMacApp.otlpReceiverEnabled"
     static let otlpReceiverPort = "traceMacApp.otlpReceiverPort"
+    static let openClawGatewayCaptureEnabled = "traceMacApp.openClawGatewayCaptureEnabled"
+    static let openClawTransparentModeEnabled = "traceMacApp.openClawTransparentModeEnabled"
+    static let openClawGatewayEndpoint = "traceMacApp.openClawGatewayEndpoint"
+    static let openClawGatewayAuthMode = "traceMacApp.openClawGatewayAuthMode"
+    static let openClawGatewayBearerToken = "traceMacApp.openClawGatewayBearerToken"
   }
 
   static let defaultOTLPReceiverPort: UInt16 = 4318
@@ -22,7 +27,12 @@ enum AppSettings {
       Key.automaticUpdateChecksEnabled: false,
       Key.traceRetentionDays: 30,
       Key.otlpReceiverEnabled: false,
-      Key.otlpReceiverPort: Int(defaultOTLPReceiverPort)
+      Key.otlpReceiverPort: Int(defaultOTLPReceiverPort),
+      Key.openClawGatewayCaptureEnabled: false,
+      Key.openClawTransparentModeEnabled: false,
+      Key.openClawGatewayEndpoint: "http://localhost:3000/v1/chat/completions",
+      Key.openClawGatewayAuthMode: "none",
+      Key.openClawGatewayBearerToken: ""
     ])
     return ud
   }()
@@ -78,6 +88,31 @@ enum AppSettings {
       return value > 0 ? UInt16(clamping: value) : defaultOTLPReceiverPort
     }
     set { defaults.set(Int(newValue), forKey: Key.otlpReceiverPort) }
+  }
+
+  static var isOpenClawGatewayCaptureEnabled: Bool {
+    get { defaults.bool(forKey: Key.openClawGatewayCaptureEnabled) }
+    set { defaults.set(newValue, forKey: Key.openClawGatewayCaptureEnabled) }
+  }
+
+  static var isOpenClawTransparentModeEnabled: Bool {
+    get { defaults.bool(forKey: Key.openClawTransparentModeEnabled) }
+    set { defaults.set(newValue, forKey: Key.openClawTransparentModeEnabled) }
+  }
+
+  static var openClawGatewayEndpoint: String {
+    get { defaults.string(forKey: Key.openClawGatewayEndpoint) ?? "http://localhost:3000/v1/chat/completions" }
+    set { defaults.set(newValue, forKey: Key.openClawGatewayEndpoint) }
+  }
+
+  static var openClawGatewayAuthMode: String {
+    get { defaults.string(forKey: Key.openClawGatewayAuthMode) ?? "none" }
+    set { defaults.set(newValue, forKey: Key.openClawGatewayAuthMode) }
+  }
+
+  static var openClawGatewayBearerToken: String {
+    get { defaults.string(forKey: Key.openClawGatewayBearerToken) ?? "" }
+    set { defaults.set(newValue, forKey: Key.openClawGatewayBearerToken) }
   }
 
   /// ~/Library/Logs/ai.openclaw.mac/ — where OpenClaw writes diagnostics output.

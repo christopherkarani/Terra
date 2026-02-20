@@ -14,13 +14,31 @@ enum DashboardTheme {
         static let cardBackground = Color(.windowBackgroundColor)
         static let cardBorder = Color(.separatorColor).opacity(0.3)
         static let surfaceBackground = Color(.controlBackgroundColor).opacity(0.55)
-        static let accentNormal = Color.blue
-        static let accentError = Color.red
-        static let accentWarning = Color.orange
-        static let accentSuccess = Color.green
+        static let accentNormal  = Color(red: 0.18, green: 0.55, blue: 0.53)   // Deep teal
+        static let accentError   = Color(red: 0.84, green: 0.24, blue: 0.22)   // Terracotta red
+        static let accentWarning = Color(red: 0.85, green: 0.58, blue: 0.20)   // Amber
+        static let accentSuccess = Color(red: 0.30, green: 0.60, blue: 0.36)   // Sage green
+        static let accentGlow    = accentNormal.opacity(0.25)
+        static let surfaceElevated = Color(.controlBackgroundColor).opacity(0.75)
         static let textPrimary = Color.primary
         static let textSecondary = Color.secondary
         static let textTertiary = Color(nsColor: .tertiaryLabelColor)
+
+        static let serviceColors: [Color] = [
+            Color(red: 0.18, green: 0.55, blue: 0.53),  // Teal
+            Color(red: 0.55, green: 0.35, blue: 0.65),  // Plum
+            Color(red: 0.20, green: 0.48, blue: 0.65),  // Steel blue
+            Color(red: 0.60, green: 0.42, blue: 0.24),  // Copper
+            Color(red: 0.35, green: 0.55, blue: 0.35),  // Forest
+            Color(red: 0.58, green: 0.28, blue: 0.45),  // Mulberry
+            Color(red: 0.40, green: 0.50, blue: 0.55),  // Slate
+            Color(red: 0.65, green: 0.48, blue: 0.18),  // Gold
+        ]
+
+        static func serviceColor(for name: String) -> Color {
+            let hash = name.utf8.reduce(UInt(0)) { ($0 &+ UInt($1)) &* 31 }
+            return serviceColors[Int(hash) % serviceColors.count]
+        }
     }
 
     // MARK: - Fonts
@@ -63,6 +81,8 @@ enum DashboardTheme {
     static var textPrimary: Color { Colors.textPrimary }
     static var textSecondary: Color { Colors.textSecondary }
     static var textTertiary: Color { Colors.textTertiary }
+    static var accentGlow: Color { Colors.accentGlow }
+    static var surfaceElevated: Color { Colors.surfaceElevated }
 
     static var kpiValue: Font { Fonts.kpiValue }
     static var kpiLabel: Font { Fonts.kpiLabel }

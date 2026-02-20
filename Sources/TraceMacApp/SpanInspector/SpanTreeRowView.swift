@@ -11,6 +11,7 @@ struct SpanTreeRowView: View {
         HStack(spacing: DashboardTheme.sectionSpacing) {
             statusDot
             nameLabel
+            durationBar
             Spacer()
             if node.span.status.isError {
                 StatusBadge(isError: true)
@@ -44,6 +45,17 @@ private extension SpanTreeRowView {
         Text(node.span.name)
             .font(DashboardTheme.rowTitle)
             .lineLimit(1)
+    }
+
+    var durationBar: some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(DashboardTheme.Colors.serviceColor(for: node.span.name).opacity(0.3))
+            .frame(width: 80, height: 6)
+            .overlay(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(DashboardTheme.Colors.serviceColor(for: node.span.name))
+                    .frame(width: max(2, node.durationFraction * 80), height: 6)
+            }
     }
 
     var durationLabel: some View {

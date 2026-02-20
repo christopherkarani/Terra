@@ -5,17 +5,20 @@ import SwiftUI
 struct DashboardCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .background(.background)
+            .background(.ultraThinMaterial)
             .clipShape(.rect(cornerRadius: DashboardTheme.Spacing.cornerRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: DashboardTheme.Spacing.cornerRadius)
-                    .strokeBorder(DashboardTheme.Colors.cardBorder, lineWidth: 1)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.15), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
             )
-            .shadow(
-                color: .black.opacity(0.06),
-                radius: 2,
-                y: 1
-            )
+            .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
     }
 }
 

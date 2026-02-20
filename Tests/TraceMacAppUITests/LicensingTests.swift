@@ -97,7 +97,7 @@ func licenseVerifierExpirationAndGrace() throws {
 
 @Test("LicenseManager trial cannot be extended by backdating the clock")
 @MainActor
-func licenseManagerBackdatingDoesNotExtendTrial() {
+func licenseManagerBackdatingDoesNotExtendTrial() async {
   final class InMemoryStore: SecureStoring {
     private var storage: [String: Data] = [:]
 
@@ -116,10 +116,10 @@ func licenseManagerBackdatingDoesNotExtendTrial() {
   let verifier = LicenseVerifier(publicKey: Curve25519.Signing.PrivateKey().publicKey, isConfigured: true)
 
   let manager = LicenseManager(clock: clock, store: store, verifier: verifier)
-  manager.refresh()
+  await manager.refresh()
 
   clock.now = Date(timeIntervalSince1970: 1_000 + (15 * 24 * 60 * 60))
-  manager.refresh()
+  await manager.refresh()
   #expect({
     if case .expiredTrial = manager.status { return true }
     return false
@@ -127,10 +127,38 @@ func licenseManagerBackdatingDoesNotExtendTrial() {
 
   // Backdate the clock; trial should not become active again.
   clock.now = Date(timeIntervalSince1970: 1_000 + (2 * 24 * 60 * 60))
-  manager.refresh()
+  await manager.refresh()
   #expect({
     if case .expiredTrial = manager.status { return true }
     return false
   }())
+}
+
+@Test("Unconfigured LicenseVerifier throws notConfigured")
+func unconfiguredVerifierThrowsNotConfigured() {
+  let verifier = LicenseVerifier(
+    publicKey: Curve25519.Signing.PrivateKey().publicKey,
+    isConfigured: false
+  )
+  #expect(throws: LicenseVerificationError.notConfigured) {
+    _ = try verifier.verify(
+      licenseKey: "TERRA-LICENSE-1.fake.fake",
+      expectedBundleIdentifier: "com.terra.TraceMacApp",
+      expectedProduct: "TraceMacApp",
+      now: Date()
+    )
+  }
+}
+
+@Test("Production verifier placeholder is deterministic (no ephemeral key)")
+func productionVerifierPlaceholderIsDeterministic() {
+  // When Info.plist key is absent in test bundle, production should return isConfigured: false
+  // but the verifier should still be constructible without randomness.
+  let v1 = LicenseVerifier.production
+  let v2 = LicenseVerifier.production
+  // Both should have the same configuration state
+  #expect(v1.isConfigured == v2.isConfigured)
+  // Both should have the same public key (deterministic, not ephemeral)
+  #expect(v1.publicKey.rawRepresentation == v2.publicKey.rawRepresentation)
 }
 

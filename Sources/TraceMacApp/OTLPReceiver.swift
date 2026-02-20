@@ -131,12 +131,12 @@ final class OTLPReceiver {
         let method = String(parts[0])
         let path = String(parts[1])
 
-        // Parse Content-Length
+        // Parse Content-Length (capped to maxRequestSize, reject negative values)
         var contentLength = 0
         for line in lines.dropFirst() {
             if line.lowercased().hasPrefix("content-length:") {
                 let value = line.dropFirst("content-length:".count).trimmingCharacters(in: .whitespaces)
-                contentLength = Int(value) ?? 0
+                contentLength = max(0, min(Int(value) ?? 0, Self.maxRequestSize))
             }
         }
 
@@ -181,9 +181,8 @@ final class OTLPReceiver {
     private func writeSpansToFile(_ spans: [SpanData]) throws {
         try FileManager.default.createDirectory(at: tracesDirectoryURL, withIntermediateDirectories: true)
 
-        // Use milliseconds since reference date as filename (matches persistence exporter convention)
-        let timestamp = Int(Date.timeIntervalSinceReferenceDate * 1000)
-        let fileURL = tracesDirectoryURL.appendingPathComponent("\(timestamp)", isDirectory: false)
+        // Use the persistence-exporter numeric naming convention and bump on collisions.
+        let fileURL = uniqueTraceFileURL()
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(spans)
@@ -191,6 +190,17 @@ final class OTLPReceiver {
         var fileData = data
         fileData.append(Data(",".utf8))
         try fileData.write(to: fileURL, options: [.atomic])
+    }
+
+    private func uniqueTraceFileURL() -> URL {
+        let fileManager = FileManager.default
+        var timestamp = UInt64(Date.timeIntervalSinceReferenceDate * 1000)
+        var fileURL = tracesDirectoryURL.appendingPathComponent("\(timestamp)", isDirectory: false)
+        while fileManager.fileExists(atPath: fileURL.path) {
+            timestamp += 1
+            fileURL = tracesDirectoryURL.appendingPathComponent("\(timestamp)", isDirectory: false)
+        }
+        return fileURL
     }
 
     // MARK: - HTTP response helpers

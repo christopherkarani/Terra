@@ -86,16 +86,32 @@ struct TraceTimelineCanvasView: View {
     // MARK: - Canvas
 
     private var timelineCanvas: some View {
-        Canvas { context, size in
-            drawLaneBackgrounds(context: &context, size: size)
-            drawSpanBars(context: &context, size: size)
+        ZStack {
+            Canvas { context, size in
+                drawLaneBackgrounds(context: &context, size: size)
+                drawConnectorLines(context: &context, size: size)
+                drawSpanBars(context: &context, size: size)
+            }
+            .accessibilityHidden(true)
+
+            ForEach(layouts) { layout in
+                Color.clear
+                    .frame(width: layout.rect.width, height: layout.rect.height)
+                    .position(x: layout.rect.midX, y: layout.rect.midY)
+                    .accessibilityElement()
+                    .accessibilityLabel(accessibilityLabel(for: layout))
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction {
+                        onSelectSpan?(layout.span)
+                    }
+            }
         }
         .overlay {
             hitTestOverlay
         }
         .gesture(zoomGesture)
         .accessibilityLabel("Trace timeline")
-        .accessibilityHint("Displays span bars in a waterfall layout")
+        .accessibilityHint("Displays span bars in a waterfall layout. Use VoiceOver to navigate individual spans.")
     }
 
     // MARK: - Drawing
@@ -112,14 +128,45 @@ struct TraceTimelineCanvasView: View {
                 width: availableWidth,
                 height: rowHeight + 4
             )
+            guard laneRect.intersects(CGRect(origin: .zero, size: size)) else { continue }
             let lanePath = RoundedRectangle(cornerRadius: laneCornerRadius)
                 .path(in: laneRect)
             context.fill(lanePath, with: .color(.gray.opacity(0.08)))
         }
     }
 
-    private func drawSpanBars(context: inout GraphicsContext, size: CGSize) {
+    private func drawConnectorLines(context: inout GraphicsContext, size: CGSize) {
+        var layoutBySpanId: [String: SpanLayout] = [:]
         for layout in layouts {
+            layoutBySpanId[layout.span.spanId.hexString] = layout
+        }
+
+        let visibleRect = CGRect(origin: .zero, size: size)
+        for layout in layouts {
+            guard let parentId = layout.span.parentSpanId else { continue }
+            guard let parentLayout = layoutBySpanId[parentId.hexString] else { continue }
+            guard layout.rect.intersects(visibleRect) else { continue }
+
+            let startX = parentLayout.rect.midX
+            let startY = parentLayout.rect.maxY
+            let endX = layout.rect.minX
+            let endY = layout.rect.midY
+
+            var path = Path()
+            path.move(to: CGPoint(x: startX, y: startY))
+            path.addLine(to: CGPoint(x: startX, y: endY))
+            path.addLine(to: CGPoint(x: endX, y: endY))
+
+            context.stroke(
+                path,
+                with: .color(DashboardTheme.textTertiary.opacity(0.5)),
+                style: StrokeStyle(lineWidth: 0.5, dash: [3, 2])
+            )
+        }
+    }
+
+    private func drawSpanBars(context: inout GraphicsContext, size: CGSize) {
+        for layout in layouts where layout.rect.intersects(CGRect(origin: .zero, size: size)) {
             let fillColor = barColor(for: layout)
             let barPath = RoundedRectangle(cornerRadius: barCornerRadius)
                 .path(in: layout.rect)
@@ -298,7 +345,18 @@ struct TraceTimelineCanvasView: View {
         } else if layout.isCritical {
             return DashboardTheme.accentWarning
         } else {
-            return DashboardTheme.accentNormal
+            return DashboardTheme.Colors.serviceColor(for: layout.span.name)
         }
+    }
+
+    private func accessibilityLabel(for layout: SpanLayout) -> String {
+        var label = layout.span.name
+        let duration = TraceFormatter.duration(
+            layout.span.endTime.timeIntervalSince(layout.span.startTime)
+        )
+        label += ", \(duration)"
+        if layout.isError { label += ", error" }
+        if layout.isCritical { label += ", slow" }
+        return label
     }
 }

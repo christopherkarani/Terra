@@ -5,6 +5,11 @@ import OpenTelemetrySdk
 @Observable
 @MainActor
 final class AppState {
+    private let tracePageSize = 100
+    private var requestedTraceFileCount = 100
+    private(set) var loadedTraceFileCount = 0
+    private(set) var totalTraceFileCount = 0
+
     enum OpenClawSetupStatus: Equatable {
         case notConnected
         case waitingForDiagnostics
@@ -18,6 +23,20 @@ final class AppState {
         case failed(message: String)
     }
 
+    enum OpenClawGatewayAuthMode: String, CaseIterable, Equatable {
+        case none
+        case bearer
+
+        var title: String {
+            switch self {
+            case .none:
+                return "None"
+            case .bearer:
+                return "Bearer"
+            }
+        }
+    }
+
     // MARK: - Published State
 
     var traces: [Trace] = []
@@ -27,12 +46,40 @@ final class AppState {
     var isLoading: Bool = false
     var errorMessage: String?
     var openClawPluginStatus: OpenClawPluginStatus = .unknown
+    var isOpenClawGatewayCaptureEnabled: Bool = AppSettings.isOpenClawGatewayCaptureEnabled {
+        didSet { AppSettings.isOpenClawGatewayCaptureEnabled = isOpenClawGatewayCaptureEnabled }
+    }
+    var isOpenClawTransparentModeEnabled: Bool = AppSettings.isOpenClawTransparentModeEnabled {
+        didSet { AppSettings.isOpenClawTransparentModeEnabled = isOpenClawTransparentModeEnabled }
+    }
+    var openClawGatewayEndpoint: String = AppSettings.openClawGatewayEndpoint {
+        didSet { AppSettings.openClawGatewayEndpoint = openClawGatewayEndpoint }
+    }
+    var openClawGatewayBearerToken: String = AppSettings.openClawGatewayBearerToken {
+        didSet { AppSettings.openClawGatewayBearerToken = openClawGatewayBearerToken }
+    }
+    var openClawGatewayAuthMode: OpenClawGatewayAuthMode = OpenClawGatewayAuthMode(rawValue: AppSettings.openClawGatewayAuthMode) ?? .none {
+        didSet { AppSettings.openClawGatewayAuthMode = openClawGatewayAuthMode.rawValue }
+    }
+    var openClawSourceFilter: OpenClawTraceSourceFilter = .all
+    var isApplyingTransparentMode: Bool = false
+    var openClawTransparentModeLastMessage: String?
 
     // MARK: - Computed
 
     var filteredTraces: [Trace] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let sorted = traces.sorted { $0.fileTimestamp > $1.fileTimestamp }
+        let sourceFiltered = traces.filter { trace in
+            switch openClawSourceFilter {
+            case .all:
+                return true
+            case .gateway:
+                return trace.openClawSource == .gateway
+            case .diagnostics:
+                return trace.openClawSource == .diagnostics
+            }
+        }
+        let sorted = sourceFiltered.sorted { $0.fileTimestamp > $1.fileTimestamp }
         guard !query.isEmpty else { return sorted }
         return sorted.filter { trace in
             trace.id.lowercased().contains(query)
@@ -44,6 +91,10 @@ final class AppState {
     var timelineViewModel: TimelineViewModel? {
         guard let selectedTrace else { return nil }
         return TimelineViewModel(trace: selectedTrace)
+    }
+
+    var canLoadMoreTraces: Bool {
+        loadedTraceFileCount < totalTraceFileCount
     }
 
     var openClawSetupStatus: OpenClawSetupStatus {
@@ -80,6 +131,34 @@ final class AppState {
         case .failed(let message):
             return "Plugin status: install failed (\(message))"
         }
+    }
+
+    var openClawGatewayStatusText: String {
+        guard isOpenClawGatewayCaptureEnabled else {
+            return "Gateway capture: disabled"
+        }
+        let endpoint = openClawGatewayEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endpointSuffix = endpoint.isEmpty ? "" : " (\(endpoint))"
+        if isOTLPReceiverRunning {
+            return "Gateway capture: enabled\(endpointSuffix), OTLP receiver listening on :\(AppSettings.otlpReceiverPort)"
+        }
+        return "Gateway capture: enabled\(endpointSuffix) (start OTLP receiver to ingest live gateway spans)"
+    }
+
+    var openClawTransparentModeStatusText: String {
+        if isApplyingTransparentMode {
+            return "Transparent mode: applying…"
+        }
+        if isOpenClawTransparentModeEnabled {
+            if let openClawTransparentModeLastMessage, !openClawTransparentModeLastMessage.isEmpty {
+                return "Transparent mode: enabled (\(openClawTransparentModeLastMessage))"
+            }
+            return "Transparent mode: enabled"
+        }
+        if let openClawTransparentModeLastMessage, !openClawTransparentModeLastMessage.isEmpty {
+            return "Transparent mode: disabled (\(openClawTransparentModeLastMessage))"
+        }
+        return "Transparent mode: disabled"
     }
 
     var isUsingOpenClawDiagnosticsDirectory: Bool {
@@ -135,12 +214,14 @@ final class AppState {
     private var watcher: TraceDirectoryWatcher?
     private var otlpReceiver: OTLPReceiver?
     private var loader: TraceLoader
+    private let isWatchFolderFeatureEnabled: () -> Bool
 
     // MARK: - Init
 
-    init() {
+    init(isWatchFolderFeatureEnabled: @escaping () -> Bool = { true }) {
+        self.isWatchFolderFeatureEnabled = isWatchFolderFeatureEnabled
         self.loader = Self.makeLoader(for: AppSettings.tracesDirectoryURL)
-        loadTraces()
+        loadTraces(resetPagination: true)
         if AppSettings.isWatchingTracesDirectory {
             startWatching()
         }
@@ -151,7 +232,12 @@ final class AppState {
 
     // MARK: - Actions
 
-    func loadTraces() {
+    func loadTraces(resetPagination: Bool = false) {
+        if resetPagination {
+            requestedTraceFileCount = tracePageSize
+        } else {
+            requestedTraceFileCount = max(tracePageSize, requestedTraceFileCount)
+        }
         Task(priority: .background) {
             await self.pruneStaleTracesIfNeeded()
         }
@@ -161,7 +247,7 @@ final class AppState {
         Task(priority: .userInitiated) {
             let result: Result<TraceLoadResult, Error>
             do {
-                let loaded = try loader.loadTracesWithFailures()
+                let loaded = try loader.loadTracesWithFailures(maxFiles: requestedTraceFileCount)
                 result = .success(loaded)
             } catch {
                 result = .failure(error)
@@ -170,6 +256,8 @@ final class AppState {
                 guard let self else { return }
                 switch result {
                 case .success(let loaded):
+                    self.loadedTraceFileCount = loaded.loadedFileCount
+                    self.totalTraceFileCount = loaded.totalFileCount
                     let previousSelectedId = self.selectedTrace?.id
                     self.traces = loaded.traces
                     if let previousSelectedId {
@@ -206,10 +294,16 @@ final class AppState {
     func loadSampleTraces() {
         do {
             try SampleTraces.writeSampleTrace(to: AppSettings.tracesDirectoryURL)
-            loadTraces()
+            loadTraces(resetPagination: true)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func loadMoreTraces() {
+        guard canLoadMoreTraces else { return }
+        requestedTraceFileCount += tracePageSize
+        loadTraces()
     }
 
     func chooseTracesFolder() {
@@ -228,6 +322,12 @@ final class AppState {
     func setupOpenClawTracing() {
         configureTracesDirectory(AppSettings.openClawDiagnosticsDirectoryURL)
         installOpenClawDiagnosticsPlugin()
+        if !isOpenClawGatewayCaptureEnabled {
+            isOpenClawGatewayCaptureEnabled = true
+        }
+        if !isOTLPReceiverRunning {
+            startOTLPReceiver()
+        }
         if case .waitingForDiagnostics = openClawSetupStatus {
             openOpenClawApp()
         }
@@ -235,6 +335,55 @@ final class AppState {
 
     func useOpenClawDiagnosticsFolder() {
         configureTracesDirectory(AppSettings.openClawDiagnosticsDirectoryURL)
+    }
+
+    func toggleOpenClawGatewayCapture() {
+        isOpenClawGatewayCaptureEnabled.toggle()
+        if isOpenClawGatewayCaptureEnabled {
+            if !isOTLPReceiverRunning {
+                startOTLPReceiver()
+            }
+        } else if isOTLPReceiverRunning {
+            stopOTLPReceiver()
+        }
+    }
+
+    func toggleOpenClawTransparentMode() {
+        guard !isApplyingTransparentMode else { return }
+        isApplyingTransparentMode = true
+        let shouldEnable = !isOpenClawTransparentModeEnabled
+        let targetPorts = configuredTransparentTargetPorts()
+
+        Task {
+            let result: Result<String, OpenClawTransparentModeError> = if shouldEnable {
+                await OpenClawTransparentModeManager.enable(proxyPort: 11435, targetPorts: targetPorts)
+            } else {
+                await OpenClawTransparentModeManager.disable()
+            }
+
+            switch result {
+            case .success(let message):
+                isOpenClawTransparentModeEnabled = shouldEnable
+                openClawTransparentModeLastMessage = message
+            case .failure(let error):
+                let message = error.localizedDescription
+                if shouldEnable {
+                    isOpenClawTransparentModeEnabled = false
+                }
+                openClawTransparentModeLastMessage = message
+                errorMessage = message
+            }
+            isApplyingTransparentMode = false
+        }
+    }
+
+    private func configuredTransparentTargetPorts() -> [Int] {
+        var ports = Set([11434, 1234])
+        if let url = URL(string: openClawGatewayEndpoint),
+           let port = url.port {
+            ports.insert(port)
+        }
+        return Array(ports).sorted()
     }
 
     func installOpenClawDiagnosticsPlugin() {
@@ -296,6 +445,11 @@ final class AppState {
     }
 
     func startWatching() {
+        guard isWatchFolderFeatureEnabled() else {
+            stopWatching()
+            Task { await AppLog.shared.info("traces.watch_start_blocked reason=license") }
+            return
+        }
         stopWatching()
         let directoryURL = AppSettings.tracesDirectoryURL
         do {
@@ -320,8 +474,10 @@ final class AppState {
     func configureTracesDirectory(_ directoryURL: URL) {
         AppSettings.tracesDirectoryURL = directoryURL
         loader = Self.makeLoader(for: directoryURL)
-        loadTraces()
-        startWatching()
+        loadTraces(resetPagination: true)
+        if AppSettings.isWatchingTracesDirectory {
+            startWatching()
+        }
     }
 
     private static func makeLoader(for directoryURL: URL) -> TraceLoader {
@@ -336,11 +492,16 @@ final class AppState {
         let directoryURL = AppSettings.tracesDirectoryURL
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: directoryURL,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
             options: .skipsHiddenFiles
         ) else { return }
         for fileURL in contents {
-            guard let modDate = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { continue }
+            guard
+                let values = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
+                values.isRegularFile == true,
+                UInt64(fileURL.lastPathComponent) != nil,
+                let modDate = values.contentModificationDate
+            else { continue }
             if modDate < cutoff {
                 try? FileManager.default.removeItem(at: fileURL)
                 let name = fileURL.lastPathComponent

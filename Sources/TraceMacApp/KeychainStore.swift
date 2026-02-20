@@ -38,6 +38,7 @@ struct KeychainStore {
 
     let update: [String: Any] = [
       kSecValueData as String: data,
+      kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
     ]
 
     let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
@@ -47,6 +48,7 @@ struct KeychainStore {
     case errSecItemNotFound:
       var insert = query
       insert[kSecValueData as String] = data
+      insert[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
       let addStatus = SecItemAdd(insert as CFDictionary, nil)
       guard addStatus == errSecSuccess else {
         throw KeychainError(status: addStatus)

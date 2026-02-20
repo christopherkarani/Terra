@@ -1,5 +1,6 @@
 import Foundation
 import OpenTelemetryApi
+import TerraSystemProfiler
 
 /// An on-device GenAI observability façade built on OpenTelemetry Swift.
 public enum Terra {
@@ -24,7 +25,7 @@ public enum Terra {
 
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.inference.rawValue),
-      Keys.GenAI.model: .string(request.model),
+      Keys.GenAI.requestModel: .string(request.model),
     ]
 
     if let maxOutputTokens = request.maxOutputTokens {
@@ -59,6 +60,24 @@ public enum Terra {
       attributes: attributes,
       body
     )
+  }
+
+  @discardableResult
+  public static func withStreamingInferenceSpan<R>(
+    _ request: InferenceRequest,
+    _ body: @Sendable (StreamingInferenceScope) async throws -> R
+  ) async rethrows -> R {
+    var streamingRequest = request
+    if streamingRequest.stream == nil {
+      streamingRequest.stream = true
+    }
+
+    let startedAt = Date()
+    return try await withInferenceSpan(streamingRequest) { scope in
+      let streamingScope = StreamingInferenceScope(scope: scope, startedAt: startedAt)
+      defer { streamingScope.finish() }
+      return try await body(streamingScope)
+    }
   }
 
   @discardableResult
@@ -112,7 +131,7 @@ public enum Terra {
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.embeddings.rawValue),
-      Keys.GenAI.model: .string(request.model),
+      Keys.GenAI.requestModel: .string(request.model),
     ]
     if let inputCount = request.inputCount {
       attributes[Keys.Terra.embeddingInputCount] = .int(inputCount)
@@ -166,18 +185,35 @@ public enum Terra {
     _ body: @Sendable (Scope<Kind>) async throws -> R
   ) async rethrows -> R {
     let tracer = tracer()
+    var mergedAttributes = attributes
+    mergedAttributes[Keys.Terra.thermalState] = .string(Runtime.thermalStateLabel())
 
     let spanBuilder = tracer.spanBuilder(spanName: name)
       .setSpanKind(spanKind: kind)
 
-    for (key, value) in attributes {
+    for (key, value) in mergedAttributes {
       spanBuilder.setAttribute(key: key, value: value)
     }
 
     let span = spanBuilder.startSpan()
-    defer { span.end() }
+    let startMemorySnapshot = TerraSystemProfiler.isMemoryProfilerEnabled
+      ? TerraSystemProfiler.captureMemorySnapshot()
+      : nil
 
     let scope = Scope<Kind>(span: span)
+    defer {
+      let endMemorySnapshot = TerraSystemProfiler.isMemoryProfilerEnabled
+        ? TerraSystemProfiler.captureMemorySnapshot()
+        : nil
+      let memoryDelta = TerraSystemProfiler.memoryDeltaAttributes(
+        start: startMemorySnapshot,
+        end: endMemorySnapshot
+      )
+      if !memoryDelta.isEmpty {
+        scope.setAttributes(memoryDelta)
+      }
+      span.end()
+    }
 
     return try await OpenTelemetry.instance.contextProvider.withActiveSpan(span) {
       do {
@@ -188,6 +224,100 @@ public enum Terra {
         scope.recordError(error)
         throw error
       }
+    }
+  }
+
+  public final class StreamingInferenceScope: @unchecked Sendable {
+    private let scope: Scope<InferenceSpan>
+    private let startedAt: Date
+    private let lock = NSLock()
+    private var firstTokenAt: Date?
+    private var outputTokenCount = 0
+    private var chunkCount = 0
+
+    init(scope: Scope<InferenceSpan>, startedAt: Date) {
+      self.scope = scope
+      self.startedAt = startedAt
+    }
+
+    public var span: any Span { scope.span }
+
+    public func addEvent(_ name: String, attributes: [String: AttributeValue] = [:]) {
+      scope.addEvent(name, attributes: attributes)
+    }
+
+    public func setAttributes(_ attributes: [String: AttributeValue]) {
+      scope.setAttributes(attributes)
+    }
+
+    public func recordToken(_ count: Int = 1, at timestamp: Date = Date()) {
+      guard count > 0 else { return }
+      var shouldEmitFirstTokenEvent = false
+      lock.lock()
+      if firstTokenAt == nil {
+        firstTokenAt = timestamp
+        shouldEmitFirstTokenEvent = true
+      }
+      outputTokenCount += count
+      lock.unlock()
+
+      if shouldEmitFirstTokenEvent {
+        scope.addEvent(Keys.Terra.streamFirstTokenEvent)
+      }
+    }
+
+    public func recordOutputTokenCount(_ totalCount: Int, at timestamp: Date = Date()) {
+      guard totalCount >= 0 else { return }
+      var shouldEmitFirstTokenEvent = false
+      lock.lock()
+      if totalCount > 0, firstTokenAt == nil {
+        firstTokenAt = timestamp
+        shouldEmitFirstTokenEvent = true
+      }
+      outputTokenCount = totalCount
+      lock.unlock()
+
+      if shouldEmitFirstTokenEvent {
+        scope.addEvent(Keys.Terra.streamFirstTokenEvent)
+      }
+    }
+
+    public func recordChunk(at timestamp: Date = Date()) {
+      var shouldEmitFirstTokenEvent = false
+      lock.lock()
+      chunkCount += 1
+      if firstTokenAt == nil {
+        firstTokenAt = timestamp
+        shouldEmitFirstTokenEvent = true
+      }
+      lock.unlock()
+
+      if shouldEmitFirstTokenEvent {
+        scope.addEvent(Keys.Terra.streamFirstTokenEvent)
+      }
+    }
+
+    func finish(finishedAt: Date = Date()) {
+      lock.lock()
+      let firstTokenAt = self.firstTokenAt
+      let outputTokenCount = self.outputTokenCount
+      let chunkCount = self.chunkCount
+      lock.unlock()
+
+      var attributes: [String: AttributeValue] = [
+        Keys.Terra.streamChunkCount: .int(chunkCount),
+      ]
+      if outputTokenCount > 0 {
+        attributes[Keys.Terra.streamOutputTokens] = .int(outputTokenCount)
+      }
+      if let firstTokenAt {
+        attributes[Keys.Terra.streamTimeToFirstTokenMs] = .double(firstTokenAt.timeIntervalSince(startedAt) * 1000)
+      }
+      if outputTokenCount > 0, let firstTokenAt {
+        let generationSeconds = max(finishedAt.timeIntervalSince(firstTokenAt), 0.000_001)
+        attributes[Keys.Terra.streamTokensPerSecond] = .double(Double(outputTokenCount) / generationSeconds)
+      }
+      scope.setAttributes(attributes)
     }
   }
 

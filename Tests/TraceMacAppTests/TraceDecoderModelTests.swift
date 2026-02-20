@@ -7,7 +7,7 @@ import OpenTelemetryApi
 private func makeSpan(
   name: String,
   traceId: TraceId = TraceId(),
-  spanId: SpanId = SpanId(),
+  spanId: SpanId = SpanId.random(),
   parentSpanId: SpanId? = nil,
   start: Date,
   end: Date,
@@ -70,8 +70,8 @@ func traceDecoderThrowsOnInvalidJSON() {
 @Test("Trace model derives stable identifiers and boundaries")
 func traceModelComputesBoundaries() throws {
   let traceId = TraceId()
-  let rootSpanId = SpanId()
-  let childSpanId = SpanId()
+  let rootSpanId = SpanId.random()
+  let childSpanId = SpanId.random()
 
   let root = makeSpan(
     name: "root",

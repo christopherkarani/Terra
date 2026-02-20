@@ -105,6 +105,21 @@ final class Runtime {
       return false
     #endif
   }
+
+  static func thermalStateLabel() -> String {
+    switch ProcessInfo.processInfo.thermalState {
+    case .nominal:
+      return "nominal"
+    case .fair:
+      return "fair"
+    case .serious:
+      return "serious"
+    case .critical:
+      return "critical"
+    @unknown default:
+      return "unknown"
+    }
+  }
 }
 
 final class TerraMetrics {

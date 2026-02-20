@@ -5,15 +5,20 @@ import TerraTraceKit
 @MainActor
 final class AppCoordinator: NSObject, MainMenuCoordinating {
   private let window: NSWindow
-  private let appState = AppState()
+  private let appState: AppState
   private let toolbarProvider: TraceToolbarProvider
 
   private var onboardingWindowController: OnboardingWindowController?
   private var quickstartWindowController: QuickstartWindowController?
-  private let licenseManager = LicenseManager()
+  private let licenseManager: LicenseManager
   private let updaterController = UpdaterController()
 
   override init() {
+    let licenseManager = LicenseManager()
+    self.licenseManager = licenseManager
+    self.appState = AppState(isWatchFolderFeatureEnabled: {
+      licenseManager.isFeatureEnabled(.watchFolder)
+    })
     toolbarProvider = TraceToolbarProvider()
     window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1200, height: 720),
@@ -57,8 +62,10 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     NSApp.activate(ignoringOtherApps: true)
 
     Task { await AppLog.shared.info("app.start") }
-    licenseManager.refresh()
-    updateWindowTitle()
+    Task {
+      await licenseManager.refresh()
+      updateWindowTitle()
+    }
 
     if !AppSettings.didCompleteOnboarding {
       showOnboarding()
@@ -246,7 +253,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
       Task { @MainActor in
         do {
           await AppLog.shared.info("license.activate_attempt")
-          try self.licenseManager.activate(licenseKey: key)
+          try await self.licenseManager.activate(licenseKey: key)
           await AppLog.shared.info("license.activate_success")
           self.updateWindowTitle()
         } catch {
@@ -272,7 +279,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
       guard response == .alertFirstButtonReturn else { return }
       Task { @MainActor in
         do {
-          try self.licenseManager.deactivate()
+          try await self.licenseManager.deactivate()
           await AppLog.shared.info("license.deactivate")
           self.updateWindowTitle()
         } catch {

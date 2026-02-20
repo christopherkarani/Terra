@@ -40,13 +40,13 @@ final class LicenseManager {
     self.store = store
     self.verifier = verifier
     self.status = .trial(daysRemaining: 14, endsAt: clock.now)
-    refresh()
+    Task { await refresh() }
   }
 
-  func refresh() {
+  func refresh() async {
     let now = clock.now
 
-    if let verified = try? currentVerifiedLicense(now: now) {
+    if let verified = try? await currentVerifiedLicense(now: now) {
       status = .licensed(verified)
       ensureTrialStateInitialized(now: now)
       return
@@ -56,7 +56,7 @@ final class LicenseManager {
     status = Self.evaluateTrial(trial, now: trial.lastSeenDate)
   }
 
-  func activate(licenseKey: String) throws {
+  func activate(licenseKey: String) async throws {
     let now = clock.now
     _ = try verifier.verify(
       licenseKey: licenseKey,
@@ -66,12 +66,12 @@ final class LicenseManager {
     )
 
     try store.writeData(Data(licenseKey.utf8), account: KeychainAccount.licenseKey)
-    refresh()
+    await refresh()
   }
 
-  func deactivate() throws {
+  func deactivate() async throws {
     try store.delete(account: KeychainAccount.licenseKey)
-    refresh()
+    await refresh()
   }
 
   func isFeatureEnabled(_ feature: Feature) -> Bool {
@@ -88,9 +88,9 @@ final class LicenseManager {
     }
   }
 
-  private func currentVerifiedLicense(now: Date) throws -> VerifiedLicense? {
+  private func currentVerifiedLicense(now: Date) async throws -> VerifiedLicense? {
     #if TRACE_MAC_APP_APPSTORE
-      if AppStoreReceiptVerifier.isReceiptPresent() {
+      if await AppStoreReceiptVerifier.verifiedPurchaseExists() {
         return VerifiedLicense(
           payload: .init(
             product: Product.name,
@@ -154,30 +154,55 @@ final class LicenseManager {
   }
 }
 
+// MARK: - Key Management
+//
+// The Ed25519 keypair used for license verification:
+//   • Public key: embedded in Info.plist under "TraceMacAppLicensePublicKey" (Base64URL)
+//   • Private key: stored in CI secrets / secure vault (NEVER in source)
+//
+// To sign a license key:
+//   1. Encode a LicensePayload as JSON
+//   2. Sign the JSON bytes with the Ed25519 private key
+//   3. Format as: TERRA-LICENSE-1.<base64url-payload>.<base64url-signature>
+//
+// To rotate:
+//   1. Generate a new Curve25519.Signing.PrivateKey()
+//   2. Update Info.plist with Base64URL.encode(newKey.publicKey.rawRepresentation)
+//   3. Re-sign all active licenses with the new private key
+
 extension LicenseVerifier {
   static var production: LicenseVerifier {
     let keyString = Bundle.main.object(forInfoDictionaryKey: "TraceMacAppLicensePublicKey") as? String
 
     if
-      let keyString,
+      let keyString, !keyString.isEmpty,
       let keyData = try? Base64URL.decode(keyString),
+      keyData != Data(repeating: 0, count: 32),
       let publicKey = try? Curve25519.Signing.PublicKey(rawRepresentation: keyData)
     {
       return LicenseVerifier(publicKey: publicKey, isConfigured: true)
     }
 
-    // Unconfigured: verification is disabled and activation will show an actionable error.
-    let placeholder = (try? Curve25519.Signing.PublicKey(rawRepresentation: Data(repeating: 0, count: 32)))
-      ?? Curve25519.Signing.PrivateKey().publicKey
-    return LicenseVerifier(publicKey: placeholder, isConfigured: false)
+    // Unconfigured: verification is disabled — verify() throws .notConfigured.
+    // Uses a deterministic zero-byte placeholder (no ephemeral key generation).
+    let zeroKey = try! Curve25519.Signing.PublicKey(rawRepresentation: Data(repeating: 1, count: 32))
+    return LicenseVerifier(publicKey: zeroKey, isConfigured: false)
   }
 }
 
 #if TRACE_MAC_APP_APPSTORE
-  enum AppStoreReceiptVerifier {
-    static func isReceiptPresent() -> Bool {
-      guard let url = Bundle.main.appStoreReceiptURL else { return false }
-      return (try? Data(contentsOf: url)).map { !$0.isEmpty } ?? false
+import StoreKit
+
+enum AppStoreReceiptVerifier {
+  /// Checks for a verified, non-revoked purchase using StoreKit 2.
+  static func verifiedPurchaseExists() async -> Bool {
+    for await result in Transaction.currentEntitlements {
+      if case .verified(let transaction) = result,
+         transaction.revocationDate == nil {
+        return true
+      }
     }
+    return false
   }
+}
 #endif

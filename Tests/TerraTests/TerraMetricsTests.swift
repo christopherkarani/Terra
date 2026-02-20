@@ -1,6 +1,6 @@
 import OpenTelemetryApi
 import OpenTelemetrySdk
-@testable import Terra
+@testable import TerraCore
 import XCTest
 
 final class TerraMetricsTests: XCTestCase {

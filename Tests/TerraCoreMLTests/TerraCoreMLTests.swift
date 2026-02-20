@@ -64,4 +64,19 @@ func configurationAttributesMatchComputeUnitsAttributes() {
 
   #expect(fromConfig == fromUnits)
 }
+
+// MARK: - CoreMLInstrumentation Name Sanitization
+
+@Test("sanitizeModelName strips control characters")
+func sanitizeModelNameStripsControlCharacters() {
+  let sanitized = CoreMLInstrumentation.sanitizeModelName("model\u{0000}\u{0007}-v1")
+  #expect(sanitized == "model-v1")
+}
+
+@Test("sanitizeModelName trims and bounds name length to 256")
+func sanitizeModelNameBoundsLength() {
+  let longName = String(repeating: "a", count: 300)
+  let sanitized = CoreMLInstrumentation.sanitizeModelName("  \(longName)  ")
+  #expect(sanitized?.count == 256)
+}
 #endif

@@ -31,6 +31,19 @@ struct TraceListView: View {
             }
             .searchable(text: $appState.searchQuery)
             .padding(.top, -4)
+
+            if appState.canLoadMoreTraces {
+                Button {
+                    appState.loadMoreTraces()
+                } label: {
+                    Text("Load More (\(appState.loadedTraceFileCount)/\(appState.totalTraceFileCount) files)")
+                        .font(.system(size: 11, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
+            }
         }
     }
 }
@@ -39,6 +52,8 @@ private struct OpenClawSetupCard: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
+        @Bindable var appState = appState
+
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label("OpenClaw Tracing", systemImage: "waveform.path.ecg")
@@ -57,6 +72,40 @@ private struct OpenClawSetupCard: View {
                 .foregroundStyle(pluginStatusColor)
                 .fixedSize(horizontal: false, vertical: true)
 
+            Text(appState.openClawGatewayStatusText)
+                .font(.system(size: 11))
+                .foregroundStyle(DashboardTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(appState.openClawTransparentModeStatusText)
+                .font(.system(size: 11))
+                .foregroundStyle(DashboardTheme.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            TextField("Gateway endpoint", text: $appState.openClawGatewayEndpoint)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11))
+
+            Picker("Gateway auth", selection: $appState.openClawGatewayAuthMode) {
+                ForEach(AppState.OpenClawGatewayAuthMode.allCases, id: \.self) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if appState.openClawGatewayAuthMode == .bearer {
+                SecureField("Bearer token", text: $appState.openClawGatewayBearerToken)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11))
+            }
+
+            Picker("Trace source", selection: $appState.openClawSourceFilter) {
+                ForEach(OpenClawTraceSourceFilter.allCases, id: \.self) { filter in
+                    Text(filter.title).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+
             HStack(spacing: 6) {
                 Button("Quick Setup") {
                     appState.setupOpenClawTracing()
@@ -68,6 +117,17 @@ private struct OpenClawSetupCard: View {
                     appState.installOpenClawDiagnosticsPlugin()
                 }
                 .disabled(appState.openClawPluginStatus == .installing)
+            }
+
+            HStack(spacing: 6) {
+                Button(appState.isOpenClawGatewayCaptureEnabled ? "Disable Gateway" : "Enable Gateway") {
+                    appState.toggleOpenClawGatewayCapture()
+                }
+
+                Button(appState.isOpenClawTransparentModeEnabled ? "Disable Transparent" : "Enable Transparent") {
+                    appState.toggleOpenClawTransparentMode()
+                }
+                .disabled(appState.isApplyingTransparentMode)
             }
         }
         .padding(10)

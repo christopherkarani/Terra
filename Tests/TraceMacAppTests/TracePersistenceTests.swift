@@ -15,7 +15,7 @@ private func withTemporaryDirectory(_ body: (URL) throws -> Void) throws {
 private func makeSpan(name: String, start: Date, end: Date) -> SpanData {
   SpanData(
     traceId: TraceId(),
-    spanId: SpanId(),
+    spanId: SpanId.random(),
     traceFlags: TraceFlags(),
     traceState: TraceState(),
     resource: Resource(),

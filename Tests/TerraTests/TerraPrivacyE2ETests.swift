@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Terra
+@testable import TerraCore
 
 final class TerraPrivacyE2ETests: XCTestCase {
   private var support: TerraTestSupport!
@@ -8,7 +8,7 @@ final class TerraPrivacyE2ETests: XCTestCase {
   override func setUp() {
     super.setUp()
     support = TerraTestSupport()
-    Terra.install(.init())
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
   }
 
   override func tearDown() {

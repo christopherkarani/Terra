@@ -7,6 +7,7 @@ public enum TraceModelError: Error, Equatable {
   case emptySpans
   case invalidFileName
   case mismatchedTraceIds
+  case duplicateSpanIds
 }
 
 /// Aggregated trace metadata derived from persisted spans.
@@ -47,6 +48,9 @@ public struct Trace {
     let traceId = spans[0].traceId
     if spans.contains(where: { $0.traceId != traceId }) {
       throw TraceModelError.mismatchedTraceIds
+    }
+    if Set(spans.map(\.spanId)).count != spans.count {
+      throw TraceModelError.duplicateSpanIds
     }
 
     let ordered = spans.sorted { lhs, rhs in

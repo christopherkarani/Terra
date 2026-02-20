@@ -64,6 +64,51 @@ Notes:
 - Reinstalling with a different config throws `Terra.InstallOpenTelemetryError.alreadyInstalled`.
 - `Terra.install(_:)` is safe to call again when you want to update privacy/provider overrides in-process.
 
+## Auto-Instrumentation
+
+Terra supports zero-code auto-instrumentation for on-device AI. One line captures everything:
+
+```swift
+import Terra
+
+try Terra.start()
+// Done. CoreML predictions and HTTP AI API calls are now traced automatically.
+```
+
+CoreML note: auto-instrumentation uses a context-based dedup guard to avoid nested spans.
+In rare high-concurrency call patterns this may still emit duplicate telemetry.
+
+### Three Tiers of Integration
+
+| Tier | Module | What it does |
+|------|--------|-------------|
+| Zero-code | `TerraAutoInstrument` | `Terra.start()` — auto-instruments CoreML + HTTP AI APIs |
+| One annotation | `TerraTracedMacro` | `@Traced(model:)` — wraps any async function in a span |
+| One closure | `TerraMLX` | `TerraMLX.traced(model:) { }` — wraps MLX generation |
+| Wrapper | `TerraFoundationModels` | `Terra.TracedSession` — Apple Foundation Models (macOS 26+) |
+
+### Customize What Gets Traced
+
+```swift
+try Terra.start(.init(
+  instrumentations: [.coreML, .httpAIAPIs],
+  excludedCoreMLModels: ["background_removal"],
+  aiAPIHosts: ["api.openai.com", "api.anthropic.com"]
+))
+```
+
+### @Traced Macro
+
+```swift
+import TerraTracedMacro
+
+@Traced(model: "llama-3.2-1B")
+func summarize(prompt: String, maxTokens: Int = 512) async throws -> String {
+  try await container.generate(prompt: prompt, maxTokens: maxTokens)
+}
+// Auto-detects prompt and maxTokens parameters, wraps body in Terra.withInferenceSpan
+```
+
 ## Instrumentation API
 
 Use the span helpers around the boundaries you own:

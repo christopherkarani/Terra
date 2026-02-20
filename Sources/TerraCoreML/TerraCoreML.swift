@@ -1,5 +1,5 @@
 import OpenTelemetryApi
-import Terra
+import TerraCore
 
 #if canImport(CoreML)
 import CoreML
@@ -35,8 +35,8 @@ public extension Terra.Scope {
   }
 }
 
-private extension MLComputeUnits {
-  var terraLabel: String {
+extension MLComputeUnits {
+  internal var terraLabel: String {
     switch self {
     case .all:
       return "all"

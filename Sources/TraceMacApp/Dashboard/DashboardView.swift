@@ -54,6 +54,31 @@ struct DashboardView: View {
                 .disabled(appState.openClawPluginStatus == .installing)
                 .help("Install or repair the diagnostics-otel plugin")
             }
+
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    appState.toggleOpenClawGatewayCapture()
+                } label: {
+                    Label(
+                        appState.isOpenClawGatewayCaptureEnabled ? "Disable OpenClaw Gateway" : "Enable OpenClaw Gateway",
+                        systemImage: appState.isOpenClawGatewayCaptureEnabled ? "bolt.slash" : "bolt"
+                    )
+                }
+                .help("Toggle live OpenClaw gateway capture")
+            }
+
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    appState.toggleOpenClawTransparentMode()
+                } label: {
+                    Label(
+                        appState.isOpenClawTransparentModeEnabled ? "Disable Transparent Mode" : "Enable Transparent Mode",
+                        systemImage: appState.isOpenClawTransparentModeEnabled ? "eye.slash" : "eye"
+                    )
+                }
+                .disabled(appState.isApplyingTransparentMode)
+                .help("Toggle transparent mode intent for OpenClaw traffic redirection")
+            }
         }
     }
 }
