@@ -48,6 +48,15 @@ func huggingFaceRequestParsing() throws {
   #expect(result.maxTokens == 512)
 }
 
+@Test("Floating max_tokens values are accepted when integral")
+func floatingMaxTokensAreAccepted() throws {
+  let body = #"{"model": "gpt-4", "max_tokens": 128.0}"#
+  let data = try #require(body.data(using: .utf8))
+  let result = try #require(AIRequestParser.parse(body: data))
+
+  #expect(result.maxTokens == 128)
+}
+
 @Test("Empty body returns nil")
 func emptyBodyReturnsNil() throws {
   let data = Data()
@@ -109,6 +118,16 @@ func anthropicResponseParsing() throws {
   #expect(result.model == "claude-3")
   #expect(result.inputTokens == 15)
   #expect(result.outputTokens == 25)
+}
+
+@Test("Floating usage token values are accepted when integral")
+func floatingUsageTokensAreAccepted() throws {
+  let body = #"{"model": "gpt-4", "usage": {"prompt_tokens": 10.0, "completion_tokens": 20.0}}"#
+  let data = try #require(body.data(using: .utf8))
+  let result = try #require(AIResponseParser.parse(data: data))
+
+  #expect(result.inputTokens == 10)
+  #expect(result.outputTokens == 20)
 }
 
 @Test("Ollama response format parses prompt_eval_count and eval_count")

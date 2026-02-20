@@ -14,25 +14,13 @@ struct AIRequestParser {
 
         let model = json["model"] as? String
 
-        let maxTokens: Int?
-        if let v = json["max_tokens"] as? Int {
-            maxTokens = v
-        } else if let v = json["max_completion_tokens"] as? Int {
-            maxTokens = v
-        } else if let v = json["max_new_tokens"] as? Int {
-            maxTokens = v
-        } else {
-            maxTokens = nil
-        }
+        let maxTokens = intValue(
+            json["max_tokens"]
+                ?? json["max_completion_tokens"]
+                ?? json["max_new_tokens"]
+        )
 
-        let temperature: Double?
-        if let v = json["temperature"] as? Double {
-            temperature = v
-        } else if let v = json["temperature"] as? Int {
-            temperature = Double(v)
-        } else {
-            temperature = nil
-        }
+        let temperature = doubleValue(json["temperature"])
 
         let stream = json["stream"] as? Bool
 
@@ -47,6 +35,39 @@ struct AIRequestParser {
             stream: stream
         )
     }
+}
+
+private func intValue(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber else {
+        return nil
+    }
+    if CFGetTypeID(number) == CFBooleanGetTypeID() {
+        return nil
+    }
+    let double = number.doubleValue
+    guard double.isFinite else {
+        return nil
+    }
+    let rounded = double.rounded(.towardZero)
+    guard rounded == double else {
+        return nil
+    }
+    let intValue = Int(rounded)
+    guard Double(intValue) == rounded else {
+        return nil
+    }
+    return intValue
+}
+
+private func doubleValue(_ value: Any?) -> Double? {
+    guard let number = value as? NSNumber else {
+        return nil
+    }
+    if CFGetTypeID(number) == CFBooleanGetTypeID() {
+        return nil
+    }
+    let double = number.doubleValue
+    return double.isFinite ? double : nil
 }
 
 struct ParsedRequest: Sendable {
