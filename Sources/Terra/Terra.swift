@@ -289,15 +289,28 @@ public enum Terra {
   ) async rethrows -> R {
     let tracer = tracer()
     var mergedAttributes = attributes
-    mergedAttributes[Keys.Terra.semanticVersion] = .string(Runtime.shared.telemetry.semanticVersion.rawValue)
-    mergedAttributes[Keys.Terra.schemaFamily] = .string(Runtime.shared.telemetry.schemaFamily)
+    let telemetry = Runtime.shared.telemetry
+    mergedAttributes[Keys.Terra.semanticVersion] = .string(telemetry.semanticVersion.rawValue)
+    mergedAttributes[Keys.Terra.schemaFamily] = .string(telemetry.schemaFamily)
+    mergedAttributes[Keys.Terra.controlLoopMode] = .string(telemetry.controlLoopMode)
+    mergedAttributes[Keys.Terra.eventAggregationLevel] = .string(telemetry.eventAggregationLevel)
     mergedAttributes[Keys.Terra.thermalState] = .string(Runtime.thermalStateLabel())
+    applyRequiredRootAttributes(to: &mergedAttributes, telemetry: telemetry)
 
     if let anonymizationKeyID = Runtime.anonymizationKeyID(),
        !anonymizationKeyID.isEmpty {
       mergedAttributes[Keys.Terra.anonymizationKeyID] = .string(anonymizationKeyID)
     }
-    applyCompliancePolicies(to: &mergedAttributes)
+    let admission = evaluateComplianceAdmission(for: mergedAttributes)
+    mergedAttributes = admission.attributes
+    if let auditEvent = admission.auditEvent {
+      Runtime.shared.appendAudit(auditEvent)
+    }
+
+    if admission.shouldSuppressSpan {
+      let scope = Scope<Kind>(span: TerraNoOpSpan())
+      return try await body(scope)
+    }
 
     let spanBuilder = tracer.spanBuilder(spanName: name)
       .setSpanKind(spanKind: kind)
@@ -556,8 +569,20 @@ public enum Terra {
   }
 
   static func emitRecommendation(_ recommendation: Recommendation, on scope: Scope<InferenceSpan>? = nil) {
+    let recommendationID = recommendation.id?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+      ? recommendation.id!.trimmingCharacters(in: .whitespacesAndNewlines)
+      : recommendation.kind.rawValue
+
+    guard Runtime.shared.shouldEmitRecommendation(
+      id: recommendationID,
+      confidence: recommendation.confidence
+    ) else {
+      return
+    }
+
     var attributes: [String: AttributeValue] = [
       Keys.Terra.recommendationKind: .string(recommendation.kind.rawValue),
+      Keys.Terra.recommendationID: .string(recommendationID),
       Keys.Terra.recommendationConfidence: .double(recommendation.confidence),
       Keys.Terra.recommendationAction: .string(recommendation.action),
       Keys.Terra.recommendationReason: .string(recommendation.reason),
@@ -581,33 +606,193 @@ public enum Terra {
     return max(duration.milliseconds, 0)
   }
 
-  private static func applyCompliancePolicies(to attributes: inout [String: AttributeValue]) {
-    let compliance = Runtime.shared.compliance
-    guard compliance.exportControls.enabled else { return }
+  private static func applyRequiredRootAttributes(
+    to attributes: inout [String: AttributeValue],
+    telemetry: TelemetryConfiguration
+  ) {
+    if normalizedStringValue(for: Keys.Terra.requestID, in: attributes) == nil {
+      attributes[Keys.Terra.requestID] = .string(UUID().uuidString)
+    }
 
-    guard let runtimeValue = attributes[Keys.Terra.runtime]?.description,
-          let runtimeKind = RuntimeKind(rawValue: runtimeValue) else {
-      return
+    if normalizedStringValue(for: Keys.Terra.sessionID, in: attributes) == nil {
+      attributes[Keys.Terra.sessionID] = .string(Runtime.shared.sessionID)
+    }
+
+    let runtimeResolution = resolveRuntime(in: attributes, telemetry: telemetry)
+    switch runtimeResolution {
+    case .resolved(let runtimeKind, let synthesized):
+      attributes[Keys.Terra.runtime] = .string(runtimeKind.rawValue)
+      attributes[Keys.Terra.runtimeClass] = .string(runtimeKind.rawValue)
+      if synthesized {
+        attributes[Keys.Terra.runtimeSynthesis] = .bool(true)
+      }
+      attributes[Keys.Terra.runtimeConfidence] = .double(synthesized ? 0.5 : 1.0)
+    case .unresolved:
+      attributes[Keys.Terra.runtimeSynthesis] = .bool(false)
+      attributes[Keys.Terra.runtimeConfidence] = .double(0.0)
+    }
+
+    if normalizedStringValue(for: Keys.Terra.modelFingerprint, in: attributes) == nil {
+      let fallbackRuntime = RuntimeKind.fromContractValue(
+        normalizedStringValue(for: Keys.Terra.runtime, in: attributes) ?? ""
+      ) ?? telemetry.defaultRuntime
+      let defaultModelID = telemetry.defaultFingerprintModelID
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      let modelID = defaultModelID.isEmpty ? "unavailable" : defaultModelID
+      let fingerprint = ModelFingerprint(modelID: modelID, runtime: fallbackRuntime)
+      attributes[Keys.Terra.modelFingerprint] = .string(fingerprint.attributeValue)
+      attributes[Keys.Terra.modelFingerprintSynthesis] = .bool(true)
+    }
+  }
+
+  private static func evaluateComplianceAdmission(
+    for attributes: [String: AttributeValue]
+  ) -> SpanAdmissionDecision {
+    let compliance = Runtime.shared.compliance
+    guard compliance.exportControls.enabled else {
+      return .allow(attributes)
+    }
+
+    guard let runtimeValue = normalizedStringValue(for: Keys.Terra.runtime, in: attributes),
+          let runtimeKind = RuntimeKind.fromContractValue(runtimeValue)
+    else {
+      var annotated = attributes
+      annotated[Keys.Terra.policyBlocked] = .bool(true)
+      annotated[Keys.Terra.policyReason] = .string("runtime_unresolvable")
+      let audit = makePolicyAuditEvent(
+        reason: "runtime_unresolvable",
+        runtime: normalizedStringValue(for: Keys.Terra.runtime, in: attributes) ?? "unavailable",
+        attributes: annotated
+      )
+      if compliance.exportControls.blockOnViolation {
+        return .block(annotated, auditEvent: audit)
+      }
+      return .annotate(annotated, auditEvent: audit)
     }
 
     if !compliance.exportControls.allowedRuntimes.contains(runtimeKind) {
-      attributes[Keys.Terra.policyBlocked] = .bool(true)
-      attributes[Keys.Terra.policyReason] = .string("runtime_not_allowed")
+      var annotated = attributes
+      annotated[Keys.Terra.policyBlocked] = .bool(true)
+      annotated[Keys.Terra.policyReason] = .string("runtime_not_allowed")
+      let audit = makePolicyAuditEvent(
+        reason: "runtime_not_allowed",
+        runtime: runtimeKind.rawValue,
+        attributes: annotated
+      )
+      if compliance.exportControls.blockOnViolation {
+        return .block(annotated, auditEvent: audit)
+      }
+      return .annotate(annotated, auditEvent: audit)
+    }
+    return .allow(attributes)
+  }
 
-      if compliance.auditEnabled {
-        Runtime.shared.appendAudit(
-          AuditEvent(
-            level: .warning,
-            message: "Export blocked by policy",
-            attributes: [
-              "runtime": runtimeKind.rawValue,
-              "reason": "runtime_not_allowed",
-            ]
-          )
-        )
+  private static func makePolicyAuditEvent(
+    reason: String,
+    runtime: String,
+    attributes: [String: AttributeValue]
+  ) -> AuditEvent? {
+    let compliance = Runtime.shared.compliance
+    guard compliance.auditEnabled else { return nil }
+    return AuditEvent(
+      level: .warning,
+      message: "Telemetry span blocked by policy",
+      attributes: [
+        "reason": reason,
+        "runtime": runtime,
+        "request_id": normalizedStringValue(for: Keys.Terra.requestID, in: attributes) ?? "unknown",
+      ]
+    )
+  }
+
+  private static func normalizedStringValue(
+    for key: String,
+    in attributes: [String: AttributeValue]
+  ) -> String? {
+    guard case .string(let value) = attributes[key] else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private enum RuntimeResolution {
+    case resolved(RuntimeKind, synthesized: Bool)
+    case unresolved
+  }
+
+  private static func resolveRuntime(
+    in attributes: [String: AttributeValue],
+    telemetry: TelemetryConfiguration
+  ) -> RuntimeResolution {
+    if let runtime = normalizedStringValue(for: Keys.Terra.runtime, in: attributes),
+       let parsed = RuntimeKind.fromContractValue(runtime) {
+      return .resolved(parsed, synthesized: false)
+    }
+    if let runtimeClass = normalizedStringValue(for: Keys.Terra.runtimeClass, in: attributes),
+       let parsed = RuntimeKind.fromContractValue(runtimeClass) {
+      return .resolved(parsed, synthesized: true)
+    }
+    if normalizedStringValue(for: Keys.Terra.runtime, in: attributes) == nil,
+       normalizedStringValue(for: Keys.Terra.runtimeClass, in: attributes) == nil {
+      return .resolved(telemetry.defaultRuntime, synthesized: true)
+    }
+    return .unresolved
+  }
+
+  private enum SpanAdmissionDecision {
+    case allow([String: AttributeValue])
+    case annotate([String: AttributeValue], auditEvent: AuditEvent?)
+    case block([String: AttributeValue], auditEvent: AuditEvent?)
+
+    var attributes: [String: AttributeValue] {
+      switch self {
+      case .allow(let attributes), .annotate(let attributes, _), .block(let attributes, _):
+        return attributes
       }
     }
+
+    var auditEvent: AuditEvent? {
+      switch self {
+      case .allow:
+        return nil
+      case .annotate(_, let auditEvent), .block(_, let auditEvent):
+        return auditEvent
+      }
+    }
+
+    var shouldSuppressSpan: Bool {
+      if case .block = self {
+        return true
+      }
+      return false
+    }
   }
+}
+
+private final class TerraNoOpSpan: Span {
+  let kind: SpanKind = .internal
+  let context = SpanContext.create(
+    traceId: TraceId.invalid,
+    spanId: SpanId.invalid,
+    traceFlags: TraceFlags(),
+    traceState: TraceState()
+  )
+  var isRecording: Bool { false }
+  var status: Status = .unset
+  var name: String = "terra.noop"
+  var description: String { "TerraNoOpSpan" }
+
+  func setAttribute(key: String, value: AttributeValue?) {}
+  func setAttributes(_ attributes: [String: AttributeValue]) {}
+  func addEvent(name: String) {}
+  func addEvent(name: String, timestamp: Date) {}
+  func addEvent(name: String, attributes: [String : AttributeValue]) {}
+  func addEvent(name: String, attributes: [String : AttributeValue], timestamp: Date) {}
+  func recordException(_ exception: any SpanException) {}
+  func recordException(_ exception: any SpanException, timestamp: Date) {}
+  func recordException(_ exception: any SpanException, attributes: [String : AttributeValue]) {}
+  func recordException(_ exception: any SpanException, attributes: [String : AttributeValue], timestamp: Date) {}
+  func end() {}
+  func end(time: Date) {}
 }
 
 private extension Duration {
