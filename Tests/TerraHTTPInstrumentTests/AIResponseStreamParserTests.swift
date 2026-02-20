@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import TerraCore
 @testable import TerraHTTPInstrument
 
 final class AIResponseStreamParserTests: XCTestCase {
@@ -24,7 +25,7 @@ final class AIResponseStreamParserTests: XCTestCase {
     XCTAssertEqual(parsed.stream.promptEvalTokenCount, 14)
     XCTAssertEqual(parsed.stream.decodeTokenCount, 2)
     XCTAssertEqual(parsed.stream.streamChunkCount, 2)
-    XCTAssertNotNil(parsed.stream.events.first(where: { $0.name == "terra.stream.lifecycle" }))
+    XCTAssertNotNil(parsed.stream.events.first(where: { $0.name == Terra.Keys.Terra.streamLifecycleEvent }))
     XCTAssertNotNil(parsed.stream.events.first(where: { $0.name == "terra.anomaly.stalled_token" }))
     XCTAssertEqual(parsed.stream.streamTTFMS, 1500.0)
     XCTAssertEqual(parsed.stream.loadDurationMs, 800.0)
@@ -58,8 +59,55 @@ final class AIResponseStreamParserTests: XCTestCase {
     XCTAssertEqual(parsed.stream.decodeTokenCount, 2)
     XCTAssertEqual(parsed.stream.streamChunkCount, 2)
     XCTAssertTrue(parsed.stream.events.contains { $0.name == "terra.stage.prompt_eval" })
-    XCTAssertTrue(parsed.stream.events.contains { $0.name == "terra.stream.lifecycle" })
+    XCTAssertTrue(parsed.stream.events.contains { $0.name == Terra.Keys.Terra.streamLifecycleEvent })
     XCTAssertNotNil(parsed.stream.events.first(where: { $0.name == "terra.stage.decode" }))
+  }
+
+  func testParseOllamaNDJSONRecoversFragmentedJSONObjects() {
+    let body = [
+      #"{"model":"qwen2","created_at":"2024-01-01T00:00:00.000Z","response":"H","done":false"#,
+      #"}"#,
+      #"{"model":"qwen2","created_at":"2024-01-01T00:00:00.050Z","done":true,"prompt_eval_count":1,"eval_count":1}"#,
+    ].joined(separator: "\n").data(using: .utf8)!
+
+    let parsed = AIResponseStreamParser.parse(
+      data: body,
+      runtime: .ollama,
+      requestModel: "qwen2"
+    )
+
+    XCTAssertNotNil(parsed)
+    guard let parsed else { return }
+    XCTAssertEqual(parsed.response.model, "qwen2")
+    XCTAssertEqual(parsed.stream.streamChunkCount, 1)
+    XCTAssertEqual(parsed.stream.promptEvalTokenCount, 1)
+    XCTAssertEqual(parsed.stream.decodeTokenCount, 1)
+    XCTAssertTrue(parsed.stream.events.contains { $0.name == Terra.Keys.Terra.streamLifecycleEvent })
+  }
+
+  func testParseLMStudioSSERecoversFragmentedDataPayload() {
+    let body = [
+      "event: chat.response",
+      #"data: {"created":1704067201.4,"model":"llama","choices":[{"delta":{"content":"hello","#,
+      #"data: "logprob":-0.2}}]}"#,
+      "event: chat.response",
+      #"data: {"created":1704067201.5,"model":"llama","choices":[{"delta":{"content":" world","logprob":-0.1}}],"usage":{"prompt_tokens":2,"completion_tokens":2}}"#,
+      "event: chat.done",
+      "data: [DONE]",
+    ].joined(separator: "\n").data(using: .utf8)!
+
+    let parsed = AIResponseStreamParser.parse(
+      data: body,
+      runtime: .lmStudio,
+      requestModel: "llama"
+    )
+
+    XCTAssertNotNil(parsed)
+    guard let parsed else { return }
+    XCTAssertEqual(parsed.stream.streamChunkCount, 2)
+    XCTAssertEqual(parsed.stream.promptEvalTokenCount, 2)
+    XCTAssertEqual(parsed.stream.decodeTokenCount, 2)
+    XCTAssertTrue(parsed.stream.events.contains { $0.name == Terra.Keys.Terra.streamLifecycleEvent })
   }
 
   func testMalformedStreamChunksAreRecoveredAndStillParseTokens() {
@@ -95,7 +143,7 @@ final class AIResponseStreamParserTests: XCTestCase {
     XCTAssertNotNil(parsed)
     guard let parsed else { return }
     XCTAssertNil(parsed.stream.streamTTFMS)
-    XCTAssertTrue(parsed.stream.events.filter { $0.name == "terra.stream.lifecycle" }.isEmpty)
+    XCTAssertTrue(parsed.stream.events.filter { $0.name == Terra.Keys.Terra.streamLifecycleEvent }.isEmpty)
     XCTAssertEqual(parsed.stream.promptEvalTokenCount, 22)
     XCTAssertEqual(parsed.stream.decodeTokenCount, 0)
   }

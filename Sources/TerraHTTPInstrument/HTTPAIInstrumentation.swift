@@ -5,6 +5,17 @@ import OpenTelemetrySdk
 import URLSessionInstrumentation
 
 public enum HTTPAIInstrumentation {
+    struct RuntimeResolution: Equatable {
+        let runtime: Terra.RuntimeKind
+        let confidence: Double
+        let evidence: String
+    }
+
+    private struct RequestContext {
+        let request: URLRequest
+        let parsedRequest: ParsedRequest?
+    }
+
     public static let defaultAIHosts: Set<String> = [
         "api.openai.com",
         "api.anthropic.com",
@@ -33,6 +44,8 @@ public enum HTTPAIInstrumentation {
 
     private static let lock = NSLock()
     private static var instance: URLSessionInstrumentation?
+    private static let requestContextLock = NSLock()
+    private static var requestContexts: [String: RequestContext] = [:]
 
     public static func install(
         hosts: Set<String> = defaultAIHosts,
@@ -45,6 +58,7 @@ public enum HTTPAIInstrumentation {
         guard instance == nil else { return }
 
         let config = URLSessionInstrumentationConfiguration(
+            shouldRecordPayload: { _ in true },
             shouldInstrument: { request in
                 guard let host = request.url?.host else { return false }
                 return isHostMatched(host, hosts: hosts)
@@ -64,22 +78,30 @@ public enum HTTPAIInstrumentation {
             },
             spanCustomization: { request, spanBuilder in
                 spanBuilder.setAttribute(key: Terra.Keys.Terra.autoInstrumented, value: true)
-                spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: "http_api")
+                spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: Terra.RuntimeKind.httpAPI.rawValue)
+                spanBuilder.setAttribute(key: Terra.Keys.Terra.runtimeClass, value: Terra.RuntimeKind.httpAPI.rawValue)
+                spanBuilder.setAttribute(key: Terra.Keys.Terra.runtimeConfidence, value: 0.5)
                 spanBuilder.setAttribute(key: Terra.Keys.GenAI.operationName, value: "chat")
 
                 let parsedRequest = request.httpBody.flatMap(AIRequestParser.parse(body:))
-                let runtime = inferRuntime(for: request, parsedRequest: parsedRequest)
+                let runtimeResolution = resolveRuntime(for: request, parsedRequest: parsedRequest)
 
                 if let host = request.url?.host {
                     let isOpenClawGateway = isHostMatched(host, hosts: openClawGatewayHosts)
                     let provider = providerName(from: host, openClawGatewayHosts: openClawGatewayHosts)
                     spanBuilder.setAttribute(key: Terra.Keys.GenAI.providerName, value: provider)
+
                     if isOpenClawGateway {
                         spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: Terra.RuntimeKind.openClawGateway.rawValue)
+                        spanBuilder.setAttribute(key: Terra.Keys.Terra.runtimeClass, value: Terra.RuntimeKind.openClawGateway.rawValue)
+                        spanBuilder.setAttribute(key: Terra.Keys.Terra.runtimeConfidence, value: 1.0)
                         spanBuilder.setAttribute(key: Terra.Keys.Terra.openClawGateway, value: true)
                         spanBuilder.setAttribute(key: Terra.Keys.Terra.openClawMode, value: openClawMode)
                     } else {
-                        spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: runtime.rawValue)
+                        spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: runtimeResolution.runtime.rawValue)
+                        spanBuilder.setAttribute(key: Terra.Keys.Terra.runtimeClass, value: runtimeResolution.runtime.rawValue)
+                        spanBuilder.setAttribute(key: Terra.Keys.Terra.runtimeConfidence, value: runtimeResolution.confidence)
+                        spanBuilder.setAttribute(key: "terra.runtime.evidence", value: runtimeResolution.evidence)
                     }
                 }
 
@@ -96,24 +118,48 @@ public enum HTTPAIInstrumentation {
                     spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestStream, value: stream)
                 }
             },
+            createdRequest: { request, span in
+                let parsedRequest = request.httpBody.flatMap(AIRequestParser.parse(body:))
+                storeRequestContext(
+                    RequestContext(request: request, parsedRequest: parsedRequest),
+                    for: span
+                )
+            },
             receivedResponse: { response, dataOrFile, span in
-                guard let responseData = responsePayloadData(from: dataOrFile),
-                      !responseData.isEmpty else { return }
+                let requestContext = takeRequestContext(for: span)
+                let fallbackRequest = requestContext?.request ?? response.url.map { URLRequest(url: $0) }
+                let parsedRequest = requestContext?.parsedRequest
+                let responseHeaders = (response as? HTTPURLResponse)?.allHeaderFields
 
-                guard let responseURL = response.url else { return }
-                let runtime = inferRuntime(
-                    for: URLRequest(url: responseURL),
-                    parsedRequest: nil
+                guard let responseData = responsePayloadData(from: dataOrFile),
+                      !responseData.isEmpty
+                else {
+                    let runtimeResolution = resolveRuntime(
+                        for: fallbackRequest,
+                        parsedRequest: parsedRequest,
+                        responseHeaderFields: responseHeaders
+                    )
+                    applyRuntimeResolution(runtimeResolution, to: span)
+
+                    if parsedRequest?.stream == true {
+                        addStreamingFallbackLifecycleEvent(
+                            to: span,
+                            runtime: runtimeResolution.runtime
+                        )
+                    }
+                    return
+                }
+
+                let runtimeResolution = resolveRuntime(
+                    for: fallbackRequest,
+                    parsedRequest: parsedRequest,
+                    responseData: responseData,
+                    responseHeaderFields: responseHeaders
                 )
-                span.setAttribute(
-                    key: Terra.Keys.Terra.runtime,
-                    value: .string(runtime.rawValue)
-                )
+                applyRuntimeResolution(runtimeResolution, to: span)
 
                 let parsedResponse = AIResponseParser.parse(data: responseData)
                 if let model = parsedResponse?.model {
-                    span.setAttribute(key: Terra.Keys.GenAI.responseModel, value: .string(model))
-                } else if let model = parsedResponse?.model {
                     span.setAttribute(key: Terra.Keys.GenAI.responseModel, value: .string(model))
                 }
                 if let inputTokens = parsedResponse?.inputTokens {
@@ -125,17 +171,20 @@ public enum HTTPAIInstrumentation {
 
                 let streamIsLikely = isStreamingResponseCandidate(
                     data: responseData,
-                    runtime: runtime,
-                    isStreamRequested: false
+                    runtimeResolution: runtimeResolution,
+                    isStreamRequested: parsedRequest?.stream ?? false
                 )
-
                 guard streamIsLikely else { return }
+
                 let parsedStream = parseStreamingResponse(
                     responseData: responseData,
-                    runtime: runtime,
-                    requestModel: parsedResponse?.model
+                    runtime: runtimeResolution.runtime,
+                    requestModel: parsedResponse?.model ?? parsedRequest?.model
                 )
                 applyStreamTelemetry(parsedStream, to: span)
+            },
+            receivedError: { _, _, _, span in
+                _ = takeRequestContext(for: span)
             },
             semanticConvention: .stable
         )
@@ -171,10 +220,10 @@ public enum HTTPAIInstrumentation {
             runtime: parserRuntime(from: runtime),
             requestModel: requestModel
         )
-            ?? ParsedResponseAndStream(
-                response: ParsedResponse(inputTokens: nil, outputTokens: nil, model: nil),
-                stream: ParsedStreamTelemetry()
-            )
+        ?? ParsedResponseAndStream(
+            response: ParsedResponse(inputTokens: nil, outputTokens: nil, model: nil),
+            stream: ParsedStreamTelemetry()
+        )
     }
 
     private static func applyStreamTelemetry(_ parsed: ParsedResponseAndStream, to span: Span) {
@@ -209,56 +258,272 @@ public enum HTTPAIInstrumentation {
             }
         }
 
-        parsed.stream.events.forEach { event in
+        for event in parsed.stream.events {
             span.addEvent(name: event.name, attributes: event.attributes)
         }
     }
 
-    private static func inferRuntime(
+    private static func applyRuntimeResolution(_ resolution: RuntimeResolution, to span: Span) {
+        span.setAttribute(key: Terra.Keys.Terra.runtime, value: .string(resolution.runtime.rawValue))
+        span.setAttribute(key: Terra.Keys.Terra.runtimeClass, value: .string(resolution.runtime.rawValue))
+        span.setAttribute(key: Terra.Keys.Terra.runtimeConfidence, value: .double(resolution.confidence))
+        span.setAttribute(key: "terra.runtime.evidence", value: .string(resolution.evidence))
+    }
+
+    private static func addStreamingFallbackLifecycleEvent(
+        to span: Span,
+        runtime: Terra.RuntimeKind
+    ) {
+        span.addEvent(
+            name: Terra.Keys.Terra.streamLifecycleEvent,
+            attributes: [
+                "event": .string("stream_complete_payload_unavailable"),
+                Terra.Keys.Terra.stageName: .string("decode"),
+                Terra.Keys.Terra.streamTokenStage: .string("decode"),
+                Terra.Keys.Terra.availability: .string("payload_unavailable"),
+                Terra.Keys.Terra.runtime: .string(runtime.rawValue),
+            ]
+        )
+    }
+
+    private static func spanContextKey(_ span: Span) -> String {
+        span.context.spanId.hexString
+    }
+
+    private static func storeRequestContext(_ context: RequestContext, for span: Span) {
+        requestContextLock.lock()
+        requestContexts[spanContextKey(span)] = context
+        requestContextLock.unlock()
+    }
+
+    private static func takeRequestContext(for span: Span) -> RequestContext? {
+        requestContextLock.lock()
+        defer { requestContextLock.unlock() }
+        return requestContexts.removeValue(forKey: spanContextKey(span))
+    }
+
+    private static func resolveRuntime(
         for request: URLRequest?,
-        parsedRequest: ParsedRequest?
-    ) -> Terra.RuntimeKind {
+        parsedRequest: ParsedRequest?,
+        responseData: Data? = nil,
+        responseHeaderFields: [AnyHashable: Any]? = nil
+    ) -> RuntimeResolution {
         guard let request, let requestURL = request.url else {
-            return .httpAPI
+            return RuntimeResolution(runtime: .httpAPI, confidence: 0.2, evidence: "missing_request")
         }
 
         let host = requestURL.host ?? ""
         let path = requestURL.path.lowercased()
         let method = request.httpMethod?.lowercased() ?? ""
         let port = requestURL.port
+        let isLocal = isHostBoundaryMatch(host: host, target: "localhost")
+            || isHostBoundaryMatch(host: host, target: "127.0.0.1")
 
-        if isHostBoundaryMatch(host: host, target: "localhost") ||
-            isHostBoundaryMatch(host: host, target: "127.0.0.1") {
-            if let port, ollamaPorts.contains(port), path.contains("api") {
-                return .ollama
+        var scores: [Terra.RuntimeKind: Double] = [:]
+        var evidenceByRuntime: [Terra.RuntimeKind: [String]] = [:]
+
+        func add(_ runtime: Terra.RuntimeKind, score: Double, reason: String) {
+            scores[runtime, default: 0.0] += score
+            evidenceByRuntime[runtime, default: []].append(reason)
+        }
+
+        if isLocal {
+            add(.ollama, score: 0.2, reason: "local_host")
+            add(.lmStudio, score: 0.2, reason: "local_host")
+        } else {
+            add(.httpAPI, score: 0.9, reason: "remote_host")
+        }
+
+        if let port, ollamaPorts.contains(port) {
+            add(.ollama, score: 1.1, reason: "port_11434")
+        }
+        if let port, lmStudioPorts.contains(port) {
+            add(.lmStudio, score: 1.1, reason: "port_1234")
+        }
+
+        if let matchedPath = ollamaPaths.first(where: { path == $0 || path.hasPrefix($0) }) {
+            add(.ollama, score: 1.0, reason: "path_\(matchedPath)")
+        }
+        if let matchedPath = lmStudioPaths.first(where: { path == $0 || path.hasPrefix($0) }) {
+            add(.lmStudio, score: 1.0, reason: "path_\(matchedPath)")
+        }
+
+        if method == "post", isLocal {
+            if path.hasPrefix("/api/") {
+                add(.ollama, score: 0.4, reason: "local_post_api")
             }
-            if let port, lmStudioPorts.contains(port), path.contains("/v1") {
-                return .lmStudio
-            }
-            if ollamaPaths.contains(where: { path == $0 || path.hasPrefix($0) }) {
-                return .ollama
-            }
-            if lmStudioPaths.contains(where: { path == $0 || path.hasPrefix($0) }) {
-                return .lmStudio
-            }
-            if parsedRequest?.model?.contains("lmstudio") == true {
-                return .lmStudio
+            if path.hasPrefix("/v1/") || path.hasPrefix("/api/v1/") {
+                add(.lmStudio, score: 0.4, reason: "local_post_v1")
             }
         }
 
-        if method == "post" {
-            if isHostBoundaryMatch(host: host, target: "localhost") ||
-                isHostBoundaryMatch(host: host, target: "127.0.0.1") {
-                if isHostMatched(host, hosts: defaultOllamaHosts) && path.contains("/api/") {
-                    return .ollama
-                }
-                if isHostMatched(host, hosts: defaultLMStudioHosts) && path.hasPrefix("/api/v1") {
-                    return .lmStudio
-                }
+        if parsedRequest?.stream == true {
+            if path.hasPrefix("/api/chat")
+                || path.hasPrefix("/api/generate")
+                || path.hasPrefix("/api/embeddings")
+            {
+                add(.ollama, score: 0.45, reason: "request_stream_ollama_path")
+            }
+            if path.hasPrefix("/v1/chat/completions")
+                || path.hasPrefix("/v1/completions")
+                || path.hasPrefix("/api/v1/chat/completions")
+            {
+                add(.lmStudio, score: 0.45, reason: "request_stream_lmstudio_path")
             }
         }
 
-        return .httpAPI
+        if let hintRuntime = runtimeHintFromHeaders(request.allHTTPHeaderFields) {
+            add(hintRuntime, score: 1.3, reason: "request_header_hint")
+        }
+
+        if let modelHint = parsedRequest?.model?.lowercased() {
+            if modelHint.contains("ollama") {
+                add(.ollama, score: 0.5, reason: "request_model_hint")
+            }
+            if modelHint.contains("lmstudio") || modelHint.contains("lm-studio") {
+                add(.lmStudio, score: 0.5, reason: "request_model_hint")
+            }
+        }
+
+        if let responseData,
+           let responseText = String(data: responseData.prefix(64 * 1_024), encoding: .utf8) {
+            let normalized = responseText.lowercased()
+
+            if normalized.contains("\"prompt_eval_count\"")
+                || normalized.contains("\"eval_duration\"")
+                || normalized.contains("\"prompt_eval_duration\"")
+                || normalized.contains("\"load_duration\"")
+                || normalized.contains("\"done\":true")
+            {
+                add(.ollama, score: 1.3, reason: "response_ollama_usage")
+            }
+
+            if normalized.contains("event: model_load.")
+                || normalized.contains("event: prompt_processing.")
+                || normalized.contains("event: chat.")
+                || normalized.contains("\"event\":\"model_load.")
+                || normalized.contains("\"event\":\"prompt_processing.")
+                || normalized.contains("\"event\":\"chat.")
+            {
+                add(.lmStudio, score: 1.3, reason: "response_lmstudio_events")
+            }
+        }
+
+        if let responseHeaderFields,
+           let contentType = responseHeaderValue("content-type", in: responseHeaderFields)?.lowercased() {
+            if contentType.contains("text/event-stream") {
+                add(.lmStudio, score: 0.8, reason: "content_type_sse")
+            }
+            if contentType.contains("ndjson") || contentType.contains("x-ndjson") {
+                add(.ollama, score: 0.8, reason: "content_type_ndjson")
+            }
+        }
+
+        let sorted = scores.sorted { lhs, rhs in
+            if lhs.value == rhs.value {
+                return lhs.key.rawValue < rhs.key.rawValue
+            }
+            return lhs.value > rhs.value
+        }
+
+        guard let top = sorted.first else {
+            return RuntimeResolution(runtime: .httpAPI, confidence: 0.2, evidence: "fallback_empty")
+        }
+
+        let second = sorted.dropFirst().first?.value ?? 0
+        let margin = top.value - second
+
+        if top.key != .httpAPI, margin < 0.2 {
+            return RuntimeResolution(
+                runtime: .httpAPI,
+                confidence: 0.35,
+                evidence: "ambiguous_\(top.key.rawValue)_margin_\(String(format: "%.2f", margin))"
+            )
+        }
+
+        let confidence = normalizedConfidence(score: top.value, margin: margin, runtime: top.key)
+        let evidence = evidenceByRuntime[top.key]?.joined(separator: ",") ?? "fallback"
+        return RuntimeResolution(runtime: top.key, confidence: confidence, evidence: evidence)
+    }
+
+    private static func normalizedConfidence(
+        score: Double,
+        margin: Double,
+        runtime: Terra.RuntimeKind
+    ) -> Double {
+        var confidence = min(max(score / 2.0, 0.2), 1.0)
+        if margin < 0.35 {
+            confidence = min(confidence, 0.65)
+        }
+        if runtime == .httpAPI && score < 1.2 {
+            confidence = min(confidence, 0.6)
+        }
+        return confidence
+    }
+
+    private static func runtimeHintFromHeaders(_ headers: [String: String]?) -> Terra.RuntimeKind? {
+        guard let headers else { return nil }
+        for (key, value) in headers {
+            let normalizedKey = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard normalizedKey == "x-terra-runtime"
+                || normalizedKey == "x-runtime"
+                || normalizedKey == "x-ai-runtime"
+            else {
+                continue
+            }
+            if let runtime = runtimeKind(fromHintValue: value) {
+                return runtime
+            }
+        }
+        return nil
+    }
+
+    private static func runtimeKind(fromHintValue value: String) -> Terra.RuntimeKind? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalized {
+        case "ollama":
+            return .ollama
+        case "lmstudio", "lm_studio", "lm-studio":
+            return .lmStudio
+        case "http", "http_api", "httpapi":
+            return .httpAPI
+        case "openclaw_gateway", "openclaw-gateway", "openclaw":
+            return .openClawGateway
+        default:
+            return nil
+        }
+    }
+
+    private static func responseHeaderValue(
+        _ field: String,
+        in headers: [AnyHashable: Any]
+    ) -> String? {
+        let normalizedField = field.lowercased()
+        for (key, value) in headers {
+            let keyString = String(describing: key).lowercased()
+            guard keyString == normalizedField else { continue }
+            if let stringValue = value as? String {
+                return stringValue
+            }
+            if let numberValue = value as? NSNumber {
+                return numberValue.stringValue
+            }
+        }
+        return nil
+    }
+
+    internal static func resolveRuntimeForTesting(
+        request: URLRequest,
+        parsedRequest: ParsedRequest?,
+        responseData: Data? = nil,
+        responseHeaderFields: [AnyHashable: Any]? = nil
+    ) -> RuntimeResolution {
+        resolveRuntime(
+            for: request,
+            parsedRequest: parsedRequest,
+            responseData: responseData,
+            responseHeaderFields: responseHeaderFields
+        )
     }
 
     private static func parserRuntime(from runtime: Terra.RuntimeKind) -> AITelemetryRuntime {
@@ -274,20 +539,33 @@ public enum HTTPAIInstrumentation {
 
     private static func isStreamingResponseCandidate(
         data: Data,
-        runtime: Terra.RuntimeKind,
+        runtimeResolution: RuntimeResolution,
         isStreamRequested: Bool
     ) -> Bool {
         if isStreamRequested {
             return true
         }
-        guard runtime == .ollama || runtime == .lmStudio else {
+
+        guard let text = String(data: data.prefix(64 * 1_024), encoding: .utf8) else {
             return false
         }
-        guard let text = String(data: data, encoding: .utf8) else { return false }
-        if runtime == .ollama {
-            return text.contains("\n") || text.contains("\"done\"")
+        let normalized = text.lowercased()
+
+        if runtimeResolution.runtime == .ollama {
+            return normalized.contains("\"done\"")
+                || normalized.contains("\"prompt_eval_count\"")
+                || normalized.contains("\n{")
         }
-        return text.contains("data:") || text.contains("event:") || text.contains("\"model\"")
+        if runtimeResolution.runtime == .lmStudio {
+            return normalized.contains("data:")
+                || normalized.contains("event:")
+                || normalized.contains("\"event\":\"")
+        }
+
+        return normalized.contains("data:")
+            || normalized.contains("event:")
+            || normalized.contains("\"prompt_eval_count\"")
+            || normalized.contains("\"eval_duration\"")
     }
 
     private static func isHostMatched(_ host: String, hosts: Set<String>) -> Bool {
@@ -318,7 +596,8 @@ public enum HTTPAIInstrumentation {
         return host
     }
 
-    private static func responsePayloadData(from value: Any) -> Data? {
+    private static func responsePayloadData(from value: Any?) -> Data? {
+        guard let value else { return nil }
         if let data = value as? Data {
             return data
         }
@@ -337,6 +616,9 @@ public enum HTTPAIInstrumentation {
         lock.lock()
         instance = nil
         lock.unlock()
+        requestContextLock.lock()
+        requestContexts.removeAll()
+        requestContextLock.unlock()
     }
     #endif
 }

@@ -35,6 +35,17 @@ struct AIResponseStreamParser {
   private enum Constants {
     static let stallThresholdMs = 300.0
     static let maxChunkIndexGap = 1_000_000
+    static let maxRecoveryBufferChars = 256_000
+  }
+
+  private struct StageEventDescriptor {
+    let eventName: String
+    let stageName: String
+  }
+
+  private struct SSEFrame {
+    let eventName: String
+    let data: String
   }
 
   private struct MonotonicTimeline {
@@ -130,12 +141,7 @@ struct AIResponseStreamParser {
   }
 
   private static func looksLikeOllama(text: String) -> Bool {
-    guard
-      let firstLine = text.split(whereSeparator: \.isNewline).first,
-      let frame = parseJSONLine(String(firstLine))
-    else {
-      return false
-    }
+    guard let frame = parseNDJSONFrames(text: text).first else { return false }
     return frame["prompt_eval_count"] != nil
       || frame["eval_count"] != nil
       || frame["load_duration"] != nil
@@ -159,18 +165,14 @@ struct AIResponseStreamParser {
       stream = baseResponse.stream
     }
 
-    let lines = text.split(whereSeparator: \.isNewline).map(String.init)
+    let frames = parseNDJSONFrames(text: text)
     var tokenIndex = 0
     var timeline = MonotonicTimeline()
     var previousTokenClock: ContinuousClock.Instant?
     var firstFrameClock: ContinuousClock.Instant?
     var firstTokenClock: ContinuousClock.Instant?
 
-    for rawLine in lines {
-      guard let frame = parseJSONLine(rawLine) else {
-        continue
-      }
-
+    for frame in frames {
       let createdAt = parseCreatedAt(from: frame["created_at"]) ?? Date()
       let eventClock = timeline.clock(for: createdAt)
       let responseText = frame["response"] as? String
@@ -267,7 +269,7 @@ struct AIResponseStreamParser {
           )
           stream.events.append(
             ParsedStreamTelemetry.Event(
-              name: Terra.SpanNames.streamLifecycle,
+              name: Terra.Keys.Terra.streamLifecycleEvent,
               timestamp: createdAt,
               attributes: attributes
             )
@@ -319,40 +321,34 @@ struct AIResponseStreamParser {
       stream = baseResponse.stream
     }
 
-    let lines = text.split(whereSeparator: \.isNewline).map(String.init)
-    var currentEvent = ""
+    var frames: [(eventName: String, frame: [String: Any])] = []
+    if isSSE {
+      var accumulator = ""
+      for sseFrame in parseSSEFrames(text: text) {
+        let payload = sseFrame.data.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard payload != "[DONE]" else { continue }
+        guard let frame = parseJSONWithRecovery(payload: payload, accumulator: &accumulator) else {
+          continue
+        }
+        frames.append((eventName: sseFrame.eventName, frame: frame))
+      }
+      if !accumulator.isEmpty, let trailingFrame = parseJSONLine(accumulator) {
+        frames.append((eventName: "", frame: trailingFrame))
+      }
+    } else {
+      let parsedFrames = parseNDJSONFrames(text: text)
+      frames = parsedFrames.map { (eventName: "", frame: $0) }
+    }
+
     var chunkIndex = 0
     var previousChunkClock: ContinuousClock.Instant?
     var firstFrameClock: ContinuousClock.Instant?
     var firstTokenClock: ContinuousClock.Instant?
     var timeline = MonotonicTimeline()
 
-    for rawLine in lines {
-      let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !line.isEmpty else {
-        continue
-      }
-
-      if isSSE, line.hasPrefix("event:") {
-        currentEvent = line
-          .replacingOccurrences(of: "event:", with: "")
-          .trimmingCharacters(in: .whitespacesAndNewlines)
-        continue
-      }
-
-      var payload = line
-      if isSSE {
-        guard payload.hasPrefix("data:") else {
-          continue
-        }
-        payload = payload
-          .replacingOccurrences(of: "data:", with: "")
-          .trimmingCharacters(in: .whitespacesAndNewlines)
-      }
-      guard payload != "[DONE]", let frame = parseJSONLine(payload) else {
-        continue
-      }
-
+    for item in frames {
+      let currentEvent = item.eventName
+      let frame = item.frame
       if stream.model == nil, let model = frame["model"] as? String {
         stream.model = model
         if response.model == nil {
@@ -393,18 +389,18 @@ struct AIResponseStreamParser {
           if chunkIndex <= Constants.maxChunkIndexGap {
             let stage = stageFromLMStudioEvent(currentEvent) ?? "decode"
             let gapMs = timeline.gapMs(from: previousChunkClock, to: eventClock)
-            let attributes = streamLifecycleAttributes(
-              index: chunkIndex,
-              stage: stage,
-              logProb: asDouble(delta["logprob"]),
-              gapMs: gapMs
+          let attributes = streamLifecycleAttributes(
+            index: chunkIndex,
+            stage: stage,
+            logProb: asDouble(delta["logprob"]),
+            gapMs: gapMs
+          )
+          stream.events.append(
+            ParsedStreamTelemetry.Event(
+              name: Terra.Keys.Terra.streamLifecycleEvent,
+              timestamp: createdTimestamp,
+              attributes: attributes
             )
-            stream.events.append(
-              ParsedStreamTelemetry.Event(
-                name: Terra.SpanNames.streamLifecycle,
-                timestamp: createdTimestamp,
-                attributes: attributes
-              )
             )
 
             if let gapMs, gapMs >= Constants.stallThresholdMs {
@@ -435,17 +431,28 @@ struct AIResponseStreamParser {
         previousChunkClock = eventClock
       }
 
-      if let stageEventName = stageEventName(currentEvent) {
+      if let descriptor = stageEventDescriptor(for: currentEvent) {
         stream.events.append(
           ParsedStreamTelemetry.Event(
-            name: stageEventName,
+            name: descriptor.eventName,
             timestamp: createdTimestamp,
             attributes: [
-              Terra.Keys.Terra.stageName: .string(stageEventName),
+              Terra.Keys.Terra.stageName: .string(descriptor.stageName),
             ]
           )
         )
       }
+    }
+
+    if stream.decodeDurationMs == nil,
+       let firstTokenClock,
+       let previousChunkClock,
+       previousChunkClock >= firstTokenClock {
+      stream.decodeDurationMs = monotonicDurationMS(from: firstTokenClock, to: previousChunkClock)
+    }
+
+    if stream.decodeTokenCount == nil, chunkIndex > 0 {
+      stream.decodeTokenCount = chunkIndex
     }
 
     if stream.streamTTFMS == nil,
@@ -481,6 +488,130 @@ struct AIResponseStreamParser {
     }
     if let raw = value as? UInt64 {
       return Date(timeIntervalSince1970: TimeInterval(raw))
+    }
+    return nil
+  }
+
+  private static func parseNDJSONFrames(text: String) -> [[String: Any]] {
+    let lines = text.split(
+      omittingEmptySubsequences: false,
+      whereSeparator: \.isNewline
+    ).map(String.init)
+
+    var frames: [[String: Any]] = []
+    var accumulator = ""
+
+    for line in lines {
+      let payload = line.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !payload.isEmpty else { continue }
+      if let frame = parseJSONWithRecovery(payload: payload, accumulator: &accumulator) {
+        frames.append(frame)
+      }
+    }
+
+    if !accumulator.isEmpty, let trailingFrame = parseJSONLine(accumulator) {
+      frames.append(trailingFrame)
+    }
+
+    return frames
+  }
+
+  private static func parseSSEFrames(text: String) -> [SSEFrame] {
+    let lines = text.split(
+      omittingEmptySubsequences: false,
+      whereSeparator: \.isNewline
+    ).map(String.init)
+
+    var frames: [SSEFrame] = []
+    var eventName = ""
+    var dataLines: [String] = []
+
+    func flush() {
+      guard !dataLines.isEmpty else { return }
+      let payload = dataLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !payload.isEmpty else {
+        dataLines.removeAll(keepingCapacity: true)
+        return
+      }
+      frames.append(SSEFrame(eventName: eventName, data: payload))
+      dataLines.removeAll(keepingCapacity: true)
+      eventName = ""
+    }
+
+    for rawLine in lines {
+      let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+      if line.isEmpty {
+        flush()
+        continue
+      }
+
+      if line.hasPrefix(":") {
+        continue
+      }
+
+      if line.hasPrefix("event:") {
+        flush()
+        eventName = line
+          .replacingOccurrences(of: "event:", with: "")
+          .trimmingCharacters(in: .whitespacesAndNewlines)
+        continue
+      }
+
+      if line.hasPrefix("data:") {
+        dataLines.append(
+          line
+            .replacingOccurrences(of: "data:", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+      } else {
+        // Graceful fallback for malformed SSE frames where data prefix is omitted.
+        dataLines.append(line)
+      }
+    }
+
+    flush()
+    return frames
+  }
+
+  private static func parseJSONWithRecovery(
+    payload: String,
+    accumulator: inout String
+  ) -> [String: Any]? {
+    let trimmed = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    if !accumulator.isEmpty {
+      let combined = accumulator + trimmed
+      if let frame = parseJSONLine(combined) {
+        accumulator.removeAll(keepingCapacity: true)
+        return frame
+      }
+
+      // If a fresh object starts while we still have buffered bytes, drop stale partial data.
+      if trimmed.hasPrefix("{") {
+        accumulator.removeAll(keepingCapacity: true)
+      } else {
+        accumulator = combined
+        if accumulator.count > Constants.maxRecoveryBufferChars {
+          accumulator.removeAll(keepingCapacity: true)
+        }
+        return nil
+      }
+    }
+
+    if let frame = parseJSONLine(trimmed) {
+      return frame
+    }
+
+    // Only keep obviously partial JSON fragments; drop malformed complete objects.
+    if trimmed.hasPrefix("{"), !trimmed.hasSuffix("}") {
+      accumulator = trimmed
+    } else {
+      accumulator.removeAll(keepingCapacity: true)
+    }
+
+    if accumulator.count > Constants.maxRecoveryBufferChars {
+      accumulator.removeAll(keepingCapacity: true)
     }
     return nil
   }
@@ -612,19 +743,28 @@ struct AIResponseStreamParser {
     return nil
   }
 
-  private static func stageEventName(_ eventName: String) -> String? {
+  private static func stageEventDescriptor(for eventName: String) -> StageEventDescriptor? {
     let normalized = eventName.lowercased()
     if normalized.isEmpty {
       return nil
     }
     if normalized.contains("prompt") {
-      return Terra.SpanNames.stagePromptEval
+      return StageEventDescriptor(
+        eventName: Terra.SpanNames.stagePromptEval,
+        stageName: "prompt_eval"
+      )
     }
     if normalized.contains("decode") || normalized.contains("response") || normalized.contains("completion") || normalized.contains("chat") {
-      return Terra.SpanNames.stageDecode
+      return StageEventDescriptor(
+        eventName: Terra.SpanNames.stageDecode,
+        stageName: "decode"
+      )
     }
     if normalized.contains("load") || normalized.contains("model") {
-      return Terra.SpanNames.modelLoad
+      return StageEventDescriptor(
+        eventName: Terra.SpanNames.modelLoad,
+        stageName: "model_load"
+      )
     }
     return nil
   }
