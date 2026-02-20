@@ -99,8 +99,8 @@ func traceDecoderDecodesSpanDataFromFileData() throws {
   #expect(decoded.count == 1)
 }
 
-@Test("TraceLoader skips corrupt files and still loads valid traces")
-func traceLoaderSkipsCorruptFiles() throws {
+@Test("TraceLoader reports corrupt files while still loading valid traces")
+func traceLoaderReportsCorruptFiles() throws {
   try withTemporaryDirectory { dir in
     let tracesDir = dir.appendingPathComponent("traces", isDirectory: true)
     try FileManager.default.createDirectory(at: tracesDir, withIntermediateDirectories: true)
@@ -120,9 +120,11 @@ func traceLoaderSkipsCorruptFiles() throws {
     )
 
     let loader = TraceLoader(locator: TraceFileLocator(tracesDirectoryURL: tracesDir))
-    let traces = try loader.loadTraces()
+    let result = try loader.loadTracesWithFailures()
 
-    #expect(traces.count == 1)
-    #expect(traces.first?.id.hasPrefix("1000-") == true)
+    #expect(result.traces.count == 1)
+    #expect(result.traces.first?.id.hasPrefix("1000-") == true)
+    #expect(result.failures.count == 1)
+    #expect(result.failures.first?.file.lastPathComponent == "2000")
   }
 }
