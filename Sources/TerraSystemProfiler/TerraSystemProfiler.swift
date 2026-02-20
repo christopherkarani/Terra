@@ -26,6 +26,14 @@ public enum TerraSystemProfiler {
     return memoryProfilerEnabled
   }
 
+  #if DEBUG
+  public static func resetForTesting() {
+    lock.lock()
+    memoryProfilerEnabled = false
+    lock.unlock()
+  }
+  #endif
+
   public static func captureMemorySnapshot() -> MemorySnapshot? {
     #if canImport(Darwin)
     var info = mach_task_basic_info()

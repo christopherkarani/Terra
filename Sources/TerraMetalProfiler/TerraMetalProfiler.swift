@@ -21,6 +21,14 @@ public enum TerraMetalProfiler {
     return installed
   }
 
+  #if DEBUG
+  public static func resetForTesting() {
+    lock.lock()
+    installed = false
+    lock.unlock()
+  }
+  #endif
+
   public static func attributes(
     gpuUtilization: Double? = nil,
     memoryInFlightMB: Double? = nil,

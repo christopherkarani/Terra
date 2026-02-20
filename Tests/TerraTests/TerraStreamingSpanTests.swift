@@ -31,4 +31,20 @@ final class TerraStreamingSpanTests: XCTestCase {
     XCTAssertNotNil(span.attributes[Terra.Keys.Terra.streamTokensPerSecond])
     XCTAssertTrue(span.events.contains { $0.name == Terra.Keys.Terra.streamFirstTokenEvent })
   }
+
+  func testStreamingScopeHighFrequencyUpdatesStayWithinBudget() async {
+    let request = Terra.InferenceRequest(model: "local/model", stream: true)
+    let clock = ContinuousClock()
+    let start = clock.now
+
+    await Terra.withStreamingInferenceSpan(request) { stream in
+      for _ in 0..<20_000 {
+        stream.recordChunk()
+        stream.recordToken()
+      }
+    }
+
+    let elapsed = start.duration(to: clock.now)
+    XCTAssertLessThan(elapsed, .seconds(2))
+  }
 }

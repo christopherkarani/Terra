@@ -73,6 +73,13 @@ The previous plan treated foundational work as future tasks (package setup, core
 - `TerraLlama` currently provides instrumentation wrappers/hooks, but no bundled C/C++ bridge into llama.cpp decode callbacks.
 - This is a product expansion item, not a blocker for current Terra core quality.
 
+## Module Reality Check (2026-02-20)
+
+- `TerraMetalProfiler`: Runtime-toggleable profiler boundary with optional span attributes. Installed only when explicitly enabled.
+- `TerraSystemProfiler`: Memory snapshot + delta attributes shipped. `ThreadProfiler` and `NeuralEngineResearch` remain diagnostics-focused helpers and are not auto-enabled.
+- `TerraLlama`: Instrumentation wrappers and C hook definitions are shipped. Native llama.cpp callback bridge remains deferred to Phase D.
+- `TerraAccelerate`: Attribute helper module is intentionally narrow and additive; no custom Accelerate runtime wrapper is shipped yet.
+
 ## Execution Plan (Net-New Work Only)
 
 ### Phase A: Production Hardening (1 sprint)

@@ -102,6 +102,17 @@ try Terra.start(.init(
 ))
 ```
 
+High-cost profilers are off by default and must be enabled explicitly:
+
+```swift
+try Terra.start(.init(
+  profiling: .init(
+    enableMemoryProfiler: true,
+    enableMetalProfiler: true
+  )
+))
+```
+
 ### @Traced Macro
 
 ```swift

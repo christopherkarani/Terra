@@ -246,6 +246,8 @@ let package = Package(
       dependencies: [
         "Terra",
         "TerraCore",
+        "TerraMetalProfiler",
+        "TerraSystemProfiler",
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),

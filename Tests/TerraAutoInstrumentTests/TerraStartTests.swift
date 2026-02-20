@@ -1,10 +1,22 @@
 import Testing
 import Terra
 @testable import TerraCore
+import TerraMetalProfiler
+import TerraSystemProfiler
 import OpenTelemetrySdk
 
 @Suite("Terra.start / AutoInstrument Tests", .serialized)
 struct TerraStartTests {
+  private func noTelemetryConfig() -> Terra.OpenTelemetryConfiguration {
+    .init(
+      enableTraces: false,
+      enableMetrics: false,
+      enableLogs: false,
+      enableSignposts: false,
+      enableSessions: false
+    )
+  }
+
   // MARK: - Terra.Instrumentations OptionSet Tests
 
   @Test("Instrumentations.none has rawValue 0")
@@ -18,13 +30,13 @@ struct TerraStartTests {
     #expect(!none.contains(.openClawDiagnostics))
   }
 
-  @Test("Instrumentations.all contains core, HTTP, and OpenClaw defaults")
+  @Test("Instrumentations.all contains only core and HTTP defaults")
   func instrumentationsAllContainsBoth() {
     let all = Terra.Instrumentations.all
     #expect(all.contains(.coreML))
     #expect(all.contains(.httpAIAPIs))
-    #expect(all.contains(.openClawGateway))
-    #expect(all.contains(.openClawDiagnostics))
+    #expect(!all.contains(.openClawGateway))
+    #expect(!all.contains(.openClawDiagnostics))
   }
 
   @Test("Instrumentations can be combined with union")
@@ -46,6 +58,13 @@ struct TerraStartTests {
     let values = flags.map(\.rawValue)
     #expect(Set(values).count == values.count)
     #expect(values.allSatisfy { $0 != 0 })
+  }
+
+  @Test("OpenClaw instrumentations remain explicitly opt-in")
+  func openClawInstrumentationsAreOptIn() {
+    let openClaw: Terra.Instrumentations = [.openClawGateway, .openClawDiagnostics]
+    #expect(openClaw.contains(.openClawGateway))
+    #expect(openClaw.contains(.openClawDiagnostics))
   }
 
   // MARK: - Terra.AutoInstrumentConfiguration Tests
@@ -95,6 +114,70 @@ struct TerraStartTests {
     #expect(!config.profiling.enableMetalProfiler)
   }
 
+  @Test("Terra.start profiling flags keep profilers disabled when false")
+  func profilingFlagsDisabledKeepProfilersOff() throws {
+    Terra.resetOpenTelemetryForTesting()
+    TerraSystemProfiler.resetForTesting()
+    TerraMetalProfiler.resetForTesting()
+    defer {
+      Terra.resetOpenTelemetryForTesting()
+      TerraSystemProfiler.resetForTesting()
+      TerraMetalProfiler.resetForTesting()
+    }
+
+    let config = Terra.AutoInstrumentConfiguration(
+      openTelemetry: noTelemetryConfig(),
+      instrumentations: .none,
+      profiling: .init(enableMemoryProfiler: false, enableMetalProfiler: false)
+    )
+
+    try Terra.start(config)
+
+    #expect(!TerraSystemProfiler.isMemoryProfilerEnabled)
+    #expect(!TerraMetalProfiler.isInstalled)
+  }
+
+  @Test("Terra.start profiling flags enable profilers when requested")
+  func profilingFlagsEnableProfilers() throws {
+    Terra.resetOpenTelemetryForTesting()
+    TerraSystemProfiler.resetForTesting()
+    TerraMetalProfiler.resetForTesting()
+    defer {
+      Terra.resetOpenTelemetryForTesting()
+      TerraSystemProfiler.resetForTesting()
+      TerraMetalProfiler.resetForTesting()
+    }
+
+    let config = Terra.AutoInstrumentConfiguration(
+      openTelemetry: noTelemetryConfig(),
+      instrumentations: .none,
+      profiling: .init(enableMemoryProfiler: true, enableMetalProfiler: true)
+    )
+
+    try Terra.start(config)
+
+    #expect(TerraSystemProfiler.isMemoryProfilerEnabled)
+    #expect(TerraMetalProfiler.isInstalled)
+  }
+
+  @Test("Memory profiler boundary capture stays within budget")
+  func memoryProfilerBoundaryBudget() {
+    TerraSystemProfiler.resetForTesting()
+    defer { TerraSystemProfiler.resetForTesting() }
+
+    TerraSystemProfiler.installMemoryProfiler()
+    let clock = ContinuousClock()
+    let start = clock.now
+    for _ in 0..<2_000 {
+      let startSnapshot = TerraSystemProfiler.captureMemorySnapshot()
+      let endSnapshot = TerraSystemProfiler.captureMemorySnapshot()
+      _ = TerraSystemProfiler.memoryDeltaAttributes(start: startSnapshot, end: endSnapshot)
+    }
+    let elapsed = start.duration(to: clock.now)
+
+    #expect(elapsed < .seconds(2))
+  }
+
   // MARK: - Terra.start() Smoke Tests
   //
   // Terra.start() calls installOpenTelemetry which throws .alreadyInstalled if called
@@ -109,13 +192,7 @@ struct TerraStartTests {
     defer { Terra.resetOpenTelemetryForTesting() }
 
     let config = Terra.AutoInstrumentConfiguration(
-      openTelemetry: .init(
-        enableTraces: false,
-        enableMetrics: false,
-        enableLogs: false,
-        enableSignposts: false,
-        enableSessions: false
-      ),
+      openTelemetry: noTelemetryConfig(),
       instrumentations: .none
     )
 
@@ -129,13 +206,7 @@ struct TerraStartTests {
     defer { Terra.resetOpenTelemetryForTesting() }
 
     let config1 = Terra.AutoInstrumentConfiguration(
-      openTelemetry: .init(
-        enableTraces: false,
-        enableMetrics: false,
-        enableLogs: false,
-        enableSignposts: false,
-        enableSessions: false
-      ),
+      openTelemetry: noTelemetryConfig(),
       instrumentations: .none
     )
     try Terra.start(config1)
@@ -154,13 +225,7 @@ struct TerraStartTests {
     defer { Terra.resetOpenTelemetryForTesting() }
 
     let config = Terra.AutoInstrumentConfiguration(
-      openTelemetry: .init(
-        enableTraces: false,
-        enableMetrics: false,
-        enableLogs: false,
-        enableSignposts: false,
-        enableSessions: false
-      ),
+      openTelemetry: noTelemetryConfig(),
       instrumentations: .none
     )
 
