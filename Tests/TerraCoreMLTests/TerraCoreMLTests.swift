@@ -3,6 +3,7 @@ import CoreML
 import OpenTelemetryApi
 import Testing
 @testable import TerraCoreML
+@testable import TerraCore
 
 // MARK: - Keys Constants
 
@@ -78,5 +79,37 @@ func sanitizeModelNameBoundsLength() {
   let longName = String(repeating: "a", count: 300)
   let sanitized = CoreMLInstrumentation.sanitizeModelName("  \(longName)  ")
   #expect(sanitized?.count == 256)
+}
+
+@Test("CoreML instrumentation uses canonical terra inference span name")
+func coreMLSpanNameIsCanonical() {
+  #expect(CoreMLInstrumentation.canonicalInferenceSpanName == "terra.inference")
+}
+
+@Test("CoreML span attributes include required terra.v1 root keys")
+func coreMLSpanAttributesContainRequiredRootKeys() {
+  let attrs = CoreMLInstrumentation.spanAttributes(
+    modelName: "LocalModel",
+    computeUnitsLabel: "all",
+    requestID: "req-coreml",
+    sessionID: "session-coreml"
+  )
+
+  #expect(attrs[Terra.Keys.Terra.semanticVersion] != nil)
+  #expect(attrs[Terra.Keys.Terra.schemaFamily] != nil)
+  #expect(attrs[Terra.Keys.Terra.runtime] == .string("coreml"))
+  #expect(attrs[Terra.Keys.Terra.requestID] == .string("req-coreml"))
+  #expect(attrs[Terra.Keys.Terra.sessionID] == .string("session-coreml"))
+  #expect(attrs[Terra.Keys.Terra.modelFingerprint]?.description.contains("runtime=coreml") == true)
+  #expect(attrs[Terra.Keys.Terra.controlLoopMode] == .string("deterministic"))
+  #expect(attrs[Terra.Keys.Terra.eventAggregationLevel] == .string("sampled"))
+}
+
+@Test("CoreML monotonic duration helper never returns negative values")
+func coreMLMonotonicDurationIsNonNegative() {
+  let start = CoreMLInstrumentation.monotonicNow()
+  let end = start.advanced(by: .milliseconds(-5))
+  let durationMS = CoreMLInstrumentation.monotonicDurationMS(from: start, to: end)
+  #expect(durationMS == 0)
 }
 #endif

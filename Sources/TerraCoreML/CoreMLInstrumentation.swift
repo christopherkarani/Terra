@@ -33,6 +33,8 @@ public enum CoreMLInstrumentation {
   private static let lock = NSLock()
   private static var isInstalled = false
   private static var configuration = Configuration()
+  private static let instrumentationSessionID = UUID().uuidString
+  internal static let canonicalInferenceSpanName = Terra.SpanNames.inference
 
   // MARK: - Public API
 
@@ -87,15 +89,16 @@ public enum CoreMLInstrumentation {
       }
 
       let span = CoreMLInstrumentation.buildSpan(modelName: modelName, model: model)
-      let startedAt = Date()
+      let startedAt = monotonicNow()
       let startMemory = TerraSystemProfiler.isMemoryProfilerEnabled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
       OpenTelemetry.instance.contextProvider.setActiveSpan(span)
 
       let result = originalFn(self_, selector, features, errorPtr)
-      let durationMS = Date().timeIntervalSince(startedAt) * 1000
+      let durationMS = monotonicDurationMS(from: startedAt, to: monotonicNow())
       span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMS))
+      span.setAttribute(key: Terra.Keys.Terra.latencyEndToEndMs, value: .double(durationMS))
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
         span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
       }
@@ -147,15 +150,16 @@ public enum CoreMLInstrumentation {
       }
 
       let span = CoreMLInstrumentation.buildSpan(modelName: modelName, model: model)
-      let startedAt = Date()
+      let startedAt = monotonicNow()
       let startMemory = TerraSystemProfiler.isMemoryProfilerEnabled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
       OpenTelemetry.instance.contextProvider.setActiveSpan(span)
 
       let result = originalFn(self_, selector, features, options, errorPtr)
-      let durationMS = Date().timeIntervalSince(startedAt) * 1000
+      let durationMS = monotonicDurationMS(from: startedAt, to: monotonicNow())
       span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMS))
+      span.setAttribute(key: Terra.Keys.Terra.latencyEndToEndMs, value: .double(durationMS))
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
         span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
       }
@@ -180,17 +184,50 @@ public enum CoreMLInstrumentation {
 
   internal static func buildSpan(modelName: String, model: MLModel) -> Span {
     let computeUnitsLabel = model.configuration.computeUnits.terraLabel
-    return OpenTelemetry.instance.tracerProvider
+    let spanBuilder = OpenTelemetry.instance.tracerProvider
       .get(instrumentationName: Terra.instrumentationName)
-      .spanBuilder(spanName: "inference \(modelName)")
+      .spanBuilder(spanName: canonicalInferenceSpanName)
       .setSpanKind(spanKind: .internal)
-      .setAttribute(key: Terra.Keys.GenAI.operationName, value: Terra.OperationName.inference.rawValue)
-      .setAttribute(key: Terra.Keys.GenAI.requestModel, value: modelName)
-      .setAttribute(key: Terra.Keys.GenAI.providerName, value: "on_device")
-      .setAttribute(key: Terra.Keys.Terra.runtime, value: "coreml")
-      .setAttribute(key: Terra.Keys.Terra.autoInstrumented, value: true)
-      .setAttribute(key: TerraCoreML.Keys.computeUnits, value: computeUnitsLabel)
-      .startSpan()
+
+    for (key, value) in spanAttributes(
+      modelName: modelName,
+      computeUnitsLabel: computeUnitsLabel
+    ) {
+      spanBuilder.setAttribute(key: key, value: value)
+    }
+
+    return spanBuilder.startSpan()
+  }
+
+  internal static func spanAttributes(
+    modelName: String,
+    computeUnitsLabel: String,
+    requestID: String = UUID().uuidString,
+    sessionID: String = instrumentationSessionID,
+    telemetry: Terra.TelemetryConfiguration = .default
+  ) -> [String: AttributeValue] {
+    let normalizedModelName = modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let modelID = normalizedModelName.isEmpty ? "unknown_coreml_model" : normalizedModelName
+    let modelFingerprint = "model=\(modelID)|runtime=\(Terra.RuntimeKind.coreML.rawValue)"
+
+    return [
+      Terra.Keys.GenAI.operationName: .string(Terra.OperationName.inference.rawValue),
+      Terra.Keys.GenAI.requestModel: .string(modelID),
+      Terra.Keys.GenAI.providerName: .string("on_device"),
+      Terra.Keys.Terra.semanticVersion: .string(telemetry.semanticVersion.rawValue),
+      Terra.Keys.Terra.schemaFamily: .string(telemetry.schemaFamily),
+      Terra.Keys.Terra.runtime: .string(Terra.RuntimeKind.coreML.rawValue),
+      Terra.Keys.Terra.runtimeClass: .string(Terra.RuntimeKind.coreML.rawValue),
+      Terra.Keys.Terra.runtimeSynthesis: .bool(false),
+      Terra.Keys.Terra.requestID: .string(requestID),
+      Terra.Keys.Terra.sessionID: .string(sessionID),
+      Terra.Keys.Terra.modelFingerprint: .string(modelFingerprint),
+      Terra.Keys.Terra.modelFingerprintSynthesis: .bool(true),
+      Terra.Keys.Terra.controlLoopMode: .string(telemetry.controlLoopMode),
+      Terra.Keys.Terra.eventAggregationLevel: .string(telemetry.eventAggregationLevel),
+      Terra.Keys.Terra.autoInstrumented: .bool(true),
+      TerraCoreML.Keys.computeUnits: .string(computeUnitsLabel),
+    ]
   }
 
   // MARK: - Model name resolution
@@ -235,6 +272,20 @@ public enum CoreMLInstrumentation {
     @unknown default:
       return false
     }
+  }
+
+  internal static func monotonicNow() -> ContinuousClock.Instant {
+    ContinuousClock().now
+  }
+
+  internal static func monotonicDurationMS(
+    from start: ContinuousClock.Instant,
+    to end: ContinuousClock.Instant
+  ) -> Double {
+    let duration = start.duration(to: end)
+    let secondsMS = Double(duration.components.seconds) * 1000
+    let attosecondsMS = Double(duration.components.attoseconds) / 1_000_000_000_000_000
+    return max(0, secondsMS + attosecondsMS)
   }
 }
 #endif
