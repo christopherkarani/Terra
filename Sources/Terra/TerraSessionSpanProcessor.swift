@@ -25,7 +25,7 @@ final class TerraSessionSpanProcessor: SpanProcessor {
   }
 
   func onEnd(span: ReadableSpan) {}
-  func shutdown(explicitTimeout: TimeInterval?) {}
-  func forceFlush(timeout: TimeInterval?) {}
+  func shutdown(explicitTimeout: TimeInterval?) { /* stateless — nothing to flush */ }
+  func forceFlush(timeout: TimeInterval?) { /* stateless — nothing to flush */ }
 }
 

@@ -2,3 +2,6 @@
 .build/
 .swiftpm/
 DerivedData/
+~/
+*.log
+null.o

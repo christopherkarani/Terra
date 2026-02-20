@@ -1,183 +1,173 @@
-# Terra: On-Device LLM/Agent Observability on OpenTelemetry Swift
+# Terra Observability Plan (HEAD-Aligned)
 
-## Recommendations (Answered First)
+Date: 2026-02-20
 
-### 1) Should You Build a Custom Runtime?
-Recommendation: do **not** start by building a full custom LLM runtime unless you have a hard requirement (custom kernels, model format constraints, nonstandard quantization, etc.).
+This plan replaces the earlier bootstrap roadmap and reflects what is already implemented in `main`.
 
-Recommended approach:
-1. Define a **runtime-agnostic execution boundary** (your public API boundary), and instrument that boundary with OpenTelemetry.
-2. Implement backends behind it in this order:
-1. **Core ML first** (broad adoption, best Apple platform story).
-2. **Metal/Accelerate adapters second** for measured hot paths or custom ops.
-3. Consider a **full custom runtime** only if profiling shows it is required.
+## Why Rewrite
 
-### 2) Where Should Telemetry Land?
-Recommendation: ship **both** developer-first and production export.
-1. **Local visibility**: Signposts so spans show up in Instruments.
-2. **Production export**: OTLP (HTTP is usually simplest on-device) decorated with **persistence** for offline + restart durability.
+The previous plan treated foundational work as future tasks (package setup, core span APIs, OTel install flow, streaming scope, resource attributes, and multiple backend modules). Those are already shipped. This version focuses only on unresolved gaps and measurable next moves.
 
-Logs should be optional and privacy-gated; traces + metrics carry most of the value.
+## Current Baseline (Already Implemented)
 
-### 3) Should Terra Fork OpenTelemetry Swift?
-Recommendation: **no fork** by default.
+1. Core span APIs and scope helpers are in place:
+1. `withInferenceSpan`
+2. `withStreamingInferenceSpan`
+3. `withAgentInvocationSpan`
+4. `withToolExecutionSpan`
+5. `withEmbeddingSpan`
+6. `withSafetyCheckSpan`
+2. Streaming telemetry is implemented:
+1. first-token event
+2. chunk count
+3. output token count
+4. TTFT
+5. tokens/sec
+3. Privacy model is implemented:
+1. content policy (`never` / `optIn` / `always`)
+2. redaction strategy (`drop` / `lengthOnly` / `hashSHA256`)
+4. OpenTelemetry install flow is implemented:
+1. Signpost and OTLP paths
+2. persistence integration
+3. `service.name` and `service.version` resource attributes
+5. Auto-instrumentation exists for:
+1. Core ML
+2. HTTP AI providers
+3. OpenClaw diagnostics export path
+6. Optional profilers are already shipped:
+1. `TerraMetalProfiler`
+2. `TerraSystemProfiler` (memory deltas)
+7. Existing tests already cover:
+1. span types
+2. streaming span behavior
+3. E2E span export/load flow
+4. host boundary matching
+5. TraceKit concurrent access
 
-Terra should be a standalone framework (its own SwiftPM package/repo) that **depends on**:
-1. **OpenTelemetry Swift Core** (`opentelemetry-swift-core`) for the API/SDK surface (Tracer/Span/Meter/LogRecord, context propagation).
-2. **OpenTelemetry Swift** (`opentelemetry-swift`) for on-device-friendly instrumentation/exporter components (e.g. Signpost integration, OTLP exporters, persistence exporter).
+## Confirmed Gaps To Prioritize
 
-Forking is reserved for a proven blocker that cannot be solved via extension points or an upstream PR.
+### G1 (High): Response parser has no size guard before JSON parse
 
-## Plan
+- `Sources/TerraHTTPInstrument/AIResponseParser.swift` parses arbitrary payload size with `JSONSerialization`.
+- `AIRequestParser` has a 10 MiB guard; response path should match.
+- Risk: large response payload can trigger avoidable allocation pressure.
 
-### Goals
-1. Provide a Swift framework that instruments:
-1. Model inference (prefill/decode/streaming)
-2. Embeddings
-3. Agent runs (planning, tool calls, memory, retrieval)
-4. Safety checks
-2. Export telemetry locally (Instruments) and remotely (OTLP) with offline persistence.
-3. Default to privacy-safe behavior and correct Swift structured concurrency context propagation.
+### G2 (Medium): CoreML dedup guard is intentionally non-atomic
 
-### Non-Goals (V1)
-1. Implement a full custom LLM runtime.
-2. Record raw prompts/outputs by default.
-3. Cross-process distributed tracing (in-process focus first).
+- `Sources/TerraCoreML/CoreMLInstrumentation.swift` uses `activeSpan == nil` check without synchronization.
+- In highly concurrent predictions this can emit duplicate auto-instrumented spans.
+- Current comment documents this tradeoff; decision needed whether to keep or harden.
 
-### Architecture Overview
-1. `TerraCore`: Public API types, conventions, redaction policies.
-2. `TerraOTel`: OpenTelemetry binding (tracer/meter/logger wiring, processors).
-3. `TerraBackends`: Optional adapters (Core ML, Metal, Accelerate) for backend-specific metrics/attributes.
-4. `TerraExport`: Turnkey install helpers for Signpost + OTLP + Persistence.
+### G3 (High): Foundation Models non-stream token usage is incomplete
 
-### Packaging and Dependencies (Production Shape)
-1. Terra ships as a standalone SwiftPM package (recommended: its own repo).
-2. Terra depends on:
-1. `opentelemetry-swift-core` (required) — Terra composes the API/SDK types rather than re-implementing them.
-2. `opentelemetry-swift` (required by this plan) — Terra reuses the existing on-device exporter/instrumentation modules where possible:
-1. `SignPostIntegration` for Instruments visibility.
-2. `OpenTelemetryProtocolExporterHttp` / `OpenTelemetryProtocolExporterGrpc` for OTLP.
-3. `PersistenceExporter` for offline + restart durability.
-3. Terra is “hard to misuse”:
-1. Terra’s public API is runtime-agnostic and does not require customers to learn OpenTelemetry internals.
-2. Advanced users can integrate Terra into an existing OTel provider setup (BYO `TracerProvider` / exporters).
+- `Sources/TerraFoundationModels/TerraTracedSession.swift` streaming path records chunk/tokens when surfaced, but non-stream `respond` paths do not set usage attributes.
+- Add explicit token usage capture for supported OS/SDK levels and map to `gen_ai.usage.*`.
 
-### Phase 0: Repo and Package Setup
-1. Create Terra as its own SwiftPM package.
-1. Add new targets under `Sources/`:
-1. `Terra`
-2. `TerraCoreML` (optional, if first-party Core ML integration is desired)
-2. Add corresponding test targets under `Tests/`.
-3. Define instrumentation scope names:
-1. Tracing/metrics instrumentation name: `com.yourorg.terra`
-2. Version: semver tied to framework release.
-4. Add dependencies:
-1. `opentelemetry-swift-core` (API/SDK)
-2. `opentelemetry-swift` (Signpost, OTLP exporters, persistence exporter)
+### G4 (Medium): Foundation Models test depth is minimal
 
-### Phase 1: Semantics and Privacy Policy
-1. Define a minimal semantic vocabulary:
-1. Prefer GenAI semantic convention keys where applicable (`gen_ai.*`).
-2. Use a stable custom prefix for Terra-specific and device/runtime details (`terra.*`).
-2. Define privacy controls:
-1. `ContentPolicy`: `.never`, `.optIn`, `.always`
-2. Redaction pipeline: hash, length-only, allowlist keys, drop high-risk fields.
-3. Define low-cardinality rules:
-1. Document which fields are allowed as attributes vs span events vs logs.
+- Current tests only validate initialization/stub compile behavior.
+- Missing behavior tests for span attributes/events under available Foundation Models environments.
 
-Deliverable: a documented attribute key list, redaction behavior, and examples.
+### G5 (Medium): No direct llama.cpp runtime bridge yet
 
-### Phase 2 (TDD First): Core Public API
-1. Write Swift Testing tests that fail initially:
-1. `withInferenceSpan` creates a span with correct name/kind/attributes.
-2. Child spans inherit parent in structured tasks.
-3. `Task.detached` does not inherit (document and test expected behavior).
-4. Metrics are recorded even if spans are sampled out (where feasible).
-2. Implement the API surface:
-1. `Terra.withInferenceSpan(request) { scope in ... }`
-2. `Terra.withAgentInvocationSpan(agent) { scope in ... }`
-3. `Terra.withToolExecutionSpan(tool, call) { scope in ... }`
-4. `Terra.withEmbeddingSpan(request) { scope in ... }`
-5. `Terra.withSafetyCheckSpan(check) { scope in ... }`
-3. Provide lightweight "scope" helpers:
-1. `span`
-2. `addEvent(_:)`
-3. `recordError(_:)`
-4. `setAttributes(_:)`
+- `TerraLlama` currently provides instrumentation wrappers/hooks, but no bundled C/C++ bridge into llama.cpp decode callbacks.
+- This is a product expansion item, not a blocker for current Terra core quality.
 
-Deliverable: minimal, stable, hard-to-misuse public API.
+## Execution Plan (Net-New Work Only)
 
-### Phase 3: OpenTelemetry Wiring and Processors
-1. Implement enrichment processors patterned after components in `opentelemetry-swift`:
-1. `TerraSpanEnrichmentProcessor` to attach session IDs, runtime info, sampling decisions.
-2. `TerraLogRecordProcessor` (optional) for structured "agent lifecycle" events.
-2. Add an install helper:
-1. `Terra.install(...)` that:
-1. registers or integrates with existing tracer/meter/logger providers
-2. installs Signpost processor in dev/debug configs
-3. installs persistence-decorated OTLP exporters for production
+### Phase A: Production Hardening (1 sprint)
 
-Deliverable: one-call adoption path for apps.
+1. Implement response body size guard in `AIResponseParser`.
+2. Add parser test for oversized responses mirroring request parser behavior.
+3. Decide CoreML dedup strategy:
+1. Keep current lock-free approach and formally classify as known behavior with explicit docs and test.
+2. Or add synchronized dedup path (feature-flagged or default) if duplicate telemetry is unacceptable.
+4. Add concurrency-focused test(s) for CoreML dedup behavior at the selected policy.
 
-### Phase 4: Backend Adapters (Recommended Order)
-1. Core ML adapter (recommended first):
-1. Record model identifier/version.
-2. Record compute target (CPU/GPU/ANE) when known.
-3. Record batch size and input-shape metadata (low-cardinality only).
-2. Metal/Accelerate adapter (optional):
-1. Wrap command buffer lifetimes with spans/events (opt-in).
-2. Record kernel stage timings as child spans or span events.
+Acceptance:
+1. Oversized response payload returns `nil` without deserialization.
+2. Dedup behavior is deterministic and documented (either guaranteed or explicitly best-effort).
 
-Deliverable: backend-specific enrichment without leaking backend types into core API.
+### Phase B: Foundation Models Telemetry Completion (1 sprint)
 
-### Phase 5: Agent Instrumentation Patterns
-1. Define standard span structure for agent runs:
-1. `invoke_agent` span
-2. child spans for planning, retrieval, tool calls, memory, safety
-2. Define tool-call schema:
-1. Tool name, tool type, status
-2. Arguments/result capture only via redaction and explicit opt-in
-3. Define correlation:
-1. session ID attachment (optionally reuse `Sessions` module)
-2. conversation/run IDs as non-identifying ephemeral IDs
+1. Add token usage attributes for non-stream `respond` flows.
+2. Improve streaming token accounting fallback where explicit token counters are absent.
+3. Add context-window attribute when available.
+4. Guard all API usage with precise availability checks.
 
-Deliverable: consistent trace shape across agents.
+Acceptance:
+1. On supported SDKs, `respond` spans include input/output usage attributes.
+2. Streaming spans still emit TTFT/tokens/sec and remain backward compatible.
+3. Module continues compiling cleanly on platforms without Foundation Models.
 
-### Phase 6: Export Strategy
-1. Local:
-1. Install `OSSignposterIntegration`/`SignPostIntegration` so spans appear in Instruments.
-2. Remote:
-1. OTLP HTTP exporter for traces/metrics (logs only if explicitly enabled).
-2. Decorate exporters with Persistence for offline reliability.
+### Phase C: Test and Verification Hardening (partial sprint)
 
-Deliverable: works offline, flushes later, visible locally during development.
+1. Expand Foundation Models behavior tests (availability-gated).
+2. Add/adjust CI tests for Phase A/B behaviors using in-memory exporters.
+3. Split verification into:
+1. CI-required checks (deterministic, no external tooling dependency).
+2. manual macOS checks (Instruments/Signpost visibility and end-to-end OTLP environment checks).
 
-### Phase 7: Performance and Sampling
-1. Provide a sampling policy strategy:
-1. Always keep errors and safety blocks.
-2. Dynamic downsampling under thermal/battery pressure (if you expose those signals).
-2. Keep overhead predictable:
-1. Avoid high-frequency span events.
-2. Prefer metrics for high-volume signals (tokens, throughput, cache rates).
+Acceptance:
+1. CI does not depend on Instruments UI or live collector availability.
+2. Manual checklist exists for Signpost and OTLP validation on macOS.
 
-Deliverable: defaults safe for production.
+### Phase D: Ecosystem Expansion (separate track)
 
-### Phase 8: Documentation and Examples
-1. Add an example under `Examples/`:
-1. instrument an "agent run" with a fake model backend and fake tool calls
-2. show Signpost + OTLP + Persistence configuration
-2. Add docs:
-1. privacy defaults
-2. concurrency propagation expectations
-3. how to add a backend adapter
+1. Design `TerraLlama` native bridge surface (C module + Swift wrapper).
+2. Implement per-token callback ingestion and span-event batching.
+3. Add focused tests around callback ordering and throughput overhead.
 
-### Definition of Done (V1)
-1. A single import and `install()` call provides:
-1. Instruments visibility
-2. OTLP export (with offline persistence)
-2. Public API is documented and Sendable-correct where needed.
-3. Swift Testing suite covers:
-1. span topology
-2. concurrency propagation behavior
-3. redaction policy behavior
-4. exporter wiring smoke tests (in-memory exporters)
+Acceptance:
+1. llama.cpp-based generation can emit token timing and throughput metrics through Terra spans.
+2. Bridge overhead and failure modes are documented.
+
+## Verification Matrix
+
+### CI Required
+
+1. `swift build`
+2. `swift test`
+3. Targeted tests for:
+1. response size guard
+2. CoreML dedup policy behavior
+3. Foundation Models token usage behavior (availability-gated)
+
+### Manual (macOS)
+
+1. Verify Signpost visibility in Instruments for representative inference spans.
+2. Verify OTLP + persistence flow in a local collector/dev backend environment.
+3. Verify TraceMacApp rendering for newly added attributes.
+
+## Files Expected To Change
+
+### Phase A
+
+1. `Sources/TerraHTTPInstrument/AIResponseParser.swift`
+2. `Tests/TerraHTTPInstrumentTests/AIRequestParserTests.swift`
+3. `Sources/TerraCoreML/CoreMLInstrumentation.swift` (if dedup policy changes)
+4. `Tests/TerraCoreMLTests/TerraCoreMLTests.swift` (plus/or new concurrency-focused test file)
+
+### Phase B
+
+1. `Sources/TerraFoundationModels/TerraTracedSession.swift`
+2. `Tests/TerraFoundationModelsTests/TerraTracedSessionTests.swift`
+3. `Sources/Terra/Terra+Constants.swift` (if new keys are required)
+
+### Phase C
+
+1. Test files under `Tests/TerraTests`, `Tests/TerraFoundationModelsTests`, and `Tests/TerraHTTPInstrumentTests`
+2. Optional doc/checklist updates in `Docs/` or `README.md`
+
+### Phase D
+
+1. `Sources/TerraLlama/`
+2. `Sources/TerraLlama/include/`
+3. `Package.swift`
+4. `Tests/TerraLlamaTests/`
+
+## Explicitly Out of Scope For This Plan Revision
+
+1. Re-implementing already shipped core APIs.
+2. Reworking already implemented resource attributes or diagnostics-mode plumbing.
+3. Forcing CI to run full external OTLP or Instruments UI workflows.

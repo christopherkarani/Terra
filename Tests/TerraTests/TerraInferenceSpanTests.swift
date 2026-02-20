@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Terra
+@testable import TerraCore
 
 final class TerraInferenceSpanTests: XCTestCase {
   private var support: TerraTestSupport!
@@ -8,7 +8,7 @@ final class TerraInferenceSpanTests: XCTestCase {
   override func setUp() {
     super.setUp()
     support = TerraTestSupport()
-    Terra.install(.init())
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
   }
 
   override func tearDown() {
@@ -44,7 +44,7 @@ final class TerraInferenceSpanTests: XCTestCase {
       span.attributes[Terra.Keys.GenAI.operationName]?.description,
       Terra.OperationName.inference.rawValue
     )
-    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.model]?.description, "local/llama-3.2-1b")
+    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestModel]?.description, "local/llama-3.2-1b")
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestMaxTokens]?.description, "16")
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestTemperature]?.description, "0.7")
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestStream]?.description, "false")

@@ -34,6 +34,10 @@ extension Terra {
     public var metricsExportInterval: TimeInterval
 
     public var persistence: PersistenceConfiguration?
+    public var serviceName: String?
+    public var serviceVersion: String?
+    public var resourceAttributes: [String: AttributeValue]
+    public var traceSamplingRatio: Double?
 
     public init(
       tracerProviderStrategy: TracerProviderStrategy = .registerNew,
@@ -46,7 +50,11 @@ extension Terra {
       otlpMetricsEndpoint: URL = defaultOtlpHttpMetricsEndpoint(),
       otlpLogsEndpoint: URL = defaultOltpHttpLoggingEndpoint(),
       metricsExportInterval: TimeInterval = 60,
-      persistence: PersistenceConfiguration? = nil
+      persistence: PersistenceConfiguration? = nil,
+      serviceName: String? = nil,
+      serviceVersion: String? = nil,
+      resourceAttributes: [String: AttributeValue] = [:],
+      traceSamplingRatio: Double? = nil
     ) {
       self.tracerProviderStrategy = tracerProviderStrategy
       self.enableTraces = enableTraces
@@ -59,6 +67,10 @@ extension Terra {
       self.otlpLogsEndpoint = otlpLogsEndpoint
       self.metricsExportInterval = metricsExportInterval
       self.persistence = persistence
+      self.serviceName = serviceName
+      self.serviceVersion = serviceVersion
+      self.resourceAttributes = resourceAttributes
+      self.traceSamplingRatio = traceSamplingRatio
     }
   }
 
@@ -113,15 +125,16 @@ extension Terra {
   /// - Throws: `InstallOpenTelemetryError.alreadyInstalled` if called more than once with a different configuration.
   public static func installOpenTelemetry(_ configuration: OpenTelemetryConfiguration) throws {
     openTelemetryInstallLock.lock()
+    defer { openTelemetryInstallLock.unlock() }
+
     if let installed = installedOpenTelemetryConfiguration {
-      openTelemetryInstallLock.unlock()
       if installed == configuration {
         return
       }
       throw InstallOpenTelemetryError.alreadyInstalled
     }
+
     installedOpenTelemetryConfiguration = configuration
-    openTelemetryInstallLock.unlock()
 
     do {
       if let persistence = configuration.persistence {
@@ -145,18 +158,26 @@ extension Terra {
 
       if configuration.enableMetrics {
         let meterProvider = try installMetrics(configuration: configuration)
-        // Ensure Terra records into the same meter pipeline.
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
     } catch {
-      openTelemetryInstallLock.lock()
       installedOpenTelemetryConfiguration = nil
-      openTelemetryInstallLock.unlock()
       throw error
     }
   }
 
   // MARK: - Tracing
+
+  private static func makeResource(configuration: OpenTelemetryConfiguration) -> Resource {
+    var attributes = configuration.resourceAttributes
+    if let serviceName = configuration.serviceName, !serviceName.isEmpty {
+      attributes["service.name"] = .string(serviceName)
+    }
+    if let serviceVersion = configuration.serviceVersion, !serviceVersion.isEmpty {
+      attributes["service.version"] = .string(serviceVersion)
+    }
+    return Resource(attributes: attributes)
+  }
 
   private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> TracerProviderSdk {
     func makeExporter() throws -> any SpanExporter {
@@ -179,10 +200,22 @@ extension Terra {
     } else {
       spanProcessor = nil
     }
+    let resource = makeResource(configuration: configuration)
+    let sampler: Sampler?
+    if let ratio = configuration.traceSamplingRatio {
+      let clamped = min(max(ratio, 0), 1)
+      sampler = Samplers.parentBased(root: Samplers.traceIdRatio(ratio: clamped))
+    } else {
+      sampler = nil
+    }
 
     switch configuration.tracerProviderStrategy {
     case .augmentExisting:
       if let existing = OpenTelemetry.instance.tracerProvider as? TracerProviderSdk {
+        existing.updateActiveResource(existing.getActiveResource().merging(other: resource))
+        if let sampler {
+          existing.updateActiveSampler(sampler)
+        }
         existing.addSpanProcessor(TerraSpanEnrichmentProcessor())
         if let spanProcessor {
           existing.addSpanProcessor(spanProcessor)
@@ -192,6 +225,10 @@ extension Terra {
       fallthrough
     case .registerNew:
       var builder = TracerProviderBuilder()
+      builder = builder.with(resource: resource)
+      if let sampler {
+        builder = builder.with(sampler: sampler)
+      }
       builder = builder.add(spanProcessor: TerraSpanEnrichmentProcessor())
       if let spanProcessor {
         builder = builder.add(spanProcessor: spanProcessor)
@@ -237,8 +274,11 @@ extension Terra {
       .setInterval(timeInterval: configuration.metricsExportInterval)
       .build()
 
+    let resource = makeResource(configuration: configuration)
     let provider = MeterProviderSdk.builder()
+      .setResource(resource: resource)
       .registerMetricReader(reader: reader)
+      .registerView(selector: InstrumentSelectorBuilder().build(), view: View.builder().build())
       .build()
 
     OpenTelemetry.registerMeterProvider(meterProvider: provider)
@@ -263,8 +303,10 @@ extension Terra {
 
     let exporter = try makeExporter()
     let processor = SimpleLogRecordProcessor(logRecordExporter: exporter)
+    let resource = makeResource(configuration: configuration)
 
     let provider = LoggerProviderBuilder()
+      .with(resource: resource)
       .with(processors: [processor])
       .build()
 
@@ -277,8 +319,8 @@ extension Terra {
 extension Terra {
   static func resetOpenTelemetryForTesting() {
     openTelemetryInstallLock.lock()
+    defer { openTelemetryInstallLock.unlock() }
     installedOpenTelemetryConfiguration = nil
-    openTelemetryInstallLock.unlock()
   }
 }
 #endif

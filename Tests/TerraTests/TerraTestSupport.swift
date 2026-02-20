@@ -1,7 +1,7 @@
 import InMemoryExporter
 import OpenTelemetryApi
 import OpenTelemetrySdk
-import Terra
+import TerraCore
 
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 private final class ClosureOnlyContextManager: ContextManager {

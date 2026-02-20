@@ -6,6 +6,9 @@ extension Terra {
   ///
   /// This is intentionally small and misuse-resistant: it exposes common operations without requiring
   /// callers to learn OpenTelemetry internals.
+  // @unchecked Sendable: `underlyingSpan` is an immutable (`let`) reference. All mutations
+  // (addEvent, setAttribute, status) delegate to the OTel SDK Span, which serializes access
+  // through its own internal lock — no additional synchronization is needed here.
   public final class Scope<Kind>: @unchecked Sendable {
     private let underlyingSpan: any Span
 

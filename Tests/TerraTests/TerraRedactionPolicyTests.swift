@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Terra
+@testable import TerraCore
 
 final class TerraRedactionPolicyTests: XCTestCase {
   private var support: TerraTestSupport!
@@ -8,7 +8,7 @@ final class TerraRedactionPolicyTests: XCTestCase {
   override func setUp() {
     super.setUp()
     support = TerraTestSupport()
-    Terra.install(.init())
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
   }
 
   override func tearDown() {
