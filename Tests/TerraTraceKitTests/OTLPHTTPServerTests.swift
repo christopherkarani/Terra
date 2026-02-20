@@ -63,14 +63,93 @@ final class OTLPHTTPServerTests: XCTestCase {
     let lines = renderer.render(spans: snapshot.allSpans)
     XCTAssertFalse(lines.isEmpty)
   }
+
+  func testOTLPHTTPServerRejectsOversizedBody() async throws {
+    let store = TraceStore(maxSpans: 10)
+    let server = OTLPHTTPServer(
+      host: "127.0.0.1",
+      port: 0,
+      traceStore: store,
+      limits: .init(maxHeaderBytes: 32 * 1024, maxBodyBytes: 8)
+    )
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = Int(server.port)
+    XCTAssertGreaterThan(actualPort, 0)
+
+    let oversizedBody = Data(repeating: 0x41, count: 16)
+    let request = makeRawRequest(
+      host: "127.0.0.1",
+      port: actualPort,
+      body: oversizedBody
+    )
+    let response = try await sendRawRequest(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      request: request
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 413)
+    XCTAssertTrue(parseBody(from: response).contains("Payload exceeds max body size"))
+  }
+
+  func testOTLPHTTPServerRejectsOversizedHeaders() async throws {
+    let store = TraceStore(maxSpans: 10)
+    let server = OTLPHTTPServer(
+      host: "127.0.0.1",
+      port: 0,
+      traceStore: store,
+      limits: .init(maxHeaderBytes: 128, maxBodyBytes: 10 * 1024 * 1024)
+    )
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = Int(server.port)
+    XCTAssertGreaterThan(actualPort, 0)
+
+    let hugeHeaderValue = String(repeating: "h", count: 512)
+    let request = makeRawRequest(
+      host: "127.0.0.1",
+      port: actualPort,
+      body: Data(),
+      extraHeaders: ["X-Large: \(hugeHeaderValue)"]
+    )
+    let response = try await sendRawRequest(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      request: request
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 431)
+    XCTAssertTrue(parseBody(from: response).contains("Request headers too large"))
+  }
 }
 
-private func makeRawRequest(host: String, port: Int, body: Data) -> Data {
+private func makeRawRequest(
+  host: String,
+  port: Int,
+  body: Data,
+  extraHeaders: [String] = []
+) -> Data {
   var request = "POST /v1/traces HTTP/1.1\r\n"
   request += "Host: \(host):\(port)\r\n"
   request += "Content-Type: application/x-protobuf\r\n"
   request += "Content-Encoding: identity\r\n"
   request += "Content-Length: \(body.count)\r\n"
+  for header in extraHeaders {
+    request += "\(header)\r\n"
+  }
   request += "Connection: close\r\n"
   request += "\r\n"
 

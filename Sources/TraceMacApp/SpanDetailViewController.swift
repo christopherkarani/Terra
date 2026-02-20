@@ -9,6 +9,9 @@ final class SpanDetailViewController: NSViewController {
 
   private let attributesTable = NSTableView()
   private let eventsTable = NSTableView()
+  private let recommendationEventsTable = NSTableView()
+  private let anomalyEventsTable = NSTableView()
+  private let hardwareEventsTable = NSTableView()
   private let linksTable = NSTableView()
 
   private let viewModel = SpanDetailViewModel()
@@ -24,7 +27,22 @@ final class SpanDetailViewController: NSViewController {
     headerStack.spacing = 3
 
     configure(table: attributesTable, columns: [("Key", 160), ("Value", 240)])
-    configure(table: eventsTable, columns: [("Event", 200), ("Timestamp", 200)])
+    configure(
+      table: eventsTable,
+      columns: [("Event", 140), ("Timestamp", 125), ("Attributes", 220)]
+    )
+    configure(
+      table: recommendationEventsTable,
+      columns: [("Event", 140), ("Timestamp", 125), ("Attributes", 220)]
+    )
+    configure(
+      table: anomalyEventsTable,
+      columns: [("Event", 140), ("Timestamp", 125), ("Attributes", 220)]
+    )
+    configure(
+      table: hardwareEventsTable,
+      columns: [("Event", 140), ("Timestamp", 125), ("Attributes", 220)]
+    )
     configure(table: linksTable, columns: [("Trace ID", 220), ("Span ID", 180)])
 
     let attributesItem = NSTabViewItem(identifier: "attributes")
@@ -35,12 +53,27 @@ final class SpanDetailViewController: NSViewController {
     eventsItem.label = "Events"
     eventsItem.view = wrap(table: eventsTable)
 
+    let recommendationItem = NSTabViewItem(identifier: "recommendations")
+    recommendationItem.label = "Recommendations"
+    recommendationItem.view = wrap(table: recommendationEventsTable)
+
+    let anomalyItem = NSTabViewItem(identifier: "anomalies")
+    anomalyItem.label = "Anomalies"
+    anomalyItem.view = wrap(table: anomalyEventsTable)
+
+    let hardwareItem = NSTabViewItem(identifier: "hardware")
+    hardwareItem.label = "Hardware"
+    hardwareItem.view = wrap(table: hardwareEventsTable)
+
     let linksItem = NSTabViewItem(identifier: "links")
     linksItem.label = "Links"
     linksItem.view = wrap(table: linksTable)
 
     tabView.addTabViewItem(attributesItem)
     tabView.addTabViewItem(eventsItem)
+    tabView.addTabViewItem(recommendationItem)
+    tabView.addTabViewItem(anomalyItem)
+    tabView.addTabViewItem(hardwareItem)
     tabView.addTabViewItem(linksItem)
 
     let stack = NSStackView(views: [headerStack, tabView])
@@ -75,6 +108,9 @@ final class SpanDetailViewController: NSViewController {
   private func reloadTables() {
     attributesTable.reloadData()
     eventsTable.reloadData()
+    recommendationEventsTable.reloadData()
+    anomalyEventsTable.reloadData()
+    hardwareEventsTable.reloadData()
     linksTable.reloadData()
   }
 
@@ -109,6 +145,12 @@ extension SpanDetailViewController: NSTableViewDataSource, NSTableViewDelegate {
       return viewModel.attributeItems.count
     case eventsTable:
       return viewModel.eventItems.count
+    case recommendationEventsTable:
+      return viewModel.recommendationEventItems.count
+    case anomalyEventsTable:
+      return viewModel.anomalyEventItems.count
+    case hardwareEventsTable:
+      return viewModel.hardwareEventItems.count
     case linksTable:
       return viewModel.linkItems.count
     default:
@@ -144,7 +186,16 @@ extension SpanDetailViewController: NSTableViewDataSource, NSTableViewDelegate {
       value = tableColumn?.identifier.rawValue == "Key" ? item.key : item.value
     } else if tableView == eventsTable {
       let item = viewModel.eventItems[row]
-      value = tableColumn?.identifier.rawValue == "Event" ? item.name : TraceFormatter.timestamp(item.timestamp)
+      value = cellValue(for: item, tableColumn: tableColumn)
+    } else if tableView == recommendationEventsTable {
+      let item = viewModel.recommendationEventItems[row]
+      value = cellValue(for: item, tableColumn: tableColumn)
+    } else if tableView == anomalyEventsTable {
+      let item = viewModel.anomalyEventItems[row]
+      value = cellValue(for: item, tableColumn: tableColumn)
+    } else if tableView == hardwareEventsTable {
+      let item = viewModel.hardwareEventItems[row]
+      value = cellValue(for: item, tableColumn: tableColumn)
     } else if tableView == linksTable {
       let item = viewModel.linkItems[row]
       value = tableColumn?.identifier.rawValue == "Trace ID" ? item.traceId.hexString : item.spanId.hexString
@@ -157,5 +208,22 @@ extension SpanDetailViewController: NSTableViewDataSource, NSTableViewDelegate {
     textField.textColor = .labelColor
 
     return cell
+  }
+
+  private func cellValue(
+    for item: EventItem,
+    tableColumn: NSTableColumn?
+  ) -> String {
+    guard let identifier = tableColumn?.identifier.rawValue else { return "" }
+    switch identifier {
+    case "Event":
+      return item.name
+    case "Timestamp":
+      return TraceFormatter.timestamp(item.timestamp)
+    case "Attributes":
+      return item.attributesText
+    default:
+      return ""
+    }
   }
 }

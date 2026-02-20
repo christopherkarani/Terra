@@ -1,0 +1,80 @@
+{
+  "fixture_id": "coreml-streaming",
+  "runtime": "coreml",
+  "schema_version": "v1",
+  "schema_family": "terra",
+  "contract": {
+    "terra.semantic.version": "v1",
+    "terra.schema.family": "terra",
+    "terra.runtime": "coreml",
+    "terra.request.id": "coreml-req-001",
+    "terra.session.id": "coreml-session-001",
+    "terra.model.fingerprint": "model:llama-3.2-1b:fp16"
+  },
+  "runtime_traits": [
+    "model_load",
+    "streaming",
+    "hardware_sample"
+  ],
+  "spans": [
+    {
+      "name": "terra.model.load",
+      "kind": "internal",
+      "start_ms": 0,
+      "end_ms": 150,
+      "attributes": {
+        "terra.runtime": "coreml"
+      }
+    },
+    {
+      "name": "terra.inference",
+      "kind": "internal",
+      "start_ms": 150,
+      "end_ms": 1650,
+      "attributes": {
+        "terra.latency.ttft_ms": 120,
+        "terra.latency.e2e_ms": 1500,
+        "terra.latency.prompt_eval_ms": 350,
+        "terra.latency.decode_ms": 1150,
+        "terra.stream.time_to_first_token_ms": 120,
+        "terra.stream.tokens_per_second": 31.4,
+        "terra.stream.output_tokens": 36,
+        "terra.stream.chunk_count": 36
+      },
+      "events": [
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "prompt_eval",
+          "token_index": 1,
+          "token_gap_ms": 0.0,
+          "token_logprob": -0.01
+        },
+        {
+          "name": "terra.stage.prompt_eval",
+          "stage": "prompt_eval",
+          "token_count": 7
+        },
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "decode",
+          "token_index": 2,
+          "token_gap_ms": 32.0
+        },
+        {
+          "name": "terra.stage.decode",
+          "stage": "decode",
+          "token_count": 36
+        },
+        {
+          "name": "terra.runtime.hardware.sample",
+          "terra.process.thermal_state": "nominal",
+          "terra.hw.memory_pressure": "normal"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "CoreML path includes stage and lifecycle attributes for prompt and decode.",
+    "Hardware sample captured with nominal thermal pressure and resident memory states."
+  ]
+}

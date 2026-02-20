@@ -2,6 +2,11 @@ import Foundation
 import OpenTelemetryApi
 import OpenTelemetrySdk
 
+/// Errors surfaced by convenience trace-loading APIs.
+public enum TraceLoaderError: Error {
+  case partialFailures([(file: URL, error: Error)])
+}
+
 /// Result of loading traces, including any per-file failures.
 public struct TraceLoadResult {
   public let traces: [Trace]
@@ -78,8 +83,14 @@ public struct TraceLoader {
     )
   }
 
-  /// Loads and groups spans into trace models (legacy convenience; discards failures).
+  /// Loads and groups spans into trace models.
+  ///
+  /// This convenience API throws when any file-level failures are encountered.
   public func loadTraces() throws -> [Trace] {
-    try loadTracesWithFailures().traces
+    let result = try loadTracesWithFailures()
+    guard result.failures.isEmpty else {
+      throw TraceLoaderError.partialFailures(result.failures)
+    }
+    return result.traces
   }
 }

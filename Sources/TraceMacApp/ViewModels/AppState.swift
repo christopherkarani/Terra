@@ -62,6 +62,7 @@ final class AppState {
         didSet { AppSettings.openClawGatewayAuthMode = openClawGatewayAuthMode.rawValue }
     }
     var openClawSourceFilter: OpenClawTraceSourceFilter = .all
+    var runtimeFilter: TraceRuntimeFilter = .all
     var isApplyingTransparentMode: Bool = false
     var openClawTransparentModeLastMessage: String?
 
@@ -79,7 +80,23 @@ final class AppState {
                 return trace.openClawSource == .diagnostics
             }
         }
-        let sorted = sourceFiltered.sorted { $0.fileTimestamp > $1.fileTimestamp }
+        let runtimeFiltered = sourceFiltered.filter { trace in
+            switch runtimeFilter {
+            case .all:
+                return true
+            default:
+                return trace.detectedRuntime == runtimeFilter
+            }
+        }
+        let sorted = runtimeFiltered.sorted { lhs, rhs in
+            if lhs.fileTimestamp != rhs.fileTimestamp {
+                return lhs.fileTimestamp > rhs.fileTimestamp
+            }
+            if lhs.id != rhs.id {
+                return lhs.id < rhs.id
+            }
+            return lhs.traceId.hexString < rhs.traceId.hexString
+        }
         guard !query.isEmpty else { return sorted }
         return sorted.filter { trace in
             trace.id.lowercased().contains(query)

@@ -11,6 +11,7 @@ final class TraceSplitViewController: NSSplitViewController {
   private var traces: [Trace] = []
   private var selectedTrace: Trace?
   private var isLoading = false
+  private var lastLoadFailureSignature: String?
 
   init(tracesDirectoryURL: URL = AppSettings.tracesDirectoryURL) {
     self.tracesDirectoryURL = tracesDirectoryURL
@@ -68,30 +69,39 @@ final class TraceSplitViewController: NSSplitViewController {
 
     let loader = self.loader
     Task.detached {
-      let loadedTraces: [Trace]
+      let loadResult: Result<TraceLoadResult, Error>
       do {
-        loadedTraces = try loader.loadTraces()
+        loadResult = .success(try loader.loadTracesWithFailures())
       } catch {
-        loadedTraces = []
+        loadResult = .failure(error)
       }
 
       await MainActor.run { [weak self] in
         guard let self else { return }
         self.isLoading = false
 
-        self.traces = loadedTraces
-        if loadedTraces.isEmpty {
-          self.selectedTrace = nil
-        }
+        switch loadResult {
+        case .success(let loaded):
+          self.traces = loaded.traces
+          if loaded.traces.isEmpty {
+            self.selectedTrace = nil
+          }
+          self.traceListViewController.updateTraces(self.traces)
+          if let selectedTrace = self.selectedTrace,
+             let refreshedSelection = self.traceListViewController.trace(withID: selectedTrace.id) {
+            self.selectTrace(refreshedSelection)
+          } else if let trace = self.traceListViewController.firstTrace {
+            self.selectTrace(trace)
+          } else {
+            self.clearSelection()
+          }
+          self.presentTraceLoadFailuresIfNeeded(loaded.failures)
 
-        self.traceListViewController.updateTraces(self.traces)
-        if let selectedTrace = self.selectedTrace,
-           let refreshedSelection = self.traceListViewController.trace(withID: selectedTrace.id) {
-          self.selectTrace(refreshedSelection)
-        } else if let trace = self.traceListViewController.firstTrace {
-          self.selectTrace(trace)
-        } else {
+        case .failure(let error):
+          self.traces = []
           self.clearSelection()
+          self.traceListViewController.updateTraces([])
+          self.presentTraceLoadError(error)
         }
       }
     }
@@ -120,5 +130,46 @@ final class TraceSplitViewController: NSSplitViewController {
     traceListViewController.clearSelection()
     timelineViewController.clearTrace()
     spanInspectorViewController.clearTrace()
+  }
+
+  private func presentTraceLoadFailuresIfNeeded(_ failures: [(file: URL, error: Error)]) {
+    guard !failures.isEmpty else {
+      lastLoadFailureSignature = nil
+      return
+    }
+
+    let signature = failures
+      .map { "\($0.file.lastPathComponent)|\(String(describing: type(of: $0.error)))" }
+      .sorted()
+      .joined(separator: ";")
+    guard signature != lastLoadFailureSignature else { return }
+    lastLoadFailureSignature = signature
+
+    let preview = failures.prefix(3).map(\.file.lastPathComponent).joined(separator: ", ")
+    let suffix = failures.count > 3 ? ", …" : ""
+    Task {
+      await AppLog.shared.error("trace.load_partial_failure count=\(failures.count) files=\(preview)\(suffix)")
+    }
+
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "Some trace files could not be loaded"
+    alert.informativeText = "\(failures.count) file(s) failed to parse: \(preview)\(suffix)"
+    alert.addButton(withTitle: "OK")
+    if let window = view.window ?? NSApp.mainWindow {
+      alert.beginSheetModal(for: window)
+    } else {
+      alert.runModal()
+    }
+  }
+
+  private func presentTraceLoadError(_ error: Error) {
+    Task { await AppLog.shared.error("trace.load_failed error=\(error)") }
+    let alert = NSAlert(error: error)
+    if let window = view.window ?? NSApp.mainWindow {
+      alert.beginSheetModal(for: window)
+    } else {
+      alert.runModal()
+    }
   }
 }

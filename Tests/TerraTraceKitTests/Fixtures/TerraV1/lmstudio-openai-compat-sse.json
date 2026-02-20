@@ -1,0 +1,63 @@
+{
+  "fixture_id": "lmstudio-openai-compat-sse",
+  "runtime": "lm_studio",
+  "schema_version": "v1",
+  "schema_family": "terra",
+  "contract": {
+    "terra.semantic.version": "v1",
+    "terra.schema.family": "terra",
+    "terra.runtime": "lm_studio",
+    "terra.request.id": "lmstudio-req-010",
+    "terra.session.id": "lmstudio-session-010",
+    "terra.model.fingerprint": "model:meta-llama-3.1-8b-q4_0"
+  },
+  "runtime_traits": [
+    "openai-compatible",
+    "streaming",
+    "usage-in-final-frame"
+  ],
+  "spans": [
+    {
+      "name": "terra.inference",
+      "kind": "client",
+      "start_ms": 0,
+      "end_ms": 1410,
+      "attributes": {
+        "terra.runtime": "lm_studio",
+        "terra.latency.ttft_ms": 88,
+        "terra.latency.e2e_ms": 1410,
+        "terra.latency.prompt_eval_ms": 420,
+        "terra.latency.decode_ms": 990,
+        "terra.stream.tokens_per_second": 24.8,
+        "terra.stream.output_tokens": 35,
+        "terra.stream.chunk_count": 35
+      },
+      "events": [
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "decode",
+          "token_index": 1,
+          "token_gap_ms": 0
+        },
+        {
+          "name": "terra.stage.decode",
+          "stage": "decode",
+          "token_count": 35
+        },
+        {
+          "name": "terra.stage.prompt_eval",
+          "stage": "prompt_eval",
+          "token_count": 14
+        },
+        {
+          "name": "terra.recommendation",
+          "terra.recommendation.kind": "slowdown_predicted_by_thermal_throttling",
+          "terra.recommendation.confidence": 0.72
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "LM Studio through OpenAI-compatible path with final usage metadata and recommendation event."
+  ]
+}

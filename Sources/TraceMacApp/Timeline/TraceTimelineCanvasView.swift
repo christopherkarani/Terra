@@ -14,6 +14,26 @@ private struct SpanLayout: Identifiable {
     let isCritical: Bool
 }
 
+private struct TimelineEventMarker: Identifiable {
+    enum Kind {
+        case promptEval
+        case decode
+        case tokenLifecycle
+        case stall
+        case recommendation
+        case anomaly
+        case hardware
+        case unknown
+    }
+
+    let id: String
+    let spanId: SpanId
+    let x: CGFloat
+    let y: CGFloat
+    let kind: Kind
+    let label: String
+}
+
 // MARK: - TraceTimelineCanvasView
 
 /// A high-performance waterfall timeline rendered using `Canvas`.
@@ -41,6 +61,7 @@ struct TraceTimelineCanvasView: View {
     @State private var layouts: [SpanLayout] = []
     @State private var contentSize: CGSize = .zero
     @State private var containerWidth: CGFloat = 0
+    @State private var eventMarkers: [TimelineEventMarker] = []
 
     // MARK: - Layout Constants
 
@@ -57,6 +78,7 @@ struct TraceTimelineCanvasView: View {
     private let zoomMinimum: CGFloat = 0.5
     private let zoomMaximum: CGFloat = 5.0
     private let zoomStep: CGFloat = 1.25
+    private let maxEventMarkers = 1200
 
     // MARK: - Body
 
@@ -91,6 +113,7 @@ struct TraceTimelineCanvasView: View {
                 drawLaneBackgrounds(context: &context, size: size)
                 drawConnectorLines(context: &context, size: size)
                 drawSpanBars(context: &context, size: size)
+                drawEventMarkers(context: &context, size: size)
             }
             .accessibilityHidden(true)
 
@@ -200,6 +223,42 @@ struct TraceTimelineCanvasView: View {
 
             // Label
             drawLabel(layout.span.name, in: layout.rect, context: &context)
+        }
+    }
+
+    private func drawEventMarkers(context: inout GraphicsContext, size: CGSize) {
+        guard !eventMarkers.isEmpty else { return }
+
+        for marker in eventMarkers {
+            let color = markerColor(marker.kind)
+            let center = CGPoint(x: marker.x, y: marker.y)
+
+            switch marker.kind {
+            case .stall:
+                var path = Path()
+                path.move(to: CGPoint(x: center.x, y: center.y - 8))
+                path.addLine(to: CGPoint(x: center.x - 7, y: center.y + 5))
+                path.addLine(to: CGPoint(x: center.x + 7, y: center.y + 5))
+                path.closeSubpath()
+                context.fill(path, with: .color(color))
+
+            case .promptEval, .decode, .tokenLifecycle, .recommendation, .anomaly, .hardware, .unknown:
+                let markerPath = Path(ellipseIn: CGRect(x: center.x - 3.5, y: center.y - 3.5, width: 7, height: 7))
+                context.fill(markerPath, with: .color(color))
+            }
+
+            if marker.kind == .stall || marker.kind == .anomaly {
+                let label = marker.label
+                let renderedText = context.resolve(
+                    Text(label)
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.white)
+                )
+                context.draw(
+                    renderedText,
+                    at: CGPoint(x: center.x + 8, y: center.y - 4)
+                )
+            }
         }
     }
 
@@ -334,6 +393,11 @@ struct TraceTimelineCanvasView: View {
         }
 
         layouts = newLayouts
+        eventMarkers = buildTimelineEventMarkers(
+            layouts: newLayouts,
+            totalWidth: totalWidth,
+            availableWidth: availableWidth
+        )
         contentSize = CGSize(width: totalWidth, height: totalHeight)
     }
 
@@ -346,6 +410,148 @@ struct TraceTimelineCanvasView: View {
             return DashboardTheme.accentWarning
         } else {
             return DashboardTheme.Colors.serviceColor(for: layout.span.name)
+        }
+    }
+
+    private func buildTimelineEventMarkers(
+        layouts: [SpanLayout],
+        totalWidth: CGFloat,
+        availableWidth: CGFloat
+    ) -> [TimelineEventMarker] {
+        let effectiveWidth = max(totalWidth, minimumCanvasWidth)
+        let effectiveAvailableWidth = availableWidth > 0 ? availableWidth : (effectiveWidth - leftPadding - rightPadding)
+        let traceDuration = max(viewModel.trace.duration, 0.001)
+
+        var markers: [TimelineEventMarker] = []
+        markers.reserveCapacity(1024)
+
+        for layout in layouts {
+            for event in layout.span.events {
+                guard let mapped = eventLayoutMarker(
+                    event: event,
+                    traceStart: viewModel.trace.startTime,
+                    spanLayout: layout,
+                    traceDuration: traceDuration,
+                    availableWidth: effectiveAvailableWidth
+                ) else { continue }
+
+                markers.append(mapped)
+            }
+        }
+
+        return downsampledMarkers(markers)
+    }
+
+    private func eventLayoutMarker(
+        event: SpanData.Event,
+        traceStart: Date,
+        spanLayout: SpanLayout,
+        traceDuration: TimeInterval,
+        availableWidth: CGFloat
+    ) -> TimelineEventMarker? {
+        let offset = event.timestamp.timeIntervalSince(traceStart)
+        guard offset >= 0 else { return nil }
+        let normalized = offset / traceDuration
+        guard normalized <= 1.02 else { return nil }
+
+        let x = leftPadding + CGFloat(normalized) * availableWidth
+        let y = spanLayout.rect.midY
+        let kind = eventKind(for: event)
+        if kind == nil { return nil }
+
+        let label = markerLabel(for: event, kind: kind!)
+        return TimelineEventMarker(
+            id: "\(spanLayout.span.spanId.hexString)|\(event.timestamp.timeIntervalSinceReferenceDate)|\(event.name)",
+            spanId: spanLayout.span.spanId,
+            x: x,
+            y: y,
+            kind: kind!,
+            label: label
+        )
+    }
+
+    private func eventKind(for event: SpanData.Event) -> TimelineEventMarker.Kind? {
+        let normalizedName = event.name.lowercased()
+        if normalizedName.contains("stalled") && normalizedName.contains("token") {
+            return .stall
+        }
+        if normalizedName == "terra.anomaly.stalled_token" || normalizedName == "terra.anomaly" {
+            return .anomaly
+        }
+        if normalizedName == "terra.recommendation" {
+            return .recommendation
+        }
+        if normalizedName.contains("prompt_eval") || normalizedName.contains("prompt-eval") {
+            return .promptEval
+        }
+        if normalizedName == "terra.stage.decode" || normalizedName.contains("decode") {
+            return .decode
+        }
+        if normalizedName == "terra.first_token" || normalizedName == "terra.token.lifecycle" {
+            return .tokenLifecycle
+        }
+        if normalizedName.hasPrefix("terra.hw") || normalizedName.hasPrefix("terra.process") {
+            return .hardware
+        }
+
+        let keys = Set(event.attributes.keys)
+        if keys.contains("terra.process.thermal_state") || keys.contains("terra.hw.memory_pressure") {
+            return .hardware
+        }
+        if keys.contains("terra.recommendation.kind") || keys.contains("terra.recommendation.action") {
+            return .recommendation
+        }
+        if keys.contains("terra.anomaly.kind") || keys.contains("terra.anomaly.score") {
+            return .anomaly
+        }
+        return .unknown
+    }
+
+    private func markerLabel(for event: SpanData.Event, kind: TimelineEventMarker.Kind) -> String {
+        switch kind {
+        case .promptEval:
+            return "P"
+        case .decode:
+            return "D"
+        case .tokenLifecycle:
+            return "T"
+        case .stall:
+            return "!"
+        case .recommendation:
+            return "R"
+        case .anomaly:
+            return "A"
+        case .hardware:
+            return "H"
+        case .unknown:
+            return event.name
+        }
+    }
+
+    private func downsampledMarkers(_ markers: [TimelineEventMarker]) -> [TimelineEventMarker] {
+        guard markers.count > maxEventMarkers else { return markers }
+        let step = Int(ceil(Double(markers.count) / Double(maxEventMarkers)))
+        return stride(from: 0, through: markers.count - 1, by: step).map { markers[$0] }
+    }
+
+    private func markerColor(_ kind: TimelineEventMarker.Kind) -> Color {
+        switch kind {
+        case .promptEval:
+            return .purple
+        case .decode:
+            return .blue
+        case .tokenLifecycle:
+            return .mint
+        case .stall:
+            return .red
+        case .recommendation:
+            return .green
+        case .anomaly:
+            return .orange
+        case .hardware:
+            return DashboardTheme.Colors.accentWarning
+        case .unknown:
+            return .secondary
         }
     }
 

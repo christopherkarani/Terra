@@ -17,6 +17,8 @@ public enum OTLPRequestDecoderError: Error, Sendable, Equatable, CustomStringCon
   case invalidProtobuf(String)
   case malformedData(reason: String)
   case decompressionFailed(reason: String)
+  case unsupportedTerraSchema(version: String)
+  case missingTerraSchemaAttributes([String])
 
   public var description: String {
     switch self {
@@ -32,11 +34,54 @@ public enum OTLPRequestDecoderError: Error, Sendable, Equatable, CustomStringCon
       return "Malformed OTLP data: \(reason)"
     case .decompressionFailed(let reason):
       return "Decompression failed: \(reason)"
+    case .unsupportedTerraSchema(let version):
+      return "Unsupported terra.semantic.version: \(version)"
+    case .missingTerraSchemaAttributes(let attributes):
+      return "Missing required terra schema attributes: \(attributes.joined(separator: ", "))"
     }
   }
 }
 
 public struct OTLPRequestDecoder: Sendable {
+  private enum TerraContract {
+    enum Keys {
+      static let semanticVersion = "terra.semantic.version"
+      static let schemaFamily = "terra.schema.family"
+      static let runtime = "terra.runtime"
+      static let requestID = "terra.request.id"
+      static let sessionID = "terra.session.id"
+      static let modelFingerprint = "terra.model.fingerprint"
+    }
+
+    static let requiredAttributeNames: Set<String> = [
+      Keys.semanticVersion,
+      Keys.schemaFamily,
+      Keys.runtime,
+      Keys.requestID,
+      Keys.sessionID,
+      Keys.modelFingerprint,
+    ]
+
+    static let supportedMajorVersion = "v1"
+    static let requiredFamily = "terra"
+
+    static func isSupportedSchemaVersion(_ version: String) -> Bool {
+      let normalized = version.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      guard let major = parseMajorVersion(from: normalized) else { return false }
+      return major == supportedMajorVersion
+    }
+
+    private static func parseMajorVersion(from version: String) -> String? {
+      guard version.hasPrefix("v") else { return nil }
+      let rest = String(version.dropFirst())
+      guard let firstComponent = rest.split(separator: ".").first, let major = Int(firstComponent) else {
+        return nil
+      }
+      return "v\(major)"
+    }
+
+  }
+
   public struct Limits: Sendable, Hashable {
     public var maxBodyBytes: Int
     public var maxDecompressedBytes: Int
@@ -134,6 +179,9 @@ public struct OTLPRequestDecoder: Sendable {
 
     for resourceSpans in request.resourceSpans {
       let resourceAttributesDict = attributesDictionary(from: resourceSpans.resource.attributes)
+      let requestSpans = resourceSpans.scopeSpans.flatMap { $0.spans }
+      try validateTerraContract(resourceAttributes: resourceAttributesDict, spans: requestSpans)
+
       let resourceAttributes = Attributes(dictionary: resourceAttributesDict)
       let resource = Resource(attributes: resourceAttributes)
 
@@ -196,6 +244,32 @@ public struct OTLPRequestDecoder: Sendable {
 
     let attributes = Attributes(dictionary: attributesDict)
 
+    let events = span.events.map {
+      SpanRecordEvent(
+        name: $0.name,
+        timestampUnixNano: $0.timeUnixNano,
+        attributes: Attributes(dictionary: attributesDictionary(from: $0.attributes))
+      )
+    }
+
+    var links: [SpanRecordLink] = []
+    links.reserveCapacity(span.links.count)
+    for protoLink in span.links {
+      guard
+        let traceID = TraceID(data: protoLink.traceID),
+        let spanID = SpanID(data: protoLink.spanID)
+      else {
+        continue
+      }
+      links.append(
+        SpanRecordLink(
+          traceID: traceID,
+          spanID: spanID,
+          attributes: Attributes(dictionary: attributesDictionary(from: protoLink.attributes))
+        )
+      )
+    }
+
     return SpanRecord(
       traceID: traceID,
       spanID: spanID,
@@ -206,7 +280,9 @@ public struct OTLPRequestDecoder: Sendable {
       startTimeUnixNano: span.startTimeUnixNano,
       endTimeUnixNano: span.endTimeUnixNano,
       attributes: attributes,
-      resource: resource
+      resource: resource,
+      events: events,
+      links: links
     )
   }
 
@@ -236,6 +312,60 @@ public struct OTLPRequestDecoder: Sendable {
     default:
       return .unset
     }
+  }
+
+  private func validateTerraContract(
+    resourceAttributes: [String: AttributeValue],
+    spans: [Opentelemetry_Proto_Trace_V1_Span]
+  ) throws {
+    let rootSpanAttributes = extractCandidateContractAttributes(
+      from: spans,
+      fallback: resourceAttributes
+    )
+
+    let missing = Self.TerraContract.requiredAttributeNames.subtracting(rootSpanAttributes.keys)
+    if !missing.isEmpty {
+      throw OTLPRequestDecoderError.missingTerraSchemaAttributes(Array(missing).sorted())
+    }
+
+    guard let version = stringValue(for: Self.TerraContract.Keys.semanticVersion, in: rootSpanAttributes) else {
+      throw OTLPRequestDecoderError.missingTerraSchemaAttributes([Self.TerraContract.Keys.semanticVersion])
+    }
+
+    if !Self.TerraContract.isSupportedSchemaVersion(version) {
+      throw OTLPRequestDecoderError.unsupportedTerraSchema(version: version)
+    }
+
+    guard let schemaFamily = stringValue(for: Self.TerraContract.Keys.schemaFamily, in: rootSpanAttributes),
+          schemaFamily == Self.TerraContract.requiredFamily else {
+      throw OTLPRequestDecoderError.unsupportedTerraSchema(
+        version: "schema-family=\(stringValue(for: Self.TerraContract.Keys.schemaFamily, in: rootSpanAttributes) ?? "missing")"
+      )
+    }
+  }
+
+  private func extractCandidateContractAttributes(
+    from spans: [Opentelemetry_Proto_Trace_V1_Span],
+    fallback resourceAttributes: [String: AttributeValue]
+  ) -> [String: AttributeValue] {
+    var candidate = resourceAttributes
+    for span in spans where span.parentSpanID.isEmpty {
+      let spanAttributes = attributesDictionary(from: span.attributes)
+      let relevant = spanAttributes.filter { Self.TerraContract.requiredAttributeNames.contains($0.key) }
+      if !relevant.isEmpty {
+        candidate.merge(relevant) { _, new in new }
+      }
+    }
+    return candidate
+  }
+
+  private func stringValue(
+    for key: String,
+    in attributes: [String: AttributeValue]
+  ) -> String? {
+    guard case .string(let value) = attributes[key] else { return nil }
+    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return normalized.isEmpty ? nil : normalized
   }
 
   private func attributesDictionary(

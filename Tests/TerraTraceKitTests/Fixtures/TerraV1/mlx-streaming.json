@@ -1,0 +1,62 @@
+{
+  "fixture_id": "mlx-streaming",
+  "runtime": "mlx",
+  "schema_version": "v1",
+  "schema_family": "terra",
+  "contract": {
+    "terra.semantic.version": "v1",
+    "terra.schema.family": "terra",
+    "terra.runtime": "mlx",
+    "terra.request.id": "mlx-req-901",
+    "terra.session.id": "mlx-session-901",
+    "terra.model.fingerprint": "model:mlx:mlxv2-13b"
+  },
+  "runtime_traits": [
+    "streaming",
+    "temperature_events",
+    "cache_events"
+  ],
+  "spans": [
+    {
+      "name": "terra.inference",
+      "kind": "client",
+      "start_ms": 0,
+      "end_ms": 980,
+      "attributes": {
+        "terra.runtime": "mlx",
+        "terra.latency.ttft_ms": 74,
+        "terra.latency.e2e_ms": 980,
+        "terra.latency.prompt_eval_ms": 250,
+        "terra.latency.decode_ms": 730,
+        "terra.stream.time_to_first_token_ms": 74,
+        "terra.stream.tokens_per_second": 41.1,
+        "terra.stream.output_tokens": 22,
+        "terra.stream.chunk_count": 22,
+        "terra.stage.name": "decode"
+      },
+      "events": [
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "decode",
+          "token_index": 1,
+          "token_gap_ms": 0,
+          "token_logprob": -0.05
+        },
+        {
+          "name": "terra.stage.decode",
+          "stage": "decode",
+          "token_count": 22
+        },
+        {
+          "name": "terra.hardware.profile",
+          "terra.hw.gpu_occupancy_pct": 37.2,
+          "terra.hw.ane_utilization_pct": 0.0,
+          "terra.hw.memory_churn_mb": 19.8
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "MLX sample includes token velocity and hardware profile attributes."
+  ]
+}

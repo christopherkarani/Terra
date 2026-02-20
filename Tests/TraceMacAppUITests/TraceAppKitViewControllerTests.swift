@@ -126,7 +126,7 @@ struct TraceAppKitViewControllerTests {
     viewController.clear()
 
     let tabView = try #require(allSubviews(of: NSTabView.self, in: viewController.view).first)
-    #expect(tabView.numberOfTabViewItems == 3)
+    #expect(tabView.numberOfTabViewItems == 6)
 
     let tables = allSubviews(of: NSTableView.self, in: viewController.view)
     #expect(!tables.isEmpty)

@@ -53,6 +53,70 @@ final class OTLPRequestDecoderTests: XCTestCase {
       try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
     )
   }
+
+  func testDecodeRejectsMissingTerraSchemaAttributes() throws {
+    let missing = try OTLPTestFixtures.serializedRequest(
+      resourceAttributes: [
+        "service.name": "demo-service",
+        "service.version": "1.0.0",
+        "terra.semantic.version": "v1",
+        "terra.schema.family": "terra",
+      ]
+    )
+    let decoder = OTLPRequestDecoder(
+      maxBodyBytes: missing.count + 64,
+      maxDecompressedBytes: missing.count + 64
+    )
+
+    XCTAssertThrowsError(try decoder.decode(body: missing, headers: ["Content-Encoding": "identity"])) { error in
+      guard let error = error as? OTLPRequestDecoderError else {
+        XCTFail("Expected OTLPRequestDecoderError, got \(error)")
+        return
+      }
+      if case let .missingTerraSchemaAttributes(attributes) = error {
+        XCTAssertTrue(attributes.contains("terra.runtime"))
+        XCTAssertTrue(attributes.contains("terra.request.id"))
+        XCTAssertTrue(attributes.contains("terra.session.id"))
+        XCTAssertTrue(attributes.contains("terra.model.fingerprint"))
+      } else {
+        XCTFail("Expected missingTerraSchemaAttributes, got \(error)")
+      }
+    }
+  }
+
+  func testDecodeRejectsUnsupportedTerraSchemaVersion() throws {
+    let unsupported = try OTLPTestFixtures.serializedRequest(
+      resourceAttributes: [
+        "service.name": "demo-service",
+        "service.version": "1.0.0",
+        "terra.semantic.version": "v2",
+        "terra.schema.family": "terra",
+        "terra.runtime": "http_api",
+        "terra.request.id": "request-123",
+        "terra.session.id": "session-456",
+        "terra.model.fingerprint": "model:gpt-4o:quant:v1",
+      ]
+    )
+    let decoder = OTLPRequestDecoder(
+      maxBodyBytes: unsupported.count + 64,
+      maxDecompressedBytes: unsupported.count + 64
+    )
+
+    XCTAssertThrowsError(
+      try decoder.decode(body: unsupported, headers: ["Content-Encoding": "identity"])
+    ) { error in
+      guard let error = error as? OTLPRequestDecoderError else {
+        XCTFail("Expected OTLPRequestDecoderError, got \(error)")
+        return
+      }
+      switch error {
+      case .unsupportedTerraSchema:
+        break
+      default:
+        XCTFail("Expected unsupportedTerraSchema, got \(error)")
+      }
+    }
+  }
 }
 
 private extension OTLPRequestDecoderTests {

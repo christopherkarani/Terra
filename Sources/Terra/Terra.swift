@@ -2,7 +2,7 @@ import Foundation
 import OpenTelemetryApi
 import TerraSystemProfiler
 
-/// An on-device GenAI observability façade built on OpenTelemetry Swift.
+/// An on-device GenAI observability facade built on OpenTelemetry Swift.
 public enum Terra {
   /// The OpenTelemetry instrumentation scope name for Terra spans and metrics.
   public static let instrumentationName: String = "io.opentelemetry.terra"
@@ -13,7 +13,7 @@ public enum Terra {
     Runtime.shared.install(installation)
   }
 
-  // MARK: - Public API (Phase 2)
+  // MARK: - Public API
 
   @discardableResult
   public static func withInferenceSpan<R>(
@@ -21,12 +21,23 @@ public enum Terra {
     _ body: @Sendable (Scope<InferenceSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
-    let startTime = Date()
+    let clock = ContinuousClock()
+    let started = clock.now
 
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.inference.rawValue),
       Keys.GenAI.requestModel: .string(request.model),
+      Keys.Terra.requestID: .string(request.requestID),
+      Keys.Terra.sessionID: .string(Runtime.shared.sessionID),
     ]
+
+    if let runtime = request.runtime {
+      attributes[Keys.Terra.runtime] = .string(runtime.rawValue)
+      attributes[Keys.Terra.runtimeClass] = .string(runtime.rawValue)
+    }
+    if let fingerprint = request.modelFingerprint {
+      attributes[Keys.Terra.modelFingerprint] = .string(fingerprint.attributeValue)
+    }
 
     if let maxOutputTokens = request.maxOutputTokens {
       attributes[Keys.GenAI.requestMaxTokens] = .int(maxOutputTokens)
@@ -49,13 +60,105 @@ public enum Terra {
       ) { _, new in new }
     }
 
-    defer {
-      let durationMs = Date().timeIntervalSince(startTime) * 1000
-      Runtime.shared.metrics.recordInference(durationMs: durationMs)
+    return try await withSpan(
+      name: SpanNames.inference,
+      kind: .internal,
+      attributes: attributes
+    ) { scope in
+      defer {
+        let end = clock.now
+        let durationMs = monotonicDurationMS(from: started, to: end)
+        Runtime.shared.metrics.recordInference(durationMs: durationMs)
+        scope.setAttributes([Keys.Terra.latencyEndToEndMs: .double(durationMs)])
+      }
+      return try await body(scope)
+    }
+  }
+
+  @discardableResult
+  public static func withModelLoadSpan<R>(
+    model: String,
+    runtime: RuntimeKind,
+    requestID: String = UUID().uuidString,
+    _ body: @Sendable (Scope<ModelLoadSpan>) async throws -> R
+  ) async rethrows -> R {
+    let attributes: [String: AttributeValue] = [
+      Keys.GenAI.operationName: .string(OperationName.modelLoad.rawValue),
+      Keys.GenAI.requestModel: .string(model),
+      Keys.Terra.runtime: .string(runtime.rawValue),
+      Keys.Terra.runtimeClass: .string(runtime.rawValue),
+      Keys.Terra.requestID: .string(requestID),
+      Keys.Terra.sessionID: .string(Runtime.shared.sessionID),
+      Keys.Terra.stageName: .string(OperationName.modelLoad.rawValue),
+    ]
+
+    return try await withSpan(
+      name: SpanNames.modelLoad,
+      kind: .internal,
+      attributes: attributes,
+      body
+    )
+  }
+
+  @discardableResult
+  public static func withInferenceStageSpan<R>(
+    _ stage: InferenceStage,
+    request: InferenceRequest,
+    _ body: @Sendable (Scope<InferenceStageSpan>) async throws -> R
+  ) async rethrows -> R {
+    let spanName: String
+    let opName: OperationName
+    switch stage {
+    case .promptEval:
+      spanName = SpanNames.stagePromptEval
+      opName = .promptEval
+    case .decode:
+      spanName = SpanNames.stageDecode
+      opName = .decode
+    case .streamLifecycle:
+      spanName = SpanNames.streamLifecycle
+      opName = .streamLifecycle
+    }
+
+    var attributes: [String: AttributeValue] = [
+      Keys.GenAI.operationName: .string(opName.rawValue),
+      Keys.GenAI.requestModel: .string(request.model),
+      Keys.Terra.stageName: .string(stage.rawValue),
+      Keys.Terra.requestID: .string(request.requestID),
+      Keys.Terra.sessionID: .string(Runtime.shared.sessionID),
+    ]
+    if let runtime = request.runtime {
+      attributes[Keys.Terra.runtime] = .string(runtime.rawValue)
+      attributes[Keys.Terra.runtimeClass] = .string(runtime.rawValue)
     }
 
     return try await withSpan(
-      name: SpanNames.inference,
+      name: spanName,
+      kind: .internal,
+      attributes: attributes,
+      body
+    )
+  }
+
+  @discardableResult
+  public static func withStreamingLifecycleSpan<R>(
+    _ request: InferenceRequest,
+    _ body: @Sendable (Scope<StreamingLifecycleSpan>) async throws -> R
+  ) async rethrows -> R {
+    var attributes: [String: AttributeValue] = [
+      Keys.GenAI.operationName: .string(OperationName.streamLifecycle.rawValue),
+      Keys.GenAI.requestModel: .string(request.model),
+      Keys.Terra.stageName: .string(InferenceStage.streamLifecycle.rawValue),
+      Keys.Terra.requestID: .string(request.requestID),
+      Keys.Terra.sessionID: .string(Runtime.shared.sessionID),
+    ]
+    if let runtime = request.runtime {
+      attributes[Keys.Terra.runtime] = .string(runtime.rawValue)
+      attributes[Keys.Terra.runtimeClass] = .string(runtime.rawValue)
+    }
+
+    return try await withSpan(
+      name: SpanNames.streamLifecycle,
       kind: .internal,
       attributes: attributes,
       body
@@ -72,7 +175,7 @@ public enum Terra {
       streamingRequest.stream = true
     }
 
-    let startedAt = Date()
+    let startedAt = monotonicNow()
     return try await withInferenceSpan(streamingRequest) { scope in
       let streamingScope = StreamingInferenceScope(scope: scope, startedAt: startedAt)
       defer { streamingScope.finish() }
@@ -186,7 +289,15 @@ public enum Terra {
   ) async rethrows -> R {
     let tracer = tracer()
     var mergedAttributes = attributes
+    mergedAttributes[Keys.Terra.semanticVersion] = .string(Runtime.shared.telemetry.semanticVersion.rawValue)
+    mergedAttributes[Keys.Terra.schemaFamily] = .string(Runtime.shared.telemetry.schemaFamily)
     mergedAttributes[Keys.Terra.thermalState] = .string(Runtime.thermalStateLabel())
+
+    if let anonymizationKeyID = Runtime.anonymizationKeyID(),
+       !anonymizationKeyID.isEmpty {
+      mergedAttributes[Keys.Terra.anonymizationKeyID] = .string(anonymizationKeyID)
+    }
+    applyCompliancePolicies(to: &mergedAttributes)
 
     let spanBuilder = tracer.spanBuilder(spanName: name)
       .setSpanKind(spanKind: kind)
@@ -229,13 +340,16 @@ public enum Terra {
 
   public final class StreamingInferenceScope: @unchecked Sendable {
     private let scope: Scope<InferenceSpan>
-    private let startedAt: Date
+    private let startedAt: ContinuousClock.Instant
+    private let clock = ContinuousClock()
     private let lock = NSLock()
-    private var firstTokenAt: Date?
+    private var firstTokenAt: ContinuousClock.Instant?
+    private var previousTokenAt: ContinuousClock.Instant?
     private var outputTokenCount = 0
     private var chunkCount = 0
+    private var lifecycleEventCount = 0
 
-    init(scope: Scope<InferenceSpan>, startedAt: Date) {
+    init(scope: Scope<InferenceSpan>, startedAt: ContinuousClock.Instant) {
       self.scope = scope
       self.startedAt = startedAt
     }
@@ -250,7 +364,7 @@ public enum Terra {
       scope.setAttributes(attributes)
     }
 
-    public func recordToken(_ count: Int = 1, at timestamp: Date = Date()) {
+    public func recordToken(_ count: Int = 1, at timestamp: ContinuousClock.Instant = ContinuousClock().now) {
       guard count > 0 else { return }
       var shouldEmitFirstTokenEvent = false
       lock.lock()
@@ -258,6 +372,7 @@ public enum Terra {
         firstTokenAt = timestamp
         shouldEmitFirstTokenEvent = true
       }
+      previousTokenAt = timestamp
       outputTokenCount += count
       lock.unlock()
 
@@ -266,13 +381,16 @@ public enum Terra {
       }
     }
 
-    public func recordOutputTokenCount(_ totalCount: Int, at timestamp: Date = Date()) {
+    public func recordOutputTokenCount(_ totalCount: Int, at timestamp: ContinuousClock.Instant = ContinuousClock().now) {
       guard totalCount >= 0 else { return }
       var shouldEmitFirstTokenEvent = false
       lock.lock()
       if totalCount > 0, firstTokenAt == nil {
         firstTokenAt = timestamp
         shouldEmitFirstTokenEvent = true
+      }
+      if totalCount > 0 {
+        previousTokenAt = timestamp
       }
       outputTokenCount = totalCount
       lock.unlock()
@@ -282,7 +400,7 @@ public enum Terra {
       }
     }
 
-    public func recordChunk(at timestamp: Date = Date()) {
+    public func recordChunk(at timestamp: ContinuousClock.Instant = ContinuousClock().now) {
       var shouldEmitFirstTokenEvent = false
       lock.lock()
       chunkCount += 1
@@ -290,6 +408,7 @@ public enum Terra {
         firstTokenAt = timestamp
         shouldEmitFirstTokenEvent = true
       }
+      previousTokenAt = timestamp
       lock.unlock()
 
       if shouldEmitFirstTokenEvent {
@@ -297,7 +416,89 @@ public enum Terra {
       }
     }
 
-    func finish(finishedAt: Date = Date()) {
+    public func recordTokenLifecycle(
+      index: Int,
+      emittedAt: ContinuousClock.Instant = ContinuousClock().now,
+      decodedAt: ContinuousClock.Instant? = nil,
+      flushedAt: ContinuousClock.Instant? = nil,
+      logProb: Double? = nil
+    ) {
+      let telemetry = Runtime.shared.telemetry
+      guard telemetry.killSwitches.tokenLifecycleEnabled, telemetry.tokenLifecycle.enabled else { return }
+      guard index >= 0 else { return }
+
+      lock.lock()
+      let shouldSample = index % telemetry.tokenLifecycle.sampleEveryN == 0
+      let withinBudget = lifecycleEventCount < telemetry.tokenLifecycle.maxEventsPerSpan
+      if shouldSample && withinBudget {
+        lifecycleEventCount += 1
+      }
+      let canRecord = shouldSample && withinBudget
+      let previousTokenAt = self.previousTokenAt
+      self.previousTokenAt = emittedAt
+      if firstTokenAt == nil {
+        firstTokenAt = emittedAt
+      }
+      lock.unlock()
+
+      guard canRecord else { return }
+
+      var attributes: [String: AttributeValue] = [
+        Keys.Terra.streamTokenIndex: .int(index),
+        Keys.Terra.streamTokenStage: .string("emitted"),
+      ]
+      if let previousTokenAt {
+        attributes[Keys.Terra.streamTokenGapMs] = .double(Terra.monotonicDurationMS(from: previousTokenAt, to: emittedAt))
+      }
+      if let decodedAt {
+        attributes[Keys.Terra.latencyDecodeMs] = .double(Terra.monotonicDurationMS(from: emittedAt, to: decodedAt))
+      }
+      if let flushedAt {
+        attributes[Keys.Terra.latencyEndToEndMs] = .double(Terra.monotonicDurationMS(from: emittedAt, to: flushedAt))
+      }
+      if let logProb {
+        attributes[Keys.Terra.streamTokenLogProb] = .double(logProb)
+      }
+
+      scope.addEvent(Keys.Terra.streamLifecycleEvent, attributes: attributes)
+    }
+
+    public func recordPromptEval(tokens: Int, durationMs: Double) {
+      guard durationMs >= 0 else { return }
+      scope.setAttributes([
+        Keys.Terra.latencyPromptEvalMs: .double(durationMs),
+        Keys.Terra.stageTokenCount: .int(tokens),
+      ])
+    }
+
+    public func recordDecodeStep(tokenIndex: Int, gapMs: Double) {
+      guard tokenIndex >= 0, gapMs >= 0 else { return }
+      scope.addEvent(
+        SpanNames.stageDecode,
+        attributes: [
+          Keys.Terra.streamTokenIndex: .int(tokenIndex),
+          Keys.Terra.streamTokenGapMs: .double(gapMs),
+          Keys.Terra.streamTokenStage: .string("decode"),
+        ]
+      )
+    }
+
+    public func recordStallDetected(gapMs: Double, thresholdMs: Double, baselineP95Ms: Double? = nil) {
+      guard gapMs >= 0, thresholdMs > 0 else { return }
+
+      var attributes: [String: AttributeValue] = [
+        Keys.Terra.stalledTokenGapMs: .double(gapMs),
+        Keys.Terra.stalledTokenThresholdMs: .double(thresholdMs),
+      ]
+      if let baselineP95Ms {
+        attributes[Keys.Terra.stalledTokenBaselineP95Ms] = .double(baselineP95Ms)
+      }
+
+      scope.addEvent(Keys.Terra.stalledTokenEvent, attributes: attributes)
+      Runtime.shared.metrics.recordAnomaly(kind: "stalled_token")
+    }
+
+    func finish(finishedAt: ContinuousClock.Instant = Terra.monotonicNow()) {
       lock.lock()
       let firstTokenAt = self.firstTokenAt
       let outputTokenCount = self.outputTokenCount
@@ -311,12 +512,16 @@ public enum Terra {
         attributes[Keys.Terra.streamOutputTokens] = .int(outputTokenCount)
       }
       if let firstTokenAt {
-        attributes[Keys.Terra.streamTimeToFirstTokenMs] = .double(firstTokenAt.timeIntervalSince(startedAt) * 1000)
+        let ttftMs = Terra.monotonicDurationMS(from: startedAt, to: firstTokenAt)
+        attributes[Keys.Terra.streamTimeToFirstTokenMs] = .double(ttftMs)
+        attributes[Keys.Terra.latencyTTFTMs] = .double(ttftMs)
       }
       if outputTokenCount > 0, let firstTokenAt {
-        let generationSeconds = max(finishedAt.timeIntervalSince(firstTokenAt), 0.000_001)
-        attributes[Keys.Terra.streamTokensPerSecond] = .double(Double(outputTokenCount) / generationSeconds)
+        let generationMs = max(Terra.monotonicDurationMS(from: firstTokenAt, to: finishedAt), 0.001)
+        attributes[Keys.Terra.streamTokensPerSecond] = .double((Double(outputTokenCount) * 1000) / generationMs)
+        attributes[Keys.Terra.latencyDecodeMs] = .double(generationMs)
       }
+
       scope.setAttributes(attributes)
     }
   }
@@ -343,10 +548,72 @@ public enum Terra {
       return [lengthKey: .int(original.count)]
     case .hashSHA256:
       var attributes: [String: AttributeValue] = [lengthKey: .int(original.count)]
-      if Runtime.isSHA256Available, let hash = Runtime.sha256Hex(original) {
+      if let hash = Runtime.anonymizedHash(of: original, for: hashKey) {
         attributes[hashKey] = .string(hash)
       }
       return attributes
     }
+  }
+
+  static func emitRecommendation(_ recommendation: Recommendation, on scope: Scope<InferenceSpan>? = nil) {
+    var attributes: [String: AttributeValue] = [
+      Keys.Terra.recommendationKind: .string(recommendation.kind.rawValue),
+      Keys.Terra.recommendationConfidence: .double(recommendation.confidence),
+      Keys.Terra.recommendationAction: .string(recommendation.action),
+      Keys.Terra.recommendationReason: .string(recommendation.reason),
+    ]
+
+    for (key, value) in recommendation.attributes {
+      attributes["terra.recommendation.meta.\(key)"] = .string(value)
+    }
+
+    scope?.addEvent(Keys.Terra.recommendationEvent, attributes: attributes)
+    Runtime.shared.metrics.recordRecommendation()
+    Runtime.shared.recommendationSink?(recommendation)
+  }
+
+  static func monotonicNow() -> ContinuousClock.Instant {
+    ContinuousClock().now
+  }
+
+  static func monotonicDurationMS(from: ContinuousClock.Instant, to: ContinuousClock.Instant) -> Double {
+    let duration = from.duration(to: to)
+    return max(duration.milliseconds, 0)
+  }
+
+  private static func applyCompliancePolicies(to attributes: inout [String: AttributeValue]) {
+    let compliance = Runtime.shared.compliance
+    guard compliance.exportControls.enabled else { return }
+
+    guard let runtimeValue = attributes[Keys.Terra.runtime]?.description,
+          let runtimeKind = RuntimeKind(rawValue: runtimeValue) else {
+      return
+    }
+
+    if !compliance.exportControls.allowedRuntimes.contains(runtimeKind) {
+      attributes[Keys.Terra.policyBlocked] = .bool(true)
+      attributes[Keys.Terra.policyReason] = .string("runtime_not_allowed")
+
+      if compliance.auditEnabled {
+        Runtime.shared.appendAudit(
+          AuditEvent(
+            level: .warning,
+            message: "Export blocked by policy",
+            attributes: [
+              "runtime": runtimeKind.rawValue,
+              "reason": "runtime_not_allowed",
+            ]
+          )
+        )
+      }
+    }
+  }
+}
+
+private extension Duration {
+  var milliseconds: Double {
+    let secondsMs = Double(components.seconds) * 1000
+    let attosecondsMs = Double(components.attoseconds) / 1_000_000_000_000_000
+    return secondsMs + attosecondsMs
   }
 }

@@ -10,6 +10,9 @@ import Testing
 struct HTTPIntegrationTests {
   @Test("HTTP instrumentation captures request and response GenAI attributes")
   func capturesAIRequestAndResponseAttributes() async throws {
+    HTTPAIInstrumentation.resetForTesting()
+    defer { HTTPAIInstrumentation.resetForTesting() }
+
     let exporter = InMemoryExporter()
     let tracerProvider = TracerProviderSdk()
     tracerProvider.addSpanProcessor(SimpleSpanProcessor(spanExporter: exporter))

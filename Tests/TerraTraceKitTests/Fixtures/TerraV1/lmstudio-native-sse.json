@@ -1,0 +1,81 @@
+{
+  "fixture_id": "lmstudio-native-sse",
+  "runtime": "lm_studio",
+  "schema_version": "v1",
+  "schema_family": "terra",
+  "contract": {
+    "terra.semantic.version": "v1",
+    "terra.schema.family": "terra",
+    "terra.runtime": "lm_studio",
+    "terra.request.id": "lmstudio-req-011",
+    "terra.session.id": "lmstudio-session-011",
+    "terra.model.fingerprint": "model:gemma-2b-it-gguf"
+  },
+  "runtime_traits": [
+    "native-sse",
+    "model_load_events",
+    "prompt_processing_events"
+  ],
+  "spans": [
+    {
+      "name": "terra.model.load",
+      "kind": "client",
+      "start_ms": 0,
+      "end_ms": 220,
+      "attributes": {
+        "terra.runtime": "lm_studio",
+        "terra.latency.p95_ms": 120
+      },
+      "events": [
+        {
+          "name": "terra.model_load.started",
+          "event": "model_load.started",
+          "state": "started"
+        }
+      ]
+    },
+    {
+      "name": "terra.inference",
+      "kind": "client",
+      "start_ms": 220,
+      "end_ms": 1530,
+      "attributes": {
+        "terra.runtime": "lm_studio",
+        "terra.latency.ttft_ms": 130,
+        "terra.latency.e2e_ms": 1310,
+        "terra.latency.prompt_eval_ms": 470,
+        "terra.latency.decode_ms": 840,
+        "terra.stream.tokens_per_second": 31.3,
+        "terra.stream.output_tokens": 25,
+        "terra.stream.chunk_count": 25
+      },
+      "events": [
+        {
+          "name": "terra.stage.prompt_eval",
+          "stage": "prompt_eval",
+          "token_count": 20
+        },
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "decode",
+          "token_index": 1,
+          "token_gap_ms": 0
+        },
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "decode",
+          "token_index": 5,
+          "token_gap_ms": 18
+        },
+        {
+          "name": "terra.stage.decode",
+          "stage": "decode",
+          "token_count": 25
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "LM Studio native SSE path includes model_load and prompt_processing event family with model_load span."
+  ]
+}

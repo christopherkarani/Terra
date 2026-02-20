@@ -178,8 +178,7 @@ let package = Package(
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
       ],
-      path: "Sources/TraceMacApp",
-      exclude: ["TraceMacApp.swift"]
+      path: "Sources/TraceMacApp"
     ),
 
     // MARK: - Test Targets
@@ -188,6 +187,7 @@ let package = Package(
       name: "TerraTests",
       dependencies: [
         "TerraCore",
+        "TerraLlama",
         "TerraTraceKit",
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core")
@@ -322,8 +322,7 @@ let package = Package(
         "TraceMacAppUI",
         "TerraTraceKit"
       ],
-      path: "Sources/TraceMacApp",
-      sources: ["TraceMacApp.swift"]
+      path: "Sources/TraceMacAppExecutable"
     )
   ]
 )

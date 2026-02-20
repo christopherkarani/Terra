@@ -1,0 +1,69 @@
+{
+  "fixture_id": "ollama-openai-compat-sse",
+  "runtime": "ollama",
+  "schema_version": "v1",
+  "schema_family": "terra",
+  "contract": {
+    "terra.semantic.version": "v1",
+    "terra.schema.family": "terra",
+    "terra.runtime": "ollama",
+    "terra.request.id": "ollama-req-002",
+    "terra.session.id": "ollama-session-002",
+    "terra.model.fingerprint": "model:qwen2:fp16"
+  },
+  "runtime_traits": [
+    "openai-compatible",
+    "streaming",
+    "include_usage"
+  ],
+  "spans": [
+    {
+      "name": "terra.inference",
+      "kind": "client",
+      "start_ms": 0,
+      "end_ms": 1820,
+      "attributes": {
+        "terra.runtime": "ollama",
+        "terra.latency.ttft_ms": 95,
+        "terra.latency.e2e_ms": 1820,
+        "terra.latency.prompt_eval_ms": 380,
+        "terra.latency.decode_ms": 1440,
+        "terra.stream.tokens_per_second": 21.2,
+        "terra.stream.output_tokens": 30,
+        "terra.stream.chunk_count": 30
+      },
+      "events": [
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "decode",
+          "token_index": 1,
+          "token_gap_ms": 0
+        },
+        {
+          "name": "terra.stage.prompt_eval",
+          "stage": "prompt_eval",
+          "token_count": 16
+        },
+        {
+          "name": "terra.stage.decode",
+          "stage": "decode",
+          "token_count": 30
+        },
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "decode",
+          "token_index": 2,
+          "token_gap_ms": 33.0
+        },
+        {
+          "name": "terra.recommendation",
+          "terra.recommendation.kind": "possible_prompt_cache_miss",
+          "terra.recommendation.confidence": 0.81
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "OpenAI-compatible Ollama streaming stream where token chunks can be consumed by generic clients."
+  ]
+}

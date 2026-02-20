@@ -38,6 +38,9 @@ extension SpanDetailView {
     enum DetailTab: String, CaseIterable, Identifiable {
         case attributes = "Attributes"
         case events = "Events"
+        case recommendations = "Recommendations"
+        case anomalies = "Anomalies"
+        case hardware = "Hardware"
         case links = "Links"
 
         var id: String { rawValue }
@@ -78,6 +81,12 @@ private extension SpanDetailView {
             SpanAttributesTable(items: viewModel.attributeItems)
         case .events:
             SpanEventsTable(items: viewModel.eventItems)
+        case .recommendations:
+            SpanEventsTable(items: viewModel.recommendationEventItems)
+        case .anomalies:
+            SpanEventsTable(items: viewModel.anomalyEventItems)
+        case .hardware:
+            SpanEventsTable(items: viewModel.hardwareEventItems)
         case .links:
             SpanLinksTable(items: viewModel.linkItems)
         }

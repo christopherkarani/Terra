@@ -56,7 +56,7 @@ struct AIResponseParser {
 }
 
 struct ParsedResponse: Sendable {
-    let inputTokens: Int?
-    let outputTokens: Int?
-    let model: String?
+    var inputTokens: Int?
+    var outputTokens: Int?
+    var model: String?
 }

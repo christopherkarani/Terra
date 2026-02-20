@@ -1,0 +1,81 @@
+{
+  "fixture_id": "openclaw-gateway-streaming",
+  "runtime": "openclaw_gateway",
+  "schema_version": "v1",
+  "schema_family": "terra",
+  "contract": {
+    "terra.semantic.version": "v1",
+    "terra.schema.family": "terra",
+    "terra.runtime": "openclaw_gateway",
+    "terra.openclaw.gateway": "true",
+    "terra.openclaw.mode": "gateway",
+    "terra.request.id": "openclaw-req-300",
+    "terra.session.id": "openclaw-session-300",
+    "terra.model.fingerprint": "model:gateway-v2:meta-llama-3.1"
+  },
+  "runtime_traits": [
+    "gateway",
+    "streaming",
+    "hardware_back_pressure"
+  ],
+  "spans": [
+    {
+      "name": "terra.inference",
+      "kind": "client",
+      "start_ms": 0,
+      "end_ms": 1640,
+      "attributes": {
+        "terra.runtime": "openclaw_gateway",
+        "terra.openclaw.gateway": "true",
+        "terra.openclaw.mode": "gateway",
+        "terra.latency.ttft_ms": 90,
+        "terra.latency.e2e_ms": 1640,
+        "terra.latency.prompt_eval_ms": 430,
+        "terra.latency.decode_ms": 1210,
+        "terra.stream.output_tokens": 40,
+        "terra.stream.chunk_count": 40
+      },
+      "events": [
+        {
+          "name": "terra.stage.prompt_eval",
+          "stage": "prompt_eval",
+          "token_count": 12
+        },
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "decode",
+          "token_index": 1,
+          "token_gap_ms": 0
+        },
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "decode",
+          "token_index": 8,
+          "token_gap_ms": 312
+        },
+        {
+          "name": "terra.anomaly.stalled_token",
+          "stage": "decode",
+          "gap_ms": 312,
+          "threshold_ms": 300
+        },
+        {
+          "name": "terra.recommendation",
+          "terra.recommendation.kind": "model_swap_regression_after_update",
+          "terra.recommendation.confidence": 0.77,
+          "terra.recommendation.action": "downgrade_model_temporarily"
+        },
+        {
+          "name": "terra.runtime.hardware.sample",
+          "terra.openclaw.gateway": "true",
+          "terra.process.thermal_state": "serious",
+          "terra.hw.memory_pressure": "serious",
+          "terra.hw.gpu_occupancy_pct": 88.5
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "OpenClaw gateway fixture demonstrates correlation attributes and stall/recommendation signals."
+  ]
+}

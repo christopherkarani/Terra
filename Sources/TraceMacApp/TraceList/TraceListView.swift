@@ -31,6 +31,14 @@ struct TraceListView: View {
             }
             .searchable(text: $appState.searchQuery)
             .padding(.top, -4)
+            Picker("Runtime", selection: $appState.runtimeFilter) {
+                ForEach(TraceRuntimeFilter.allCases, id: \.self) { runtime in
+                    Text(runtime.title).tag(runtime)
+                }
+            }
+            .pickerStyle(.menu)
+            .controlSize(.small)
+            .padding(.horizontal, 8)
 
             if appState.canLoadMoreTraces {
                 Button {

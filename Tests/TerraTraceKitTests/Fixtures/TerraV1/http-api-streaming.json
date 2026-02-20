@@ -1,0 +1,58 @@
+{
+  "fixture_id": "http-api-streaming",
+  "runtime": "http_api",
+  "schema_version": "v1",
+  "schema_family": "terra",
+  "contract": {
+    "terra.semantic.version": "v1",
+    "terra.schema.family": "terra",
+    "terra.runtime": "http_api",
+    "terra.request.id": "http-api-req-001",
+    "terra.session.id": "http-api-session-001",
+    "terra.model.fingerprint": "model:remote-openai:gpt-4o-mini"
+  },
+  "runtime_traits": [
+    "generic-openai",
+    "streaming",
+    "remote-call"
+  ],
+  "spans": [
+    {
+      "name": "terra.inference",
+      "kind": "client",
+      "start_ms": 0,
+      "end_ms": 1540,
+      "attributes": {
+        "terra.runtime": "http_api",
+        "terra.latency.ttft_ms": 150,
+        "terra.latency.e2e_ms": 1540,
+        "terra.latency.prompt_eval_ms": 620,
+        "terra.latency.decode_ms": 920,
+        "terra.stream.chunk_count": 17,
+        "terra.stream.output_tokens": 17,
+        "terra.stream.tokens_per_second": 17.6
+      },
+      "events": [
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "prompt_eval",
+          "token_index": 1,
+          "token_gap_ms": 0
+        },
+        {
+          "name": "terra.stage.prompt_eval",
+          "stage": "prompt_eval",
+          "token_count": 6
+        },
+        {
+          "name": "terra.stage.decode",
+          "stage": "decode",
+          "token_count": 17
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Remote HTTP API runtime baseline streaming fixture for parity comparison."
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "fixture_id": "ollama-ndjson",
+  "runtime": "ollama",
+  "schema_version": "v1",
+  "schema_family": "terra",
+  "contract": {
+    "terra.semantic.version": "v1",
+    "terra.schema.family": "terra",
+    "terra.runtime": "ollama",
+    "terra.request.id": "ollama-req-001",
+    "terra.session.id": "ollama-session-001",
+    "terra.model.fingerprint": "model:qwen2:fp16"
+  },
+  "runtime_traits": [
+    "ndjson",
+    "load_breakdown",
+    "prompt_eval_tokens"
+  ],
+  "spans": [
+    {
+      "name": "terra.inference",
+      "kind": "client",
+      "start_ms": 0,
+      "end_ms": 2100,
+      "attributes": {
+        "terra.runtime": "ollama",
+        "terra.latency.ttft_ms": 110,
+        "terra.latency.e2e_ms": 2100,
+        "terra.latency.prompt_eval_ms": 520,
+        "terra.latency.decode_ms": 1580,
+        "terra.stream.chunk_count": 2,
+        "terra.stream.output_tokens": 2,
+        "terra.stream.time_to_first_token_ms": 110
+      },
+      "events": [
+        {
+          "name": "terra.stream.lifecycle",
+          "stage": "prompt_eval",
+          "token_index": 1,
+          "token_gap_ms": 0
+        },
+        {
+          "name": "terra.stage.prompt_eval",
+          "stage": "prompt_eval",
+          "token_count": 14
+        },
+        {
+          "name": "terra.stage.decode",
+          "stage": "decode",
+          "token_count": 2
+        },
+        {
+          "name": "terra.anomaly.stalled_token",
+          "stage": "decode",
+          "gap_ms": 420,
+          "threshold_ms": 300
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Represents Ollama `/api/generate` token stream with final usage frame and stage splits."
+  ]
+}

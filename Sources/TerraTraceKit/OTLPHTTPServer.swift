@@ -73,9 +73,32 @@ public final class OTLPHTTPServer {
       throw NSError(domain: "OTLPHTTPServer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])
     }
 
+    let startStateLock = NSLock()
+    let startSemaphore = DispatchSemaphore(value: 0)
+    var didSignalStart = false
+    var startError: Error?
+
+    func signalStartIfNeeded(error: Error? = nil) {
+      startStateLock.lock()
+      if didSignalStart {
+        startStateLock.unlock()
+        return
+      }
+      didSignalStart = true
+      startError = error
+      startStateLock.unlock()
+      startSemaphore.signal()
+    }
+
     listener.stateUpdateHandler = { [weak self] (state: NWListener.State) in
-      if case .failed = state {
+      switch state {
+      case .ready:
+        signalStartIfNeeded()
+      case .failed(let error):
         self?.stop()
+        signalStartIfNeeded(error: error)
+      default:
+        break
       }
     }
 
@@ -85,6 +108,18 @@ public final class OTLPHTTPServer {
 
     self.listener = listener
     listener.start(queue: queue)
+
+    if startSemaphore.wait(timeout: .now() + .seconds(2)) == .timedOut {
+      stop()
+      throw NSError(
+        domain: "OTLPHTTPServer",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for listener readiness"]
+      )
+    }
+    if let startError {
+      throw startError
+    }
   }
 
   public func stop() {

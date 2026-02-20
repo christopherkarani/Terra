@@ -65,6 +65,50 @@ final class TerraRedactionPolicyTests: XCTestCase {
     XCTAssertFalse(hash?.contains(prompt) ?? true)
   }
 
+  func testHashRedaction_isDeterministicWithRotationWindow() async throws {
+    let policy = Terra.AnonymizationPolicy(
+      enabled: true,
+      keyID: "rotation-test",
+      secret: "rotation-secret",
+      rotationIntervalSeconds: 60
+    )
+    Terra.install(
+      .init(
+        privacy: .init(
+          contentPolicy: .always,
+          redaction: .hashSHA256,
+          anonymizationPolicy: policy
+        ),
+        tracerProvider: support.tracerProvider
+      )
+    )
+
+    let requestA = Terra.InferenceRequest(model: "local/llama-3.2-1b", prompt: "hello")
+    await Terra.withInferenceSpan(requestA) { _ in }
+    let firstHashA = support.finishedSpans().first?
+      .attributes[Terra.Keys.Terra.promptSHA256]?.description
+
+    support.reset()
+    support.tracerProvider.forceFlush()
+
+    let requestB = Terra.InferenceRequest(model: "local/llama-3.2-1b", prompt: "hello")
+    await Terra.withInferenceSpan(requestB) { _ in }
+    let firstHashB = support.finishedSpans().first?
+      .attributes[Terra.Keys.Terra.promptSHA256]?.description
+
+    XCTAssertNotNil(firstHashA)
+    XCTAssertEqual(firstHashA, firstHashB)
+
+    let policyBefore = Runtime.shared.privacy.anonymizationPolicy
+    let now = Date(timeIntervalSince1970: 1000)
+    let sameWindowA = policyBefore.keyID(for: now)
+    let sameWindowB = policyBefore.keyID(for: now + 10)
+    let nextWindow = policyBefore.keyID(for: now + 70)
+
+    XCTAssertEqual(sameWindowA, sameWindowB)
+    XCTAssertNotEqual(sameWindowA, nextWindow)
+  }
+
   func testHashRedactionLabel_matchesAvailability() async throws {
     Terra.install(
       .init(privacy: .init(contentPolicy: .always, redaction: .hashSHA256))

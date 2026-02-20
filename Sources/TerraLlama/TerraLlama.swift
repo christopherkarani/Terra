@@ -41,7 +41,7 @@ public enum TerraLlama {
     request.stream = true
     return try await Terra.withStreamingInferenceSpan(request) { streamScope in
       streamScope.setAttributes([
-        Terra.Keys.Terra.runtime: .string("llama.cpp"),
+        Terra.Keys.Terra.runtime: .string(Terra.RuntimeKind.llamaCpp.rawValue),
         Terra.Keys.Terra.autoInstrumented: .bool(true),
       ])
       return try await body(streamScope)

@@ -218,6 +218,8 @@ public struct SpanRecord: Hashable, Sendable {
   public let endTimeUnixNano: UInt64
   public let attributes: Attributes
   public let resource: Resource
+  public let events: [SpanRecordEvent]
+  public let links: [SpanRecordLink]
 
   public init(
     traceID: TraceID,
@@ -229,7 +231,9 @@ public struct SpanRecord: Hashable, Sendable {
     startTimeUnixNano: UInt64,
     endTimeUnixNano: UInt64,
     attributes: Attributes,
-    resource: Resource
+    resource: Resource,
+    events: [SpanRecordEvent] = [],
+    links: [SpanRecordLink] = []
   ) {
     self.traceID = traceID
     self.spanID = spanID
@@ -241,6 +245,8 @@ public struct SpanRecord: Hashable, Sendable {
     self.endTimeUnixNano = endTimeUnixNano
     self.attributes = attributes
     self.resource = resource
+    self.events = events
+    self.links = links
   }
 
   public var durationNanoseconds: UInt64 {
@@ -249,6 +255,30 @@ public struct SpanRecord: Hashable, Sendable {
 
   public var resourceAttributes: Attributes {
     resource.attributes
+  }
+}
+
+public struct SpanRecordEvent: Hashable, Sendable {
+  public let name: String
+  public let timestampUnixNano: UInt64
+  public let attributes: Attributes
+
+  public init(name: String, timestampUnixNano: UInt64, attributes: Attributes) {
+    self.name = name
+    self.timestampUnixNano = timestampUnixNano
+    self.attributes = attributes
+  }
+}
+
+public struct SpanRecordLink: Hashable, Sendable {
+  public let traceID: TraceID
+  public let spanID: SpanID
+  public let attributes: Attributes
+
+  public init(traceID: TraceID, spanID: SpanID, attributes: Attributes = Attributes([])) {
+    self.traceID = traceID
+    self.spanID = spanID
+    self.attributes = attributes
   }
 }
 

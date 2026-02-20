@@ -13,7 +13,10 @@ public final class TerraSpanEnrichmentProcessor: SpanProcessor {
     guard Terra.SpanNames.isTerraSpanName(span.name) else { return }
 
     let privacy = Runtime.shared.privacy
+    let telemetry = Runtime.shared.telemetry
     span.setAttribute(key: Terra.Keys.Terra.contentPolicy, value: privacy.contentPolicy.asAttributeValue)
+    span.setAttribute(key: Terra.Keys.Terra.semanticVersion, value: .string(telemetry.semanticVersion.rawValue))
+    span.setAttribute(key: Terra.Keys.Terra.schemaFamily, value: .string(telemetry.schemaFamily))
     let redactionValue: AttributeValue
     switch privacy.redaction {
     case .hashSHA256 where !Runtime.isSHA256Available:
@@ -22,6 +25,9 @@ public final class TerraSpanEnrichmentProcessor: SpanProcessor {
       redactionValue = privacy.redaction.asAttributeValue
     }
     span.setAttribute(key: Terra.Keys.Terra.contentRedaction, value: redactionValue)
+    if let keyID = Runtime.anonymizationKeyID(), !keyID.isEmpty {
+      span.setAttribute(key: Terra.Keys.Terra.anonymizationKeyID, value: .string(keyID))
+    }
   }
 
   public func onEnd(span: ReadableSpan) {}

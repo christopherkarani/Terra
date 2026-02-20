@@ -153,7 +153,26 @@ func spanDetailViewModelSelection() throws {
     end: Date(timeIntervalSince1970: 2)
   )
   span = span.settingAttributes(["http.method": .string("GET")])
-  span = span.settingEvents([SpanData.Event(name: "event", timestamp: Date())])
+  let recommendationEvent = SpanData.Event(
+    name: "terra.recommendation",
+    timestamp: Date(),
+    attributes: [
+      "terra.recommendation.kind": .string("thermal_slowdown"),
+      "test": .string("value")
+    ]
+  )
+  let anomalyEvent = SpanData.Event(
+    name: "terra.anomaly.stalled_token",
+    timestamp: Date(),
+    attributes: ["terra.anomaly.kind": .string("stalled_token")]
+  )
+  let hardwareEvent = SpanData.Event(
+    name: "terra.runtime.hardware.sample",
+    timestamp: Date(),
+    attributes: ["terra.process.thermal_state": .string("nominal")]
+  )
+  span = span.settingEvents([recommendationEvent, anomalyEvent, hardwareEvent])
+
   let linkContext = SpanContext.create(traceId: traceId, spanId: SpanId.random(), traceFlags: TraceFlags(), traceState: TraceState())
   span = span.settingLinks([SpanData.Link(context: linkContext)])
 
@@ -161,12 +180,18 @@ func spanDetailViewModelSelection() throws {
   detail.select(span: span)
 
   #expect(detail.attributeItems.count == 1)
-  #expect(detail.eventItems.count == 1)
+  #expect(detail.eventItems.count == 3)
+  #expect(detail.recommendationEventItems.count == 1)
+  #expect(detail.anomalyEventItems.count == 1)
+  #expect(detail.hardwareEventItems.count == 1)
   #expect(detail.linkItems.count == 1)
 
   detail.clearSelection()
   #expect(detail.attributeItems.isEmpty)
   #expect(detail.eventItems.isEmpty)
+  #expect(detail.recommendationEventItems.isEmpty)
+  #expect(detail.anomalyEventItems.isEmpty)
+  #expect(detail.hardwareEventItems.isEmpty)
   #expect(detail.linkItems.isEmpty)
 }
 

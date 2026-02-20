@@ -280,6 +280,32 @@ func loaderPreservesDuplicateSpanIDFailures() throws {
   #expect(result.failures[0].error as? TraceModelError == .duplicateSpanIds)
 }
 
+@Test("TraceLoader legacy convenience throws when file failures are present")
+func loaderLegacyConvenienceThrowsOnPartialFailures() throws {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  let traceId = TraceId()
+  let span = makeSpan(name: "root", traceId: traceId)
+  try writeSpanFile(spans: [span], to: dir.appendingPathComponent("1000000"))
+  try Data("not valid json,".utf8).write(to: dir.appendingPathComponent("2000000"))
+
+  let loader = TraceLoader(locator: TraceFileLocator(tracesDirectoryURL: dir))
+
+  do {
+    _ = try loader.loadTraces()
+    Issue.record("Expected legacy loadTraces() to throw on partial failures")
+  } catch let error as TraceLoaderError {
+    switch error {
+    case .partialFailures(let failures):
+      #expect(failures.count == 1)
+      #expect(failures.first?.file.lastPathComponent == "2000000")
+    }
+  }
+}
+
 @Test("TraceLoader maxFiles loads only the newest files")
 func loaderRespectsMaxFilesNewestFirst() throws {
   let dir = FileManager.default.temporaryDirectory

@@ -30,7 +30,13 @@ enum OTLPTestFixtures {
 
   static let resourceAttributes: [String: String] = [
     "service.name": "demo-service",
-    "service.version": "1.0.0"
+    "service.version": "1.0.0",
+    "terra.semantic.version": "v1",
+    "terra.schema.family": "terra",
+    "terra.runtime": "http_api",
+    "terra.request.id": "request-123",
+    "terra.session.id": "session-456",
+    "terra.model.fingerprint": "model:gpt-4o:quant:v1",
   ]
 
   static let spanAttributes: [(String, String)] = [
@@ -40,7 +46,9 @@ enum OTLPTestFixtures {
     ("span.kind", "server")
   ]
 
-  static func makeExportRequest() -> Opentelemetry_Proto_Collector_Trace_V1_ExportTraceServiceRequest {
+  static func makeExportRequest(
+    resourceAttributes overrideResourceAttributes: [String: String] = resourceAttributes
+  ) -> Opentelemetry_Proto_Collector_Trace_V1_ExportTraceServiceRequest {
     let rootSpan = makeSpan(
       traceIDHex: traceIDHex,
       spanIDHex: parentSpanIDHex,
@@ -69,7 +77,7 @@ enum OTLPTestFixtures {
     )
 
     var resource = Opentelemetry_Proto_Resource_V1_Resource()
-    resource.attributes = resourceAttributes.map { key, value in
+    resource.attributes = overrideResourceAttributes.map { key, value in
       makeKeyValue(key: key, stringValue: value)
     }
 
@@ -139,8 +147,8 @@ enum OTLPTestFixtures {
     return request
   }
 
-  static func serializedRequest() throws -> Data {
-    try makeExportRequest().serializedData()
+  static func serializedRequest(resourceAttributes overrideResourceAttributes: [String: String]? = nil) throws -> Data {
+    try makeExportRequest(resourceAttributes: overrideResourceAttributes ?? resourceAttributes).serializedData()
   }
 
   static func serializedSiblingRequest() throws -> Data {
