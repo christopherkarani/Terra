@@ -1,0 +1,2 @@
+[TraceMacApp RC Performance Gate]
+- timeline_compaction_render_prep_path: p50=-0.197% p95=0.906% threshold=(3.000%,7.000%) pass=true

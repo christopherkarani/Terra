@@ -215,7 +215,10 @@ let package = Package(
         .product(name: "SwiftProtobuf", package: "swift-protobuf"),
         .product(name: "Testing", package: "swift-testing"),
       ],
-      path: "Tests/TerraTraceKitTests"
+      path: "Tests/TerraTraceKitTests",
+      resources: [
+        .copy("Fixtures/TerraV1")
+      ]
     ),
     .testTarget(
       name: "TerraHTTPInstrumentTests",

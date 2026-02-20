@@ -597,9 +597,18 @@ public enum HTTPAIInstrumentation {
     }
 
     private static func responsePayloadData(from value: Any?) -> Data? {
+        extractResponsePayloadData(from: value, depth: 0)
+    }
+
+    private static func extractResponsePayloadData(from value: Any?, depth: Int) -> Data? {
+        guard depth <= 4 else { return nil }
         guard let value else { return nil }
+
         if let data = value as? Data {
             return data
+        }
+        if let data = value as? NSData {
+            return data as Data
         }
         if let url = value as? URL {
             return try? Data(contentsOf: url)
@@ -607,6 +616,30 @@ public enum HTTPAIInstrumentation {
         if let path = value as? String {
             return try? Data(contentsOf: URL(fileURLWithPath: path))
         }
+        if let dictionary = value as? [String: Any] {
+            for key in ["data", "body", "payload", "response", "file", "url", "path"] {
+                if let data = extractResponsePayloadData(from: dictionary[key], depth: depth + 1),
+                   !data.isEmpty {
+                    return data
+                }
+            }
+        }
+
+        let mirror = Mirror(reflecting: value)
+        if mirror.displayStyle == .optional {
+            if let child = mirror.children.first {
+                return extractResponsePayloadData(from: child.value, depth: depth + 1)
+            }
+            return nil
+        }
+
+        for child in mirror.children {
+            if let data = extractResponsePayloadData(from: child.value, depth: depth + 1),
+               !data.isEmpty {
+                return data
+            }
+        }
+
         return nil
     }
 

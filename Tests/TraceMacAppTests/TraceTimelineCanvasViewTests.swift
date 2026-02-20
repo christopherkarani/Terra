@@ -23,6 +23,48 @@ struct TraceTimelineCanvasViewTests {
     #expect(kind == "recommendation")
   }
 
+  @Test("Marker kind classifier maps lifecycle names consistently")
+  func markerKindClassifierUsesLifecycleParityNames() {
+    let firstToken = TraceTimelineCanvasView.markerKindName(
+      eventName: "terra.first_token",
+      attributes: [:]
+    )
+    #expect(firstToken == "tokenLifecycle")
+
+    let streamLifecycle = TraceTimelineCanvasView.markerKindName(
+      eventName: "terra.stream.lifecycle",
+      attributes: [:]
+    )
+    #expect(streamLifecycle == "tokenLifecycle")
+
+    let tokenLifecycle = TraceTimelineCanvasView.markerKindName(
+      eventName: "terra.token.lifecycle",
+      attributes: [:]
+    )
+    #expect(tokenLifecycle == "tokenLifecycle")
+  }
+
+  @Test("Marker kind classifier maps hardware via name and attributes")
+  func markerKindClassifierUsesHardwareParitySignals() {
+    let hardwareName = TraceTimelineCanvasView.markerKindName(
+      eventName: "terra.hw.sample",
+      attributes: [:]
+    )
+    #expect(hardwareName == "hardware")
+
+    let processName = TraceTimelineCanvasView.markerKindName(
+      eventName: "terra.process.sample",
+      attributes: [:]
+    )
+    #expect(processName == "hardware")
+
+    let hardwareAttributes = TraceTimelineCanvasView.markerKindName(
+      eventName: "provider.event",
+      attributes: ["terra.hw.memory_pressure": .string("warning")]
+    )
+    #expect(hardwareAttributes == "hardware")
+  }
+
   @Test("Marker compaction reports coalescing and sampling for high-volume streams")
   func markerCompactionReportsAggregationLevels() {
     let coalescedStats = TraceTimelineCanvasView.markerCompactionStats(
@@ -50,5 +92,51 @@ struct TraceTimelineCanvasViewTests {
     #expect(sampledStats.aggregationLevel == "sampled")
     #expect(sampledStats.keptCount <= 300)
     #expect(sampledStats.sampledCount > 0)
+  }
+
+  @Test("High-volume mixed marker datasets keep truthful aggregation and kind mapping")
+  func mixedMarkerDatasetsRemainStableAtLargeVolume() {
+    let samples = (0..<3_000).flatMap { index -> [TimelineMarkerDebugSample] in
+      let kind: String
+      switch index % 5 {
+      case 0:
+        kind = "recommendation"
+      case 1:
+        kind = "anomaly"
+      case 2:
+        kind = "stall"
+      case 3:
+        kind = "decode"
+      default:
+        kind = "tokenLifecycle"
+      }
+      let baseX = CGFloat(index) * 2.5
+      let spanHex = String(format: "%04x", index)
+      return [
+        TimelineMarkerDebugSample(x: baseX, kind: kind, spanHex: spanHex),
+        TimelineMarkerDebugSample(x: baseX + 0.2, kind: kind, spanHex: spanHex),
+      ]
+    }
+
+    let stats = TraceTimelineCanvasView.markerCompactionStats(
+      samples: samples,
+      maxEventMarkers: 1_200
+    )
+    #expect(stats.aggregationLevel == "sampled")
+    #expect(stats.keptCount <= 1_200)
+    #expect(stats.sampledCount > 0)
+    #expect(stats.coalescedCount > 0)
+
+    let anomalyKind = TraceTimelineCanvasView.markerKindName(
+      eventName: "provider.event",
+      attributes: ["terra.anomaly.kind": .string("stalled_token")]
+    )
+    #expect(anomalyKind == "anomaly")
+
+    let stallKind = TraceTimelineCanvasView.markerKindName(
+      eventName: "terra.anomaly.stalled_token",
+      attributes: [:]
+    )
+    #expect(stallKind == "stall" || stallKind == "anomaly")
   }
 }

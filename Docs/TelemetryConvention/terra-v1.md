@@ -129,3 +129,39 @@ The same contract applies to:
 - `http_api`
 
 Each runtime must provide stream attribution where tokenized delivery is available.
+
+## 11. Live Runtime Validation Notes
+
+RC hardening includes live runtime validation for first-class local providers through
+`Tests/TerraHTTPInstrumentTests/LiveProviderIntegrationTests.swift`.
+
+### Enabling live matrix locally
+
+Run with live checks enabled:
+
+```bash
+TERRA_ENABLE_LIVE_PROVIDER_TESTS=1 swift test --filter LiveProviderIntegrationTests
+```
+
+Optional overrides:
+
+- `TERRA_LIVE_OLLAMA_BASE_URL` (default `http://127.0.0.1:11434`)
+- `TERRA_LIVE_LMSTUDIO_BASE_URL` (default `http://127.0.0.1:1234`)
+- `TERRA_LIVE_OLLAMA_MODEL` (default `llama3.2:1b`)
+- `TERRA_LIVE_LMSTUDIO_MODEL` (default `llama-3.2-1b-instruct`)
+
+### Matrix coverage
+
+- Ollama NDJSON stream and non-stream
+- Ollama OpenAI-compatible stream and non-stream (`include_usage`)
+- LM Studio native SSE stream
+- LM Studio OpenAI-compatible stream and non-stream
+
+### Skip behavior
+
+- Endpoint unavailable: the test is skipped with explicit host/port reason.
+- Unsupported endpoint shape: the case is skipped with explicit HTTP status/content-type reason.
+- Model unavailable at runtime: the case is skipped with an explicit model-missing reason.
+
+These skips are intentional for optional live-provider environments and should not
+mask protocol or schema regressions in mock/integration suites.

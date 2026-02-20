@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: ["main"]
+    tags: ["*rc*", "*RC*"]
   workflow_dispatch:
 
 jobs:
@@ -50,3 +51,85 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
+
+  rc-hardening:
+    name: RC hardening gates
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          set -euo pipefail
+          swift --version
+          xcodebuild -version
+
+      - name: Run RC hardening script
+        env:
+          TERRA_ENABLE_LIVE_PROVIDER_TESTS: "0"
+          TERRA_ENABLE_PERF_GATES: "1"
+          TERRA_RC_OUTPUT_DIR: ${{ github.workspace }}/Artifacts/rc-hardening/latest
+        run: |
+          set -euo pipefail
+          ./Scripts/rc_hardening.sh
+
+      - name: Validate RC hardening artifact set
+        if: always()
+        run: |
+          set -euo pipefail
+          required=(
+            Artifacts/rc-hardening/latest/rc-hardening-summary.json
+            Artifacts/rc-hardening/latest/rc-hardening-summary.txt
+            Artifacts/rc-hardening/latest/terra-performance-gate.json
+            Artifacts/rc-hardening/latest/terra-performance-gate.txt
+            Artifacts/rc-hardening/latest/http-performance-gate.json
+            Artifacts/rc-hardening/latest/http-performance-gate.txt
+            Artifacts/rc-hardening/latest/tracemacapp-performance-gate.json
+            Artifacts/rc-hardening/latest/tracemacapp-performance-gate.txt
+            terra-v1-rc-hardening-report.md
+          )
+          for file in "${required[@]}"; do
+            test -f "$file"
+          done
+
+      - name: Upload RC hardening artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc-hardening-artifacts
+          path: |
+            Artifacts/rc-hardening/latest/**
+            terra-v1-rc-hardening-report.md
+          if-no-files-found: error
+
+  rc-live-provider-self-hosted:
+    name: RC live provider smoke (self-hosted optional)
+    if: (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) && vars.TERRA_RC_ENABLE_SELF_HOSTED_LIVE == '1'
+    runs-on: [self-hosted, macOS]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          set -euo pipefail
+          swift --version
+          xcodebuild -version
+
+      - name: Live provider integration smoke
+        env:
+          TERRA_ENABLE_LIVE_PROVIDER_TESTS: "1"
+          TERRA_RC_OUTPUT_DIR: ${{ github.workspace }}/Artifacts/rc-hardening/self-hosted-live
+        run: |
+          set -euo pipefail
+          swift test --filter LiveProviderIntegrationTests
+
+      - name: Upload live-provider artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc-live-provider-artifacts
+          path: Artifacts/rc-hardening/self-hosted-live/**
+          if-no-files-found: warn

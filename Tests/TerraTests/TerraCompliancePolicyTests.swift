@@ -180,4 +180,69 @@ final class TerraCompliancePolicyTests: XCTestCase {
     XCTAssertEqual(audits.first?.attributes["request_id"], "pressure-76")
     XCTAssertEqual(audits.last?.attributes["request_id"], "pressure-1099")
   }
+
+  func testConcurrentPolicySuppression_isDeterministicAcrossRepeatedRounds() async {
+    Terra.install(
+      .init(
+        compliance: .init(
+          exportControls: .init(
+            enabled: true,
+            blockOnViolation: true,
+            allowedRuntimes: [.coreML]
+          ),
+          auditEnabled: true
+        ),
+        tracerProvider: support.tracerProvider,
+        registerProvidersAsGlobal: false
+      )
+    )
+
+    let rounds = 3
+    let requestsPerRound = 320
+    var observedAuditCounts: [Int] = []
+    var observedBodyExecutionCounts: [Int] = []
+
+    for round in 0..<rounds {
+      support.reset()
+      _ = Runtime.shared.consumeAuditEvents()
+      let counter = AsyncCounter()
+
+      await withTaskGroup(of: Void.self) { group in
+        for index in 0..<requestsPerRound {
+          group.addTask {
+            let request = Terra.InferenceRequest(
+              model: "local/llama-3.2-1b",
+              runtime: .ollama,
+              requestID: "round-\(round)-\(index)"
+            )
+            await Terra.withInferenceSpan(request) { _ in
+              await counter.increment()
+            }
+          }
+        }
+      }
+
+      let executedBodies = await counter.value
+      let spans = support.finishedSpans()
+      let audits = Runtime.shared.consumeAuditEvents()
+
+      XCTAssertTrue(spans.isEmpty, "Round \(round) should not export blocked spans")
+      XCTAssertEqual(executedBodies, requestsPerRound, "Round \(round) should execute every blocked body")
+      XCTAssertEqual(audits.count, requestsPerRound, "Round \(round) should emit deterministic audit counts")
+
+      observedAuditCounts.append(audits.count)
+      observedBodyExecutionCounts.append(executedBodies)
+    }
+
+    XCTAssertEqual(Set(observedAuditCounts), [requestsPerRound])
+    XCTAssertEqual(Set(observedBodyExecutionCounts), [requestsPerRound])
+  }
+}
+
+private actor AsyncCounter {
+  private(set) var value = 0
+
+  func increment() {
+    value += 1
+  }
 }

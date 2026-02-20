@@ -254,8 +254,15 @@ final class TerraV1FixtureTests: XCTestCase {
   }
 
   private func fixtureDirectory() -> URL {
-    return projectRoot()
-      .appendingPathComponent("Tests/TerraTraceKitTests/Fixtures/TerraV1")
+    if let resourceURL = Bundle.module.resourceURL {
+      let bundledFixturesURL = resourceURL.appendingPathComponent("TerraV1", isDirectory: true)
+      if FileManager.default.fileExists(atPath: bundledFixturesURL.path) {
+        return bundledFixturesURL
+      }
+    }
+
+    // Fallback for local tooling that still runs tests from checked-out sources.
+    return projectRoot().appendingPathComponent("Tests/TerraTraceKitTests/Fixtures/TerraV1")
   }
 
   private func loadFixture(file: URL) throws -> [String: Any] {

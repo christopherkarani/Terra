@@ -1,0 +1,3 @@
+[Terra RC Performance Gate]
+- inference_span_path: p50=1.200% p95=2.379% threshold=(3.000%,7.000%) pass=true
+- streaming_span_path: p50=1.065% p95=2.520% threshold=(3.000%,7.000%) pass=true

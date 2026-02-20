@@ -1,0 +1,79 @@
+{
+  "generated_at": "2026-02-20T22:06:13Z",
+  "commit_sha": "f2f7822ace91af6d1364f88bf6f767e86e7ae0be",
+  "overall": "pass",
+  "steps": [
+    {
+      "name": "live-provider-matrix",
+      "required": "required",
+      "status": "skipped",
+      "duration_seconds": 0,
+      "log": "/Users/chriskarani/CodingProjects/Terra/Artifacts/rc-hardening/latest/live-provider-matrix.log",
+      "note": "Live provider matrix disabled (set TERRA_ENABLE_LIVE_PROVIDER_TESTS=1 to execute)."
+    },
+    {
+      "name": "perf-terra",
+      "required": "required",
+      "status": "pass",
+      "duration_seconds": 33,
+      "log": "/Users/chriskarani/CodingProjects/Terra/Artifacts/rc-hardening/latest/perf-terra.log",
+      "note": "Runs Terra inference/streaming overhead gates (p50<=3%, p95<=7%)."
+    },
+    {
+      "name": "perf-http",
+      "required": "required",
+      "status": "pass",
+      "duration_seconds": 140,
+      "log": "/Users/chriskarani/CodingProjects/Terra/Artifacts/rc-hardening/latest/perf-http.log",
+      "note": "Runs HTTP stream parser overhead gate (p50<=3%, p95<=7%)."
+    },
+    {
+      "name": "perf-tracemacapp",
+      "required": "required",
+      "status": "pass",
+      "duration_seconds": 125,
+      "log": "/Users/chriskarani/CodingProjects/Terra/Artifacts/rc-hardening/latest/perf-tracemacapp.log",
+      "note": "Runs TraceMacApp timeline compaction/render-prep overhead gate (p50<=3%, p95<=7%)."
+    },
+    {
+      "name": "compliance-stress",
+      "required": "required",
+      "status": "pass",
+      "duration_seconds": 37,
+      "log": "/Users/chriskarani/CodingProjects/Terra/Artifacts/rc-hardening/latest/compliance-stress.log",
+      "note": "Runs concurrent compliance suppression determinism stress."
+    },
+    {
+      "name": "otlp-reject-stress",
+      "required": "required",
+      "status": "pass",
+      "duration_seconds": 1,
+      "log": "/Users/chriskarani/CodingProjects/Terra/Artifacts/rc-hardening/latest/otlp-reject-stress.log",
+      "note": "Runs mixed allow/reject/schema OTLP stress and verifies deterministic 200/403/400 outcomes."
+    },
+    {
+      "name": "stream-invariants",
+      "required": "required",
+      "status": "pass",
+      "duration_seconds": 1,
+      "log": "/Users/chriskarani/CodingProjects/Terra/Artifacts/rc-hardening/latest/stream-invariants.log",
+      "note": "Runs parser + HTTP integration invariants for out-of-order timestamps and recovery."
+    },
+    {
+      "name": "fixture-hygiene",
+      "required": "required",
+      "status": "pass",
+      "duration_seconds": 1,
+      "log": "/Users/chriskarani/CodingProjects/Terra/Artifacts/rc-hardening/latest/fixture-hygiene.log",
+      "note": "Runs TerraV1 fixture suite to validate schema/runtime fixture integrity and package resource wiring."
+    },
+    {
+      "name": "static-audits",
+      "required": "required",
+      "status": "pass",
+      "duration_seconds": 0,
+      "log": "/Users/chriskarani/CodingProjects/Terra/Artifacts/rc-hardening/latest/static-audits.log",
+      "note": "Verifies terra.v1 contract source and 403/400 reject semantics in OTLP server."
+    }
+  ]
+}

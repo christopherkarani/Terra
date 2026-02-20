@@ -126,7 +126,7 @@ struct AIResponseStreamParser {
       if looksLikeOllama(text: text) {
         return parseOllama(text: text, requestModel: requestModel, baseResponse: baseResponse)
       }
-      if looksLikeSSE(text: text) {
+      if looksLikeStructuredSSE(text: text) {
         return parseLMStudio(text: text, requestModel: requestModel, baseResponse: baseResponse, isSSE: true)
       }
       return parseLMStudio(
@@ -149,6 +149,57 @@ struct AIResponseStreamParser {
 
   private static func looksLikeSSE(text: String) -> Bool {
     return text.contains("data:") || text.contains("event:")
+  }
+
+  private static func looksLikeStructuredSSE(text: String) -> Bool {
+    let lines = text.split(
+      omittingEmptySubsequences: false,
+      whereSeparator: \.isNewline
+    ).map(String.init)
+
+    var sawDataLine = false
+    var sawSSEField = false
+    var currentFrameHasData = false
+    var sawFrameBoundary = false
+
+    for rawLine in lines {
+      let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+
+      if line.isEmpty {
+        if currentFrameHasData {
+          sawFrameBoundary = true
+          currentFrameHasData = false
+        }
+        continue
+      }
+
+      if line.hasPrefix(":") {
+        continue
+      }
+
+      if line.hasPrefix("event:")
+        || line.hasPrefix("id:")
+        || line.hasPrefix("retry:")
+      {
+        sawSSEField = true
+        continue
+      }
+
+      if line.hasPrefix("data:") {
+        sawDataLine = true
+        sawSSEField = true
+        currentFrameHasData = true
+        continue
+      }
+
+      return false
+    }
+
+    if currentFrameHasData {
+      sawFrameBoundary = true
+    }
+
+    return sawDataLine && sawSSEField && sawFrameBoundary
   }
 
   private static func parseOllama(

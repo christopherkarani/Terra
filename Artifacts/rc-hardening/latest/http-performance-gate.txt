@@ -1,0 +1,2 @@
+[HTTP RC Performance Gate]
+- http_stream_parser_path: p50=-15.672% p95=-14.958% threshold=(3.000%,7.000%) pass=true

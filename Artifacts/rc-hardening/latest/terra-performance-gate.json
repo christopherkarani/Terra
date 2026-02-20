@@ -1,0 +1,22 @@
+[
+  {
+    "p50Overhead" : 0.012000649207605022,
+    "p95Overhead" : 0.02378641883683684,
+    "passed" : true,
+    "sampleCount" : 32,
+    "suite" : "terra",
+    "thresholdP50" : 0.03,
+    "thresholdP95" : 0.07,
+    "workload" : "inference_span_path"
+  },
+  {
+    "p50Overhead" : 0.01065355933388916,
+    "p95Overhead" : 0.025195073123234036,
+    "passed" : true,
+    "sampleCount" : 24,
+    "suite" : "terra",
+    "thresholdP50" : 0.03,
+    "thresholdP95" : 0.07,
+    "workload" : "streaming_span_path"
+  }
+]

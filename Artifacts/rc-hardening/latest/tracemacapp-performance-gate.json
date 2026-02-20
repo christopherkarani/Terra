@@ -1,0 +1,12 @@
+[
+  {
+    "p50Overhead" : -0.001968906290569415,
+    "p95Overhead" : 0.009062621748120918,
+    "passed" : true,
+    "sampleCount" : 35,
+    "suite" : "tracemacapp",
+    "thresholdP50" : 0.03,
+    "thresholdP95" : 0.07,
+    "workload" : "timeline_compaction_render_prep_path"
+  }
+]

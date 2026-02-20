@@ -63,6 +63,58 @@ final class AIResponseStreamParserTests: XCTestCase {
     XCTAssertNotNil(parsed.stream.events.first(where: { $0.name == "terra.stage.decode" }))
   }
 
+  func testParseUnknownRuntimeNDJSONWithSSELiteralsStaysOnNDJSONPath() {
+    let body = [
+      #"{"created":1704067201.2,"model":"llama","choices":[{"delta":{"content":"data: token-one"}}]}"#,
+      #"{"created":1704067201.3,"model":"llama","choices":[{"delta":{"content":"event: token-two"}}],"usage":{"prompt_tokens":5,"completion_tokens":2}}"#,
+    ].joined(separator: "\n").data(using: .utf8)!
+
+    let parsed = AIResponseStreamParser.parse(
+      data: body,
+      runtime: .unknown,
+      requestModel: "llama"
+    )
+
+    XCTAssertNotNil(parsed)
+    guard let parsed else { return }
+    XCTAssertEqual(parsed.response.model, "llama")
+    XCTAssertEqual(parsed.stream.streamChunkCount, 2)
+    XCTAssertEqual(parsed.stream.promptEvalTokenCount, 5)
+    XCTAssertEqual(parsed.stream.decodeTokenCount, 2)
+    XCTAssertEqual(
+      parsed.stream.events.filter { $0.name == Terra.Keys.Terra.streamLifecycleEvent }.count,
+      2
+    )
+  }
+
+  func testParseUnknownRuntimeStructuredSSEStillParsesLifecycleAndUsage() {
+    let body = [
+      "event: chat.response",
+      #"data: {"created":1704067201.2,"model":"llama","choices":[{"delta":{"content":"hello "}}]}"#,
+      "",
+      "event: chat.response",
+      #"data: {"created":1704067201.3,"model":"llama","choices":[{"delta":{"content":"world"}}],"usage":{"prompt_tokens":6,"completion_tokens":2}}"#,
+      "",
+      "event: chat.done",
+      "data: [DONE]",
+      "",
+    ].joined(separator: "\n").data(using: .utf8)!
+
+    let parsed = AIResponseStreamParser.parse(
+      data: body,
+      runtime: .unknown,
+      requestModel: "llama"
+    )
+
+    XCTAssertNotNil(parsed)
+    guard let parsed else { return }
+    XCTAssertEqual(parsed.response.model, "llama")
+    XCTAssertEqual(parsed.stream.streamChunkCount, 2)
+    XCTAssertEqual(parsed.stream.promptEvalTokenCount, 6)
+    XCTAssertEqual(parsed.stream.decodeTokenCount, 2)
+    XCTAssertTrue(parsed.stream.events.contains { $0.name == Terra.Keys.Terra.streamLifecycleEvent })
+  }
+
   func testParseOllamaNDJSONRecoversFragmentedJSONObjects() {
     let body = [
       #"{"model":"qwen2","created_at":"2024-01-01T00:00:00.000Z","response":"H","done":false"#,
@@ -146,5 +198,119 @@ final class AIResponseStreamParserTests: XCTestCase {
     XCTAssertTrue(parsed.stream.events.filter { $0.name == Terra.Keys.Terra.streamLifecycleEvent }.isEmpty)
     XCTAssertEqual(parsed.stream.promptEvalTokenCount, 22)
     XCTAssertEqual(parsed.stream.decodeTokenCount, 0)
+  }
+
+  func testOutOfOrderProviderTimestampsKeepLifecycleGapsNonNegative() {
+    let body = [
+      "event: chat.response",
+      #"data: {"created":1704067202.0,"model":"llama","choices":[{"delta":{"content":"a","logprob":-0.2}}]}"#,
+      "event: chat.response",
+      #"data: {"created":1704067201.0,"model":"llama","choices":[{"delta":{"content":"b","logprob":-0.1}}],"usage":{"prompt_tokens":3,"completion_tokens":2}}"#,
+      "event: chat.done",
+      "data: [DONE]",
+    ].joined(separator: "\n").data(using: .utf8)!
+
+    let parsed = AIResponseStreamParser.parse(
+      data: body,
+      runtime: .lmStudio,
+      requestModel: "llama"
+    )
+
+    XCTAssertNotNil(parsed)
+    guard let parsed else { return }
+    XCTAssertEqual(parsed.stream.streamChunkCount, 2)
+    XCTAssertTrue((parsed.stream.streamTTFMS ?? 0) >= 0)
+
+    let lifecycle = parsed.stream.events.filter { $0.name == Terra.Keys.Terra.streamLifecycleEvent }
+    XCTAssertFalse(lifecycle.isEmpty)
+    var previousIndex = 0
+    for event in lifecycle {
+      if let rawIndex = event.attributes[Terra.Keys.Terra.streamTokenIndex]?.description,
+         let tokenIndex = Int(rawIndex)
+      {
+        XCTAssertGreaterThan(tokenIndex, previousIndex)
+        previousIndex = tokenIndex
+      }
+      if let rawGap = event.attributes[Terra.Keys.Terra.streamTokenGapMs]?.description,
+         let gap = Double(rawGap)
+      {
+        XCTAssertGreaterThanOrEqual(gap, 0)
+      }
+    }
+  }
+
+  func testNegativeClockSkewInputsDoNotCreateNegativeDurations() {
+    let body = [
+      #"{"model":"qwen2","created_at":"1969-12-31T23:59:59.500Z","response":"x","done":false}"#,
+      #"{"model":"qwen2","created_at":"1969-12-31T23:59:58.100Z","response":"y","done":false}"#,
+      #"{"model":"qwen2","created_at":"1969-12-31T23:59:57.900Z","done":true,"prompt_eval_count":5,"eval_count":2,"prompt_eval_duration":1000000000,"eval_duration":1500000000}"#,
+    ].joined(separator: "\n").data(using: .utf8)!
+
+    let parsed = AIResponseStreamParser.parse(
+      data: body,
+      runtime: .ollama,
+      requestModel: "qwen2"
+    )
+
+    XCTAssertNotNil(parsed)
+    guard let parsed else { return }
+    XCTAssertEqual(parsed.stream.streamChunkCount, 2)
+    XCTAssertGreaterThanOrEqual(parsed.stream.streamTTFMS ?? 0, 0)
+    XCTAssertGreaterThanOrEqual(parsed.stream.promptEvalDurationMs ?? 0, 0)
+    XCTAssertGreaterThanOrEqual(parsed.stream.decodeDurationMs ?? 0, 0)
+  }
+
+  func testMalformedFrameBurstRecoversAndMaintainsDerivedTokenAccounting() {
+    let body = [
+      "garbage-line-1",
+      "garbage-line-2",
+      #"{"model":"qwen2","created_at":"2024-01-01T00:00:00.000Z","response":"one","done":false}"#,
+      #"{"model":"qwen2","created_at":"2024-01-01T00:00:00.120Z","response":"two","done":false}"#,
+      "incomplete{",
+      "still-bad",
+      #"{"model":"qwen2","created_at":"2024-01-01T00:00:00.260Z","done":true,"prompt_eval_count":6,"eval_count":2}"#,
+    ].joined(separator: "\n").data(using: .utf8)!
+
+    let parsed = AIResponseStreamParser.parse(
+      data: body,
+      runtime: .ollama,
+      requestModel: "qwen2"
+    )
+
+    XCTAssertNotNil(parsed)
+    guard let parsed else { return }
+    XCTAssertEqual(parsed.stream.streamChunkCount, 2)
+    XCTAssertEqual(parsed.stream.decodeTokenCount, 2)
+    XCTAssertEqual(parsed.response.outputTokens, 2)
+    XCTAssertTrue(parsed.stream.events.contains { $0.name == Terra.Keys.Terra.streamLifecycleEvent })
+  }
+
+  func testDerivedStageSummaryMatchesStageEventsExactly() {
+    let body = [
+      #"{"model":"qwen2","created_at":"2024-01-01T00:00:00.000Z","response":"H","done":false}"#,
+      #"{"model":"qwen2","created_at":"2024-01-01T00:00:00.500Z","done":true,"prompt_eval_count":4,"eval_count":1,"prompt_eval_duration":1200000000,"eval_duration":2200000000,"load_duration":300000000}"#,
+    ].joined(separator: "\n").data(using: .utf8)!
+
+    let parsed = AIResponseStreamParser.parse(
+      data: body,
+      runtime: .ollama,
+      requestModel: "qwen2"
+    )
+
+    XCTAssertNotNil(parsed)
+    guard let parsed else { return }
+
+    let promptStage = parsed.stream.events.first { $0.name == Terra.SpanNames.stagePromptEval }
+    let decodeStage = parsed.stream.events.first { $0.name == Terra.SpanNames.stageDecode }
+
+    XCTAssertEqual(
+      promptStage?.attributes[Terra.Keys.Terra.latencyPromptEvalMs]?.description,
+      "\(parsed.stream.promptEvalDurationMs ?? -1)"
+    )
+    XCTAssertEqual(
+      decodeStage?.attributes[Terra.Keys.Terra.latencyDecodeMs]?.description,
+      "\(parsed.stream.decodeDurationMs ?? -1)"
+    )
+    XCTAssertEqual(parsed.stream.decodeTokenCount, parsed.response.outputTokens)
   }
 }

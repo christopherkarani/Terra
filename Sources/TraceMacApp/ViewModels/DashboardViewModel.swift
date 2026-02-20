@@ -86,16 +86,22 @@ enum DashboardViewModel {
             event.name == TerraMetricKeys.stalledTokenEvent
         }
         let recommendationEvents = allSpanAttributes.filter { event in
-            event.name == TerraMetricKeys.recommendationEvent
+            TerraTelemetryClassifier.isRecommendationEvent(
+                name: event.name,
+                attributes: event.attributes
+            )
         }
         let anomalyEvents = allSpanAttributes.filter { event in
-            event.name.hasPrefix(TerraMetricKeys.anomalyKindPrefix)
+            TerraTelemetryClassifier.isAnomalyEvent(
+                name: event.name,
+                attributes: event.attributes
+            )
         }
         let hardwareEvents = allSpanAttributes.filter { event in
-            event.attributes.contains { key, _ in
-                TerraMetricKeys.hardwareAttributeKeys.contains(key)
-                    || key.hasPrefix(TerraMetricKeys.hardwareAttributePrefix)
-            }
+            TerraTelemetryClassifier.isHardwareEvent(
+                name: event.name,
+                attributes: event.attributes
+            )
         }
 
         let runtimeCounts = Dictionary(uniqueKeysWithValues: TraceRuntimeFilter.allCases.map { filter in
@@ -185,18 +191,4 @@ enum DashboardViewModel {
 
 private enum TerraMetricKeys {
     static let stalledTokenEvent = "terra.anomaly.stalled_token"
-    static let recommendationEvent = "terra.recommendation"
-    static let anomalyKindPrefix = "terra.anomaly"
-    static let hardwareAttributePrefix = "terra.hw"
-    static let hardwareAttributeKeys: Set<String> = [
-        "terra.process.thermal_state",
-        "terra.process.memory_resident_delta_mb",
-        "terra.process.memory_peak_mb",
-        "terra.hw.power_state",
-        "terra.hw.memory_pressure",
-        "terra.hw.rss_mb",
-        "terra.hw.memory_churn_mb",
-        "terra.hw.gpu_occupancy_pct",
-        "terra.hw.ane_utilization_pct"
-    ]
 }

@@ -37,10 +37,32 @@ final class SpanDetailViewModelTests: XCTestCase {
       ]
     )
     span.addEvent(
+      name: "terra.first_token",
+      attributes: [
+        "terra.token.stage": .string("decode"),
+      ]
+    )
+    span.addEvent(
       name: "terra.token.lifecycle",
       attributes: [
         "terra.token.stage": .string("decode"),
         "terra.token.index": .int(4),
+      ]
+    )
+    span.addEvent(
+      name: "terra.stream.lifecycle",
+      attributes: [
+        "terra.stream.chunk_count": .int(4),
+      ]
+    )
+    span.addEvent(
+      name: "terra.hw.memory_snapshot",
+      attributes: [:]
+    )
+    span.addEvent(
+      name: "provider.event",
+      attributes: [
+        "terra.process.thermal_state": .string("nominal"),
       ]
     )
     span.end()
@@ -54,7 +76,8 @@ final class SpanDetailViewModelTests: XCTestCase {
     XCTAssertEqual(viewModel.recommendationEventItems.count, 1)
     XCTAssertEqual(viewModel.anomalyEventItems.count, 1)
     XCTAssertEqual(viewModel.policyEventItems.count, 1)
-    XCTAssertEqual(viewModel.lifecycleEventItems.count, 1)
+    XCTAssertEqual(viewModel.lifecycleEventItems.count, 3)
+    XCTAssertEqual(viewModel.hardwareEventItems.count, 2)
 
     let runtimeConfidenceItem = viewModel.attributeItems.first { $0.key == "terra.runtime.confidence" }
     XCTAssertNotNil(runtimeConfidenceItem)

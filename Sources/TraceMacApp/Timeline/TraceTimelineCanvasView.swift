@@ -742,35 +742,22 @@ struct TraceTimelineCanvasView: View {
         if normalizedName.contains("stalled") && normalizedName.contains("token") {
             return TimelineEventMarker.Kind.stall.rawValue
         }
-        if normalizedName == "terra.anomaly.stalled_token" || normalizedName == "terra.anomaly" {
-            return TimelineEventMarker.Kind.anomaly.rawValue
-        }
-        if normalizedName == "terra.recommendation" {
-            return TimelineEventMarker.Kind.recommendation.rawValue
-        }
         if normalizedName.contains("prompt_eval") || normalizedName.contains("prompt-eval") {
             return TimelineEventMarker.Kind.promptEval.rawValue
         }
         if normalizedName == "terra.stage.decode" || normalizedName.contains("decode") {
             return TimelineEventMarker.Kind.decode.rawValue
         }
-        if normalizedName == "terra.first_token"
-            || normalizedName == "terra.token.lifecycle"
-        {
+        if TerraTelemetryClassifier.isLifecycleEvent(name: eventName, attributes: attributes) {
             return TimelineEventMarker.Kind.tokenLifecycle.rawValue
         }
-        if normalizedName.hasPrefix("terra.hw") || normalizedName.hasPrefix("terra.process") {
+        if TerraTelemetryClassifier.isHardwareEvent(name: eventName, attributes: attributes) {
             return TimelineEventMarker.Kind.hardware.rawValue
         }
-
-        let keys = Set(attributes.keys)
-        if keys.contains("terra.process.thermal_state") || keys.contains("terra.hw.memory_pressure") {
-            return TimelineEventMarker.Kind.hardware.rawValue
-        }
-        if keys.contains("terra.recommendation.kind") || keys.contains("terra.recommendation.action") {
+        if TerraTelemetryClassifier.isRecommendationEvent(name: eventName, attributes: attributes) {
             return TimelineEventMarker.Kind.recommendation.rawValue
         }
-        if keys.contains("terra.anomaly.kind") || keys.contains("terra.anomaly.score") {
+        if TerraTelemetryClassifier.isAnomalyEvent(name: eventName, attributes: attributes) {
             return TimelineEventMarker.Kind.anomaly.rawValue
         }
 

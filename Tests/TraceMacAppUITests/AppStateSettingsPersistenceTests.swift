@@ -82,4 +82,72 @@ struct AppStateSettingsPersistenceTests {
 
     cleanupDefaults()
   }
+
+  @Test("AppState keeps persisted controls stable while loading large trace sets")
+  func appStateControlsRemainStableUnderLargeTraceVolume() async throws {
+    cleanupDefaults()
+
+    let tempDirectory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("trace-ui-large-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+    defer {
+      try? FileManager.default.removeItem(at: tempDirectory)
+      cleanupDefaults()
+    }
+
+    for _ in 0..<120 {
+      try SampleTraces.writeSampleTrace(to: tempDirectory)
+      try await Task.sleep(nanoseconds: 1_100_000)
+    }
+
+    AppSettings.tracesDirectoryURL = tempDirectory
+    AppSettings.tracePageSize = 75
+    AppSettings.timelineMaxEventMarkers = 1_600
+    AppSettings.spanEventsRowLimit = 260
+    AppSettings.timelineZoomScale = 1.4
+    AppSettings.runtimeFilterRawValue = TraceRuntimeFilter.all.rawValue
+    AppSettings.openClawSourceFilterRawValue = OpenClawTraceSourceFilter.all.rawValue
+
+    let state = AppState(isWatchFolderFeatureEnabled: { false })
+    try await waitUntilLoaded(state: state, timeoutSeconds: 8)
+
+    #expect(state.tracePageSizeSetting == 75)
+    #expect(state.timelineMaxEventMarkers == 1_600)
+    #expect(state.spanEventsRowLimit == 260)
+    #expect(abs(state.timelineZoomScale - 1.4) < 0.000_1)
+    #expect(state.loadedTraceFileCount > 0)
+
+    state.timelineMaxEventMarkers = 2_200
+    state.spanEventsRowLimit = 500
+    state.runtimeFilter = .ollama
+    state.openClawSourceFilter = .gateway
+    state.loadTraces(resetPagination: true)
+    try await waitUntilLoaded(state: state, timeoutSeconds: 8)
+
+    #expect(state.timelineMaxEventMarkers == 2_200)
+    #expect(state.spanEventsRowLimit == 500)
+    #expect(AppSettings.timelineMaxEventMarkers == 2_200)
+    #expect(AppSettings.spanEventsRowLimit == 500)
+    #expect(AppSettings.runtimeFilterRawValue == TraceRuntimeFilter.ollama.rawValue)
+    #expect(AppSettings.openClawSourceFilterRawValue == OpenClawTraceSourceFilter.gateway.rawValue)
+  }
+
+  private func waitUntilLoaded(
+    state: AppState,
+    timeoutSeconds: TimeInterval
+  ) async throws {
+    let timeout = Date().addingTimeInterval(timeoutSeconds)
+    while Date() < timeout {
+      if !state.isLoading {
+        return
+      }
+      try await Task.sleep(nanoseconds: 50_000_000)
+    }
+
+    throw NSError(
+      domain: "AppStateSettingsPersistenceTests",
+      code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "Timed out waiting for AppState to finish loading"]
+    )
+  }
 }

@@ -79,32 +79,34 @@ public final class SpanDetailViewModel {
       .sorted(by: { $0.key < $1.key })
       .map { AttributeItem(key: $0.key, value: $0.value.description) }
 
-    let allEvents = span.events
-      .sorted(by: { $0.timestamp < $1.timestamp })
-      .map { event in
-        EventItem(
+    let allEvents = span.events.sorted(by: { $0.timestamp < $1.timestamp })
+    let preparedEvents = allEvents.map { event in
+      (
+        source: event,
+        item: EventItem(
           name: event.name,
           timestamp: event.timestamp,
           attributes: normalizedAttributes(event.attributes)
         )
-      }
+      )
+    }
 
-    eventItems = allEvents
-    recommendationEventItems = allEvents.filter {
-      isRecommendationEvent(name: $0.name, attributes: $0.attributes)
-    }
-    anomalyEventItems = allEvents.filter {
-      isAnomalyEvent(name: $0.name, attributes: $0.attributes)
-    }
-    policyEventItems = allEvents.filter {
-      isPolicyEvent(name: $0.name, attributes: $0.attributes)
-    }
-    hardwareEventItems = allEvents.filter {
-      isHardwareEvent(name: $0.name, attributes: $0.attributes)
-    }
-    lifecycleEventItems = allEvents.filter {
-      isLifecycleEvent(name: $0.name, attributes: $0.attributes)
-    }
+    eventItems = preparedEvents.map(\.item)
+    recommendationEventItems = preparedEvents
+      .filter { TerraTelemetryClassifier.isRecommendationEvent(name: $0.source.name, attributes: $0.source.attributes) }
+      .map(\.item)
+    anomalyEventItems = preparedEvents
+      .filter { TerraTelemetryClassifier.isAnomalyEvent(name: $0.source.name, attributes: $0.source.attributes) }
+      .map(\.item)
+    policyEventItems = preparedEvents
+      .filter { TerraTelemetryClassifier.isPolicyEvent(name: $0.source.name, attributes: $0.source.attributes) }
+      .map(\.item)
+    hardwareEventItems = preparedEvents
+      .filter { TerraTelemetryClassifier.isHardwareEvent(name: $0.source.name, attributes: $0.source.attributes) }
+      .map(\.item)
+    lifecycleEventItems = preparedEvents
+      .filter { TerraTelemetryClassifier.isLifecycleEvent(name: $0.source.name, attributes: $0.source.attributes) }
+      .map(\.item)
 
     linkItems = span.links.map { link in
       LinkItem(traceId: link.context.traceId, spanId: link.context.spanId)
@@ -124,52 +126,6 @@ public final class SpanDetailViewModel {
     linkItems = []
   }
 
-  private func isRecommendationEvent(name: String, attributes: [(String, String)]) -> Bool {
-    if name == TerraTelemetryKey.recommendationEventName {
-      return true
-    }
-    return attributes.contains {
-      $0.0.hasPrefix(TerraTelemetryKey.recommendationAttributePrefix)
-    }
-  }
-
-  private func isAnomalyEvent(name: String, attributes: [(String, String)]) -> Bool {
-    if name.hasPrefix(TerraTelemetryKey.anomalyNamePrefix) {
-      return true
-    }
-    return attributes.contains {
-      $0.0.hasPrefix(TerraTelemetryKey.anomalyAttributePrefix)
-    }
-  }
-
-  private func isHardwareEvent(name: String, attributes: [(String, String)]) -> Bool {
-    if name.hasPrefix(TerraTelemetryKey.hardwareNamePrefix) {
-      return true
-    }
-    return attributes.contains {
-      TerraTelemetryKey.hardwareAttributeKeys.contains($0.0)
-    }
-  }
-
-  private func isPolicyEvent(name: String, attributes: [(String, String)]) -> Bool {
-    if name.hasPrefix(TerraTelemetryKey.policyNamePrefix)
-      || name.hasPrefix(TerraTelemetryKey.auditNamePrefix)
-    {
-      return true
-    }
-    return attributes.contains {
-      $0.0.hasPrefix(TerraTelemetryKey.policyAttributePrefix)
-        || $0.0.hasPrefix(TerraTelemetryKey.auditAttributePrefix)
-    }
-  }
-
-  private func isLifecycleEvent(name: String, attributes: [(String, String)]) -> Bool {
-    if TerraTelemetryKey.lifecycleEventNames.contains(name) {
-      return true
-    }
-    return attributes.contains { TerraTelemetryKey.lifecycleAttributeKeys.contains($0.0) }
-  }
-
   private func normalizedAttributes(_ values: [String: OpenTelemetryApi.AttributeValue]) -> [(String, String)] {
     values.map { key, value in
       (key, value.description)
@@ -177,38 +133,4 @@ public final class SpanDetailViewModel {
       lhs.0 == rhs.0 ? lhs.1 < rhs.1 : lhs.0 < rhs.0
     }
   }
-}
-
-private enum TerraTelemetryKey {
-  static let recommendationEventName = "terra.recommendation"
-  static let recommendationAttributePrefix = "terra.recommendation."
-  static let anomalyNamePrefix = "terra.anomaly"
-  static let anomalyAttributePrefix = "terra.anomaly."
-  static let hardwareNamePrefix = "terra.process."
-  static let policyNamePrefix = "terra.policy"
-  static let auditNamePrefix = "terra.audit"
-  static let policyAttributePrefix = "terra.policy."
-  static let auditAttributePrefix = "terra.audit."
-  static let lifecycleEventNames: Set<String> = [
-    "terra.token.lifecycle",
-    "terra.stream.lifecycle",
-  ]
-  static let lifecycleAttributeKeys: Set<String> = [
-    "terra.token.stage",
-    "terra.token.index",
-    "terra.token.gap_ms",
-    "terra.stream.chunk_count",
-    "terra.stream.output_tokens",
-  ]
-  static let hardwareAttributeKeys: Set<String> = [
-    "terra.process.thermal_state",
-    "terra.process.memory_resident_delta_mb",
-    "terra.process.memory_peak_mb",
-    "terra.hw.power_state",
-    "terra.hw.memory_pressure",
-    "terra.hw.rss_mb",
-    "terra.hw.memory_churn_mb",
-    "terra.hw.gpu_occupancy_pct",
-    "terra.hw.ane_utilization_pct",
-  ]
 }
