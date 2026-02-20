@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: ["main"]
+  workflow_dispatch:
 
 jobs:
   swift:
@@ -49,4 +50,3 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
-

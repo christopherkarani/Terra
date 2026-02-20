@@ -5,3 +5,7 @@ DerivedData/
 ~/
 *.log
 null.o
+*.d
+*.o
+*.swiftdeps
+*.dia

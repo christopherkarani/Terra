@@ -1,5 +1,7 @@
 # Terra
 
+[![CI](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml?query=branch%3Amain)
+
 Terra is observability for on-device GenAI apps in Swift.
 
 It helps you instrument model inference, embeddings, agent steps, tool calls, and safety checks with a focused API, strong privacy defaults, and export/persistence wiring designed for real production environments.
@@ -20,8 +22,6 @@ It helps you instrument model inference, embeddings, agent steps, tool calls, an
 - Route data through OTLP/HTTP into existing observability pipelines.
 - Enable on-device persistence for intermittent connectivity and buffered export.
 - Standardize GenAI telemetry semantics across apps and model runtimes.
-
-> **Note:** The bullet points above describe **Terra SDK** (the Swift library) capabilities. **Trace** (the macOS viewer app) provides local trace visualization. Network ingestion and trace re-export from the viewer are planned features.
 
 ## Quickstart
 
@@ -72,7 +72,6 @@ Terra supports zero-code auto-instrumentation for on-device AI. One line capture
 import Terra
 
 try Terra.start()
-// Done. CoreML predictions and HTTP AI API calls are now traced automatically.
 ```
 
 CoreML note: auto-instrumentation uses a context-based dedup guard to avoid nested spans.
@@ -86,6 +85,12 @@ In rare high-concurrency call patterns this may still emit duplicate telemetry.
 | One annotation | `TerraTracedMacro` | `@Traced(model:)` — wraps any async function in a span |
 | One closure | `TerraMLX` | `TerraMLX.traced(model:) { }` — wraps MLX generation |
 | Wrapper | `TerraFoundationModels` | `Terra.TracedSession` — Apple Foundation Models (macOS 26+) |
+
+### Production Usage Notes
+
+- Configure OpenTelemetry before creating spans, ideally at process start.
+- Treat persistence as a cache: the default location can be purged by the OS.
+- Prefer explicit configuration in production (`Terra.OpenTelemetryConfiguration`) so behavior is deterministic and auditable.
 
 ### Customize What Gets Traced
 
@@ -179,6 +184,27 @@ Telemetry destinations:
 - Remote: OTLP/HTTP endpoints for traces/metrics/logs.
 - Optional: on-device persistence for offline buffering and later export.
 
+### Persistence Storage (Default Paths)
+
+`Terra.defaultPersistenceStorageURL()` resolves to the platform cache directory and appends `opentelemetry/terra`.
+
+- iOS, tvOS, watchOS, visionOS: `<App Sandbox>/Library/Caches/opentelemetry/terra`
+- macOS (sandboxed): `<App Sandbox>/Library/Caches/opentelemetry/terra`
+- macOS (non-sandboxed): `~/Library/Caches/opentelemetry/terra`
+- If unavailable, Terra falls back to `FileManager.default.temporaryDirectory`.
+
+When persistence is enabled, Terra creates `traces`, `metrics`, and `logs` subdirectories.
+
+### Instrumentation Version
+
+```swift
+if let version = Terra.instrumentationVersion {
+  print("Terra instrumentation version: \(version)")
+}
+```
+
+When present, Terra passes it to the tracer provider so spans can be tagged with that version.
+
 ## Enterprise Rollout Patterns
 
 - Set privacy globally once at startup, then use per-request opt-in capture only for approved paths.
@@ -210,7 +236,8 @@ Trace is a native macOS app (in `Apps/TraceMacApp/`) for visualizing on-device t
 - Network-based trace ingestion (OTLP/HTTP receiver for multi-machine workflows).
 - Advanced filtering by date range, duration, error status, or span attributes.
 
-> **Important:** The "Enterprise Teams" bullets at the top of this README describe **Terra SDK** library features (OTLP/HTTP export, on-device persistence, privacy controls). Trace reads persisted traces from disk — it does not currently re-export them or accept network ingestion.
+> **Note:** The `Enterprise` bullets at the top describe **Terra SDK** library features (OTLP/HTTP export, on-device persistence, privacy controls).
+> Trace reads persisted traces from disk; network ingestion is tracked separately.
 
 ## Included Products in This Repo
 
@@ -240,3 +267,14 @@ Trace is a native macOS app (in `Apps/TraceMacApp/`) for visualizing on-device t
 ## Standards Compatibility
 
 Terra is compatible with OpenTelemetry-based pipelines and semantic conventions, so you can route data to standard collectors/backends without locking into a Terra-specific format.
+
+## CI
+
+This repo runs tests on pull requests using:
+
+- `swift test`
+- `swift test --enable-swift-testing`
+
+## License
+
+Apache-2.0. See [LICENSE](https://github.com/christopherkarani/Terra/blob/main/LICENSE).

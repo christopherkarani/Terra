@@ -48,3 +48,7 @@
 - Implementation agents: I1 (persistence), I2 (model), I3 (view models), I4 (AppKit UI).
 - Review agents: 1 per task; 2 for UI integration.
 - Fix/gap agent as needed.
+
+## Legacy Notes
+
+- Earlier implementation direction (now superseded) focused on live OTLP ingestion in the UI with `TraceStore` snapshots and refresh loops, while maintaining AppKit-only architecture and strict `Sendable` actor boundaries.

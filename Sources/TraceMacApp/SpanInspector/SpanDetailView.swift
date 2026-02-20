@@ -122,7 +122,7 @@ private struct SpanDetailHeaderView: View {
 
 /// Displays the span kind as a styled capsule badge.
 private struct KindBadgeView: View {
-    let kind: SpanKind
+    let kind: OpenTelemetryApi.SpanKind
 
     var body: some View {
         Text(label)

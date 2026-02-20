@@ -24,14 +24,19 @@ let package = Package(
     .library(name: "TerraLlama", targets: ["TerraLlama"]),
     .library(name: "TerraAccelerate", targets: ["TerraAccelerate"]),
     .library(name: "TerraTracedMacro", targets: ["TerraTracedMacro"]),
-    .executable(name: "TerraSample", targets: ["TerraSample"])
+    .library(name: "TraceMacAppUI", targets: ["TraceMacAppUI"]),
+    .executable(name: "TerraSample", targets: ["TerraSample"]),
+    .executable(name: "TraceMacApp", targets: ["TraceMacApp"]),
+    .executable(name: "terra", targets: ["TerraCLI"])
   ],
   dependencies: [
+    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
+    .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.25.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", from: "2.3.0"),
     .package(url: "https://github.com/apple/swift-crypto.git", from: "4.2.0"),
     .package(url: "https://github.com/apple/swift-testing.git", from: "0.99.0"),
-    .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0"),
+    .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0")
   ],
   targets: [
     // MARK: - Core Libraries
@@ -68,7 +73,9 @@ let package = Package(
     .target(
       name: "TerraTraceKit",
       dependencies: [
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+        .product(name: "OpenTelemetryProtocolExporter", package: "opentelemetry-swift")
       ],
       path: "Sources/TerraTraceKit"
     ),
@@ -205,6 +212,7 @@ let package = Package(
         "TerraTraceKit",
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+        .product(name: "SwiftProtobuf", package: "swift-protobuf"),
         .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraTraceKitTests"
@@ -271,6 +279,7 @@ let package = Package(
     .testTarget(
       name: "TraceMacAppTests",
       dependencies: [
+        "TraceMacAppUI",
         "TerraTraceKit",
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
@@ -296,6 +305,23 @@ let package = Package(
       name: "TerraSample",
       dependencies: ["Terra"],
       path: "Examples/Terra Sample"
+    ),
+    .executableTarget(
+      name: "TerraCLI",
+      dependencies: [
+        "TerraTraceKit",
+        .product(name: "ArgumentParser", package: "swift-argument-parser")
+      ],
+      path: "Sources/terra-cli"
+    ),
+    .executableTarget(
+      name: "TraceMacApp",
+      dependencies: [
+        "TraceMacAppUI",
+        "TerraTraceKit"
+      ],
+      path: "Sources/TraceMacApp",
+      sources: ["TraceMacApp.swift"]
     )
   ]
 )

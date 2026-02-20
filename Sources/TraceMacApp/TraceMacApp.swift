@@ -1,4 +1,5 @@
 import AppKit
+import TraceMacAppUI
 
 @main
 final class TraceMacApp: NSObject, NSApplicationDelegate {

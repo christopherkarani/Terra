@@ -1,6 +1,7 @@
 import AppKit
 
-@objc protocol MainMenuCoordinating: AnyObject {
+@MainActor
+@objc public protocol MainMenuCoordinating: AnyObject {
   func checkForUpdates(_ sender: Any?)
   func showQuickstart(_ sender: Any?)
 

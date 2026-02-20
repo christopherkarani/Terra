@@ -1,7 +1,7 @@
 import Foundation
 
-actor AppLog {
-  static let shared = AppLog()
+public actor AppLog {
+  public static let shared = AppLog()
 
   private let fileURL: URL
   private var handle: FileHandle?
@@ -12,11 +12,11 @@ actor AppLog {
     self.fileURL = fileURL
   }
 
-  func info(_ message: String) {
+  public func info(_ message: String) {
     writeLine("[INFO] \(message)")
   }
 
-  func error(_ message: String) {
+  public func error(_ message: String) {
     writeLine("[ERROR] \(message)")
   }
 
@@ -82,4 +82,3 @@ actor AppLog {
     return handle
   }
 }
-

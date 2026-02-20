@@ -3,7 +3,7 @@ import SwiftUI
 import TerraTraceKit
 
 @MainActor
-final class AppCoordinator: NSObject, MainMenuCoordinating {
+public final class AppCoordinator: NSObject, MainMenuCoordinating {
   private let window: NSWindow
   private let appState: AppState
   private let toolbarProvider: TraceToolbarProvider
@@ -13,7 +13,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
   private let licenseManager: LicenseManager
   private let updaterController = UpdaterController()
 
-  override init() {
+  public override init() {
     let licenseManager = LicenseManager()
     self.licenseManager = licenseManager
     self.appState = AppState(isWatchFolderFeatureEnabled: {
@@ -56,7 +56,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     updateWindowTitle()
   }
 
-  func start() {
+  public func start() {
     window.center()
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
@@ -72,11 +72,11 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     }
   }
 
-  @objc func reloadTraces(_ sender: Any? = nil) {
+  @objc public func reloadTraces(_ sender: Any? = nil) {
     appState.loadTraces()
   }
 
-  @objc func openTracesFolder(_ sender: Any? = nil) {
+  @objc public func openTracesFolder(_ sender: Any? = nil) {
     let url = AppSettings.tracesDirectoryURL
     Task { await AppLog.shared.info("traces.open_folder path=\(url.path)") }
     do {
@@ -88,7 +88,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     NSWorkspace.shared.open(url)
   }
 
-  @objc func chooseTracesFolder(_ sender: Any? = nil) {
+  @objc public func chooseTracesFolder(_ sender: Any? = nil) {
     let panel = NSOpenPanel()
     panel.canChooseFiles = false
     panel.canChooseDirectories = true
@@ -107,7 +107,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     }
   }
 
-  @objc func toggleWatchTracesFolder(_ sender: Any? = nil) {
+  @objc public func toggleWatchTracesFolder(_ sender: Any? = nil) {
     guard licenseManager.isFeatureEnabled(.watchFolder) else {
       presentActivationRequiredAlert(featureName: "Watch Folder")
       return
@@ -120,12 +120,12 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     }
   }
 
-  @objc func loadSampleTraces(_ sender: Any? = nil) {
+  @objc public func loadSampleTraces(_ sender: Any? = nil) {
     Task { await AppLog.shared.info("traces.load_sample") }
     appState.loadSampleTraces()
   }
 
-  @objc func showQuickstart(_ sender: Any? = nil) {
+  @objc public func showQuickstart(_ sender: Any? = nil) {
     if quickstartWindowController == nil {
       quickstartWindowController = QuickstartWindowController()
     }
@@ -133,7 +133,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     quickstartWindowController?.window?.makeKeyAndOrderFront(nil)
   }
 
-  @objc func checkForUpdates(_ sender: Any? = nil) {
+  @objc public func checkForUpdates(_ sender: Any? = nil) {
     Task { await AppLog.shared.info("updates.check") }
 
     guard updaterController.isAvailable else {
@@ -156,12 +156,12 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     updaterController.checkForUpdates(sender)
   }
 
-  @objc func exportDiagnostics(_ sender: Any? = nil) {
+  @objc public func exportDiagnostics(_ sender: Any? = nil) {
     Task { await AppLog.shared.info("export.diagnostics") }
     DiagnosticsExporter.export(from: window, tracesDirectoryURL: AppSettings.tracesDirectoryURL, licenseStatus: licenseManager.status)
   }
 
-  @objc func openPrivacyPolicy(_ sender: Any? = nil) {
+  @objc public func openPrivacyPolicy(_ sender: Any? = nil) {
     guard let url = LegalDocs.privacyPolicyURL() else {
       presentErrorAlert(message: "Privacy Policy URL is not configured.", error: CocoaError(.fileNoSuchFile))
       return
@@ -169,7 +169,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     NSWorkspace.shared.open(url)
   }
 
-  @objc func openEULA(_ sender: Any? = nil) {
+  @objc public func openEULA(_ sender: Any? = nil) {
     guard let url = LegalDocs.eulaURL() else {
       presentErrorAlert(message: "EULA URL is not configured.", error: CocoaError(.fileNoSuchFile))
       return
@@ -177,18 +177,18 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     NSWorkspace.shared.open(url)
   }
 
-  @objc func toggleCrashReporting(_ sender: Any? = nil) {
+  @objc public func toggleCrashReporting(_ sender: Any? = nil) {
     AppSettings.isCrashReportingEnabled.toggle()
     Task { await AppLog.shared.info("privacy.toggle_crash_reporting enabled=\(AppSettings.isCrashReportingEnabled)") }
   }
 
-  @objc func toggleAutomaticUpdateChecks(_ sender: Any? = nil) {
+  @objc public func toggleAutomaticUpdateChecks(_ sender: Any? = nil) {
     AppSettings.isAutomaticUpdateChecksEnabled.toggle()
     Task { await AppLog.shared.info("privacy.toggle_auto_update_checks enabled=\(AppSettings.isAutomaticUpdateChecksEnabled)") }
     updaterController.setAutomaticChecksEnabled(AppSettings.isAutomaticUpdateChecksEnabled)
   }
 
-  @objc func revealCrashReports(_ sender: Any? = nil) {
+  @objc public func revealCrashReports(_ sender: Any? = nil) {
     let url = FileManager.default.homeDirectoryForCurrentUser
       .appendingPathComponent("Library", isDirectory: true)
       .appendingPathComponent("Logs", isDirectory: true)
@@ -218,7 +218,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     controller.window?.makeKeyAndOrderFront(nil)
   }
 
-  @objc func activateLicense(_ sender: Any? = nil) {
+  @objc public func activateLicense(_ sender: Any? = nil) {
     let alert = NSAlert()
     alert.alertStyle = .informational
     alert.messageText = "Activate TraceMacApp"
@@ -264,7 +264,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     }
   }
 
-  @objc func deactivateLicense(_ sender: Any? = nil) {
+  @objc public func deactivateLicense(_ sender: Any? = nil) {
     guard case .licensed = licenseManager.status else { return }
 
     let alert = NSAlert()
@@ -289,7 +289,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
     }
   }
 
-  @objc func showLicenseStatus(_ sender: Any? = nil) {
+  @objc public func showLicenseStatus(_ sender: Any? = nil) {
     let alert = NSAlert()
     alert.alertStyle = .informational
     alert.messageText = "License Status"
@@ -417,7 +417,7 @@ final class AppCoordinator: NSObject, MainMenuCoordinating {
 }
 
 extension AppCoordinator: NSMenuItemValidation {
-  func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+  public func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     switch menuItem.action {
     case #selector(toggleWatchTracesFolder(_:)):
       menuItem.state = AppSettings.isWatchingTracesDirectory ? .on : .off
