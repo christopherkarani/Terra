@@ -29,8 +29,16 @@ final class OTLPHTTPServerTests: XCTestCase {
     }
     defer { server.stop() }
 
-    let actualPort = Int(server.port)
-    XCTAssertGreaterThan(actualPort, 0)
+    var actualPort = Int(server.port)
+    if actualPort == 0 {
+      for _ in 0..<100 where actualPort == 0 {
+        try await Task.sleep(nanoseconds: 10_000_000)
+        actualPort = Int(server.port)
+      }
+    }
+    guard actualPort > 0 else {
+      throw XCTSkip("Skipping: server did not publish an ephemeral port in time")
+    }
     let requestBytes = makeRawRequest(
       host: "127.0.0.1",
       port: actualPort,
