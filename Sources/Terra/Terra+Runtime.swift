@@ -46,12 +46,8 @@ final class Runtime {
   func install(_ installation: Terra.Installation) {
     lock.lock()
     privacyValue = installation.privacy
-    if let tracerProvider = installation.tracerProvider {
-      tracerProviderOverride = tracerProvider
-    }
-    if let loggerProvider = installation.loggerProvider {
-      loggerProviderOverride = loggerProvider
-    }
+    tracerProviderOverride = installation.tracerProvider
+    loggerProviderOverride = installation.loggerProvider
     lock.unlock()
 
     if installation.registerProvidersAsGlobal {

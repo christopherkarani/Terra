@@ -20,7 +20,7 @@ public enum Terra {
     _ body: @Sendable (Scope<InferenceSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
-    let startTime = Date()
+    let startTime = DispatchTime.now()
 
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.inference.rawValue),
@@ -49,7 +49,14 @@ public enum Terra {
     }
 
     defer {
-      let durationMs = Date().timeIntervalSince(startTime) * 1000
+      let endTime = DispatchTime.now()
+      let durationNs: UInt64
+      if endTime.uptimeNanoseconds >= startTime.uptimeNanoseconds {
+        durationNs = endTime.uptimeNanoseconds - startTime.uptimeNanoseconds
+      } else {
+        durationNs = 0
+      }
+      let durationMs = Double(durationNs) / 1_000_000
       Runtime.shared.metrics.recordInference(durationMs: durationMs)
     }
 
