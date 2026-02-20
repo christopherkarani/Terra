@@ -60,8 +60,12 @@ public final class SpanDetailViewModel {
   public private(set) var recommendationEventItems: [EventItem] = []
   /// Anomaly events prepared for display.
   public private(set) var anomalyEventItems: [EventItem] = []
+  /// Policy and audit events prepared for display.
+  public private(set) var policyEventItems: [EventItem] = []
   /// Hardware telemetry events prepared for display.
   public private(set) var hardwareEventItems: [EventItem] = []
+  /// Stream lifecycle events prepared for display.
+  public private(set) var lifecycleEventItems: [EventItem] = []
   /// Links prepared for display.
   public private(set) var linkItems: [LinkItem] = []
 
@@ -92,8 +96,14 @@ public final class SpanDetailViewModel {
     anomalyEventItems = allEvents.filter {
       isAnomalyEvent(name: $0.name, attributes: $0.attributes)
     }
+    policyEventItems = allEvents.filter {
+      isPolicyEvent(name: $0.name, attributes: $0.attributes)
+    }
     hardwareEventItems = allEvents.filter {
       isHardwareEvent(name: $0.name, attributes: $0.attributes)
+    }
+    lifecycleEventItems = allEvents.filter {
+      isLifecycleEvent(name: $0.name, attributes: $0.attributes)
     }
 
     linkItems = span.links.map { link in
@@ -108,7 +118,9 @@ public final class SpanDetailViewModel {
     eventItems = []
     recommendationEventItems = []
     anomalyEventItems = []
+    policyEventItems = []
     hardwareEventItems = []
+    lifecycleEventItems = []
     linkItems = []
   }
 
@@ -139,6 +151,25 @@ public final class SpanDetailViewModel {
     }
   }
 
+  private func isPolicyEvent(name: String, attributes: [(String, String)]) -> Bool {
+    if name.hasPrefix(TerraTelemetryKey.policyNamePrefix)
+      || name.hasPrefix(TerraTelemetryKey.auditNamePrefix)
+    {
+      return true
+    }
+    return attributes.contains {
+      $0.0.hasPrefix(TerraTelemetryKey.policyAttributePrefix)
+        || $0.0.hasPrefix(TerraTelemetryKey.auditAttributePrefix)
+    }
+  }
+
+  private func isLifecycleEvent(name: String, attributes: [(String, String)]) -> Bool {
+    if TerraTelemetryKey.lifecycleEventNames.contains(name) {
+      return true
+    }
+    return attributes.contains { TerraTelemetryKey.lifecycleAttributeKeys.contains($0.0) }
+  }
+
   private func normalizedAttributes(_ values: [String: OpenTelemetryApi.AttributeValue]) -> [(String, String)] {
     values.map { key, value in
       (key, value.description)
@@ -154,6 +185,21 @@ private enum TerraTelemetryKey {
   static let anomalyNamePrefix = "terra.anomaly"
   static let anomalyAttributePrefix = "terra.anomaly."
   static let hardwareNamePrefix = "terra.process."
+  static let policyNamePrefix = "terra.policy"
+  static let auditNamePrefix = "terra.audit"
+  static let policyAttributePrefix = "terra.policy."
+  static let auditAttributePrefix = "terra.audit."
+  static let lifecycleEventNames: Set<String> = [
+    "terra.token.lifecycle",
+    "terra.stream.lifecycle",
+  ]
+  static let lifecycleAttributeKeys: Set<String> = [
+    "terra.token.stage",
+    "terra.token.index",
+    "terra.token.gap_ms",
+    "terra.stream.chunk_count",
+    "terra.stream.output_tokens",
+  ]
   static let hardwareAttributeKeys: Set<String> = [
     "terra.process.thermal_state",
     "terra.process.memory_resident_delta_mb",

@@ -214,6 +214,45 @@ enum OTLPTestFixtures {
     keyValue.value = value
     return keyValue
   }
+
+  static func makeKeyValue(key: String, boolValue: Bool) -> Opentelemetry_Proto_Common_V1_KeyValue {
+    var value = Opentelemetry_Proto_Common_V1_AnyValue()
+    value.boolValue = boolValue
+
+    var keyValue = Opentelemetry_Proto_Common_V1_KeyValue()
+    keyValue.key = key
+    keyValue.value = value
+    return keyValue
+  }
+
+  static func makeKeyValue(key: String, doubleValue: Double) -> Opentelemetry_Proto_Common_V1_KeyValue {
+    var value = Opentelemetry_Proto_Common_V1_AnyValue()
+    value.doubleValue = doubleValue
+
+    var keyValue = Opentelemetry_Proto_Common_V1_KeyValue()
+    keyValue.key = key
+    keyValue.value = value
+    return keyValue
+  }
+
+  static func makeNullKeyValue(key: String) -> Opentelemetry_Proto_Common_V1_KeyValue {
+    var keyValue = Opentelemetry_Proto_Common_V1_KeyValue()
+    keyValue.key = key
+    keyValue.value = Opentelemetry_Proto_Common_V1_AnyValue()
+    return keyValue
+  }
+
+  static func makeEvent(
+    name: String,
+    timeUnixNano: UInt64,
+    attributes: [Opentelemetry_Proto_Common_V1_KeyValue]
+  ) -> Opentelemetry_Proto_Trace_V1_Span.Event {
+    var event = Opentelemetry_Proto_Trace_V1_Span.Event()
+    event.name = name
+    event.timeUnixNano = timeUnixNano
+    event.attributes = attributes
+    return event
+  }
 }
 
 extension String {

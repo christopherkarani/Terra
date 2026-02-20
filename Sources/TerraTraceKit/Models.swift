@@ -121,6 +121,34 @@ public enum AttributeValue: Hashable, Sendable {
     }
     return nil
   }
+
+  public var boolValue: Bool? {
+    if case .bool(let value) = self {
+      return value
+    }
+    return nil
+  }
+
+  public var intValue: Int64? {
+    if case .int(let value) = self {
+      return value
+    }
+    return nil
+  }
+
+  public var doubleValue: Double? {
+    if case .double(let value) = self {
+      return value
+    }
+    return nil
+  }
+
+  public var isNull: Bool {
+    if case .null = self {
+      return true
+    }
+    return false
+  }
 }
 
 extension AttributeValue: CustomStringConvertible {
