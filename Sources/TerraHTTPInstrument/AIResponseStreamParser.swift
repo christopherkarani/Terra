@@ -49,15 +49,12 @@ struct AIResponseStreamParser {
   }
 
   private struct MonotonicTimeline {
-    private var anchorWall: Date
+    private var anchorEpochMs: Double?
     private var anchorClock: ContinuousClock.Instant
     private var lastClock: ContinuousClock.Instant
-    private var hasReference = false
 
     init() {
-      let nowWall = Date()
       let nowClock = monotonicNow()
-      anchorWall = nowWall
       anchorClock = nowClock
       lastClock = nowClock
     }
@@ -71,14 +68,15 @@ struct AIResponseStreamParser {
         return lastClock
       }
 
-      if !hasReference {
-        anchorWall = wallTime
+      let wallEpochMs = wallTime.timeIntervalSince1970 * 1000.0
+      if anchorEpochMs == nil {
+        anchorEpochMs = wallEpochMs
         anchorClock = monotonicNow()
         lastClock = anchorClock
-        hasReference = true
       }
 
-      let wallDeltaMs = max(0.0, wallTime.timeIntervalSince(anchorWall) * 1000.0)
+      let anchorMs = anchorEpochMs ?? wallEpochMs
+      let wallDeltaMs = max(0.0, wallEpochMs - anchorMs)
       let ns = Int64(wallDeltaMs * 1_000_000)
       let projected = anchorClock.advanced(by: .nanoseconds(ns))
       if projected >= lastClock {
@@ -173,8 +171,9 @@ struct AIResponseStreamParser {
     var firstTokenClock: ContinuousClock.Instant?
 
     for frame in frames {
-      let createdAt = parseCreatedAt(from: frame["created_at"]) ?? Date()
+      let createdAt = parseCreatedAt(from: frame["created_at"])
       let eventClock = timeline.clock(for: createdAt)
+      let eventTimestamp = createdAt ?? .now
       let responseText = frame["response"] as? String
 
       if stream.model == nil, let model = frame["model"] as? String {
@@ -209,7 +208,7 @@ struct AIResponseStreamParser {
           stream.events.append(
             ParsedStreamTelemetry.Event(
               name: Terra.SpanNames.stagePromptEval,
-              timestamp: createdAt,
+              timestamp: eventTimestamp,
               attributes: promptEvalAttributes
             )
           )
@@ -227,7 +226,7 @@ struct AIResponseStreamParser {
           stream.events.append(
             ParsedStreamTelemetry.Event(
               name: Terra.SpanNames.stageDecode,
-              timestamp: createdAt,
+              timestamp: eventTimestamp,
               attributes: decodeAttributes
             )
           )
@@ -238,7 +237,7 @@ struct AIResponseStreamParser {
           stream.events.append(
             ParsedStreamTelemetry.Event(
               name: Terra.SpanNames.modelLoad,
-              timestamp: createdAt,
+              timestamp: eventTimestamp,
               attributes: [
                 Terra.Keys.Terra.stageName: .string("model_load"),
                 Terra.Keys.Terra.latencyModelLoadMs: .double(loadMs),
@@ -270,7 +269,7 @@ struct AIResponseStreamParser {
           stream.events.append(
             ParsedStreamTelemetry.Event(
               name: Terra.Keys.Terra.streamLifecycleEvent,
-              timestamp: createdAt,
+              timestamp: eventTimestamp,
               attributes: attributes
             )
           )
@@ -281,7 +280,7 @@ struct AIResponseStreamParser {
             stream.events.append(
               ParsedStreamTelemetry.Event(
                 name: Terra.Keys.Terra.stalledTokenEvent,
-                timestamp: createdAt,
+                timestamp: eventTimestamp,
                 attributes: stalled
               )
             )
@@ -369,8 +368,9 @@ struct AIResponseStreamParser {
 
       let createdTimestamp = parseCreatedAt(
         from: frame["created"] ?? frame["created_at"]
-      ) ?? Date()
+      )
       let eventClock = timeline.clock(for: createdTimestamp)
+      let eventTimestamp = createdTimestamp ?? .now
       if firstFrameClock == nil {
         firstFrameClock = eventClock
       }
@@ -398,7 +398,7 @@ struct AIResponseStreamParser {
           stream.events.append(
             ParsedStreamTelemetry.Event(
               name: Terra.Keys.Terra.streamLifecycleEvent,
-              timestamp: createdTimestamp,
+              timestamp: eventTimestamp,
               attributes: attributes
             )
             )
@@ -408,7 +408,7 @@ struct AIResponseStreamParser {
               stream.events.append(
                 ParsedStreamTelemetry.Event(
                   name: Terra.Keys.Terra.stalledTokenEvent,
-                  timestamp: createdTimestamp,
+                  timestamp: eventTimestamp,
                   attributes: stalled
                 )
               )
@@ -420,7 +420,7 @@ struct AIResponseStreamParser {
           stream.events.append(
             ParsedStreamTelemetry.Event(
               name: Terra.SpanNames.stageDecode,
-              timestamp: createdTimestamp,
+              timestamp: eventTimestamp,
               attributes: [
                 Terra.Keys.Terra.stageName: .string("finish"),
                 Terra.Keys.Terra.stageTokenCount: .int(chunkIndex),
@@ -435,7 +435,7 @@ struct AIResponseStreamParser {
         stream.events.append(
           ParsedStreamTelemetry.Event(
             name: descriptor.eventName,
-            timestamp: createdTimestamp,
+            timestamp: eventTimestamp,
             attributes: [
               Terra.Keys.Terra.stageName: .string(descriptor.stageName),
             ]
