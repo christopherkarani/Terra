@@ -5,8 +5,18 @@ import OpenTelemetrySdk
 @Observable
 @MainActor
 final class AppState {
-    private let tracePageSize = 100
-    private var requestedTraceFileCount = 100
+    private var tracePageSize: Int = AppSettings.tracePageSize {
+        didSet {
+            let normalized = clampedTracePageSize(tracePageSize)
+            if normalized != tracePageSize {
+                tracePageSize = normalized
+                return
+            }
+            AppSettings.tracePageSize = normalized
+            requestedTraceFileCount = max(normalized, requestedTraceFileCount)
+        }
+    }
+    private var requestedTraceFileCount = AppSettings.tracePageSize
     private(set) var loadedTraceFileCount = 0
     private(set) var totalTraceFileCount = 0
 
@@ -61,8 +71,42 @@ final class AppState {
     var openClawGatewayAuthMode: OpenClawGatewayAuthMode = OpenClawGatewayAuthMode(rawValue: AppSettings.openClawGatewayAuthMode) ?? .none {
         didSet { AppSettings.openClawGatewayAuthMode = openClawGatewayAuthMode.rawValue }
     }
-    var openClawSourceFilter: OpenClawTraceSourceFilter = .all
-    var runtimeFilter: TraceRuntimeFilter = .all
+    var openClawSourceFilter: OpenClawTraceSourceFilter = OpenClawTraceSourceFilter(rawValue: AppSettings.openClawSourceFilterRawValue) ?? .all {
+        didSet { AppSettings.openClawSourceFilterRawValue = openClawSourceFilter.rawValue }
+    }
+    var runtimeFilter: TraceRuntimeFilter = TraceRuntimeFilter(rawValue: AppSettings.runtimeFilterRawValue) ?? .all {
+        didSet { AppSettings.runtimeFilterRawValue = runtimeFilter.rawValue }
+    }
+    var timelineZoomScale: CGFloat = AppSettings.timelineZoomScale {
+        didSet {
+            let normalized = clampedTimelineZoomScale(timelineZoomScale)
+            if normalized != timelineZoomScale {
+                timelineZoomScale = normalized
+                return
+            }
+            AppSettings.timelineZoomScale = normalized
+        }
+    }
+    var timelineMaxEventMarkers: Int = AppSettings.timelineMaxEventMarkers {
+        didSet {
+            let normalized = clampedTimelineMaxEventMarkers(timelineMaxEventMarkers)
+            if normalized != timelineMaxEventMarkers {
+                timelineMaxEventMarkers = normalized
+                return
+            }
+            AppSettings.timelineMaxEventMarkers = normalized
+        }
+    }
+    var spanEventsRowLimit: Int = AppSettings.spanEventsRowLimit {
+        didSet {
+            let normalized = clampedSpanEventsRowLimit(spanEventsRowLimit)
+            if normalized != spanEventsRowLimit {
+                spanEventsRowLimit = normalized
+                return
+            }
+            AppSettings.spanEventsRowLimit = normalized
+        }
+    }
     var isApplyingTransparentMode: Bool = false
     var openClawTransparentModeLastMessage: String?
 
@@ -112,6 +156,11 @@ final class AppState {
 
     var canLoadMoreTraces: Bool {
         loadedTraceFileCount < totalTraceFileCount
+    }
+
+    var tracePageSizeSetting: Int {
+        get { tracePageSize }
+        set { tracePageSize = newValue }
     }
 
     var openClawSetupStatus: OpenClawSetupStatus {
@@ -500,6 +549,30 @@ final class AppState {
     private static func makeLoader(for directoryURL: URL) -> TraceLoader {
         let locator = TraceFileLocator(tracesDirectoryURL: directoryURL)
         return TraceLoader(locator: locator)
+    }
+
+    private func clampedTracePageSize(_ value: Int) -> Int {
+        min(max(value, AppSettings.tracePageSizeRange.lowerBound), AppSettings.tracePageSizeRange.upperBound)
+    }
+
+    private func clampedTimelineMaxEventMarkers(_ value: Int) -> Int {
+        min(
+            max(value, AppSettings.timelineMaxEventMarkersRange.lowerBound),
+            AppSettings.timelineMaxEventMarkersRange.upperBound
+        )
+    }
+
+    private func clampedSpanEventsRowLimit(_ value: Int) -> Int {
+        min(
+            max(value, AppSettings.spanEventsRowLimitRange.lowerBound),
+            AppSettings.spanEventsRowLimitRange.upperBound
+        )
+    }
+
+    private func clampedTimelineZoomScale(_ value: CGFloat) -> CGFloat {
+        let lower = CGFloat(AppSettings.timelineZoomScaleRange.lowerBound)
+        let upper = CGFloat(AppSettings.timelineZoomScaleRange.upperBound)
+        return min(max(value, lower), upper)
     }
 
     private nonisolated func pruneStaleTracesIfNeeded() async {

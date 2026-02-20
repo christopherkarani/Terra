@@ -10,7 +10,7 @@ struct SpanEventsTable: View {
 
     @State private var showAll = false
 
-    init(items: [EventItem], maxRows: Int = 300) {
+    init(items: [EventItem], maxRows: Int = AppSettings.spanEventsRowLimit) {
         self.items = items
         self.maxRows = max(1, maxRows)
     }

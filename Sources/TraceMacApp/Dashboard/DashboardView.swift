@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import TerraTraceKit
 
@@ -85,18 +86,24 @@ struct DashboardView: View {
 
 struct DashboardContentColumn: View {
     @Environment(AppState.self) private var appState
-    @State private var zoomScale: CGFloat = 1.0
 
     var body: some View {
+        @Bindable var appState = appState
+
         if let trace = appState.selectedTrace,
            let viewModel = appState.timelineViewModel {
             VStack(spacing: 0) {
                 KPICardsView()
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.top)
+
+                DashboardVolumeControlsView()
+                    .padding(.horizontal)
+                    .padding(.bottom, 10)
 
                 Divider()
 
-                TimelineRulerView(trace: trace, zoomScale: zoomScale)
+                TimelineRulerView(trace: trace, zoomScale: appState.timelineZoomScale)
 
                 TraceTimelineCanvasView(
                     viewModel: viewModel,
@@ -104,7 +111,8 @@ struct DashboardContentColumn: View {
                     onSelectSpan: { span in
                         appState.selectSpan(span)
                     },
-                    zoomScale: $zoomScale
+                    maxEventMarkers: appState.timelineMaxEventMarkers,
+                    zoomScale: $appState.timelineZoomScale
                 )
             }
         } else {
@@ -114,6 +122,74 @@ struct DashboardContentColumn: View {
                 subtitle: "Choose a trace from the sidebar to view its timeline"
             )
         }
+    }
+}
+
+private struct DashboardVolumeControlsView: View {
+    @Environment(AppState.self) private var appState
+
+    private var zoomRange: ClosedRange<CGFloat> {
+        CGFloat(AppSettings.timelineZoomScaleRange.lowerBound)...CGFloat(AppSettings.timelineZoomScaleRange.upperBound)
+    }
+
+    var body: some View {
+        @Bindable var appState = appState
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Volume Controls")
+                    .font(DashboardTheme.sectionHeader)
+                    .foregroundStyle(DashboardTheme.textPrimary)
+                Spacer()
+                Button("Reset Defaults") {
+                    appState.tracePageSizeSetting = AppSettings.defaultTracePageSize
+                    appState.timelineMaxEventMarkers = AppSettings.defaultTimelineMaxEventMarkers
+                    appState.spanEventsRowLimit = AppSettings.defaultSpanEventsRowLimit
+                    appState.timelineZoomScale = CGFloat(AppSettings.defaultTimelineZoomScale)
+                }
+                .controlSize(.small)
+            }
+
+            HStack(spacing: 12) {
+                Stepper(value: $appState.tracePageSizeSetting, in: AppSettings.tracePageSizeRange, step: 25) {
+                    Text("Trace page size: \(appState.tracePageSizeSetting)")
+                        .font(DashboardTheme.detail)
+                }
+
+                Stepper(value: $appState.timelineMaxEventMarkers, in: AppSettings.timelineMaxEventMarkersRange, step: 100) {
+                    Text("Timeline markers: \(appState.timelineMaxEventMarkers)")
+                        .font(DashboardTheme.detail)
+                }
+
+                Stepper(value: $appState.spanEventsRowLimit, in: AppSettings.spanEventsRowLimitRange, step: 25) {
+                    Text("Event rows: \(appState.spanEventsRowLimit)")
+                        .font(DashboardTheme.detail)
+                }
+            }
+
+            HStack(spacing: 10) {
+                Text("Timeline zoom")
+                    .font(DashboardTheme.detail)
+                    .frame(width: 84, alignment: .leading)
+                Slider(value: $appState.timelineZoomScale, in: zoomRange, step: 0.05)
+                Text(String(format: "%.2fx", Double(appState.timelineZoomScale)))
+                    .font(DashboardTheme.detail.monospacedDigit())
+                    .frame(width: 58, alignment: .trailing)
+                Button("Reset Zoom") {
+                    appState.timelineZoomScale = CGFloat(AppSettings.defaultTimelineZoomScale)
+                }
+                .controlSize(.small)
+            }
+
+            Text("Controls are persisted and apply immediately to loading, timeline rendering, and event tables.")
+                .font(.system(size: 10, weight: .regular))
+                .foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(DashboardTheme.surfaceBackground)
+        )
     }
 }
 

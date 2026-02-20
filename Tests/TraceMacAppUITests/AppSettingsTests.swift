@@ -11,6 +11,12 @@ struct AppSettingsTests {
     static let automaticUpdateChecksEnabled = "traceMacApp.automaticUpdateChecksEnabled"
     static let watchTracesDirectory = "traceMacApp.watchTracesDirectory"
     static let didCompleteOnboarding = "traceMacApp.didCompleteOnboarding"
+    static let tracePageSize = "traceMacApp.tracePageSize"
+    static let timelineMaxEventMarkers = "traceMacApp.timelineMaxEventMarkers"
+    static let spanEventsRowLimit = "traceMacApp.spanEventsRowLimit"
+    static let timelineZoomScale = "traceMacApp.timelineZoomScale"
+    static let runtimeFilter = "traceMacApp.runtimeFilter"
+    static let openClawSourceFilter = "traceMacApp.openClawSourceFilter"
   }
 
   private func cleanupDefaults() {
@@ -20,6 +26,12 @@ struct AppSettingsTests {
     defaults.removeObject(forKey: Key.automaticUpdateChecksEnabled)
     defaults.removeObject(forKey: Key.watchTracesDirectory)
     defaults.removeObject(forKey: Key.didCompleteOnboarding)
+    defaults.removeObject(forKey: Key.tracePageSize)
+    defaults.removeObject(forKey: Key.timelineMaxEventMarkers)
+    defaults.removeObject(forKey: Key.spanEventsRowLimit)
+    defaults.removeObject(forKey: Key.timelineZoomScale)
+    defaults.removeObject(forKey: Key.runtimeFilter)
+    defaults.removeObject(forKey: Key.openClawSourceFilter)
   }
 
   @Test("Default tracesDirectoryURL returns a valid URL")
@@ -68,6 +80,41 @@ struct AppSettingsTests {
 
     AppSettings.didCompleteOnboarding = true
     #expect(AppSettings.didCompleteOnboarding == true)
+
+    cleanupDefaults()
+  }
+
+  @Test("Dashboard volume settings clamp and round-trip")
+  func dashboardVolumeSettingsRoundTrip() {
+    cleanupDefaults()
+
+    AppSettings.tracePageSize = 120
+    #expect(AppSettings.tracePageSize == 120)
+
+    AppSettings.tracePageSize = 999_999
+    #expect(AppSettings.tracePageSize == AppSettings.tracePageSizeRange.upperBound)
+
+    AppSettings.timelineMaxEventMarkers = 2_500
+    #expect(AppSettings.timelineMaxEventMarkers == 2_500)
+
+    AppSettings.spanEventsRowLimit = 640
+    #expect(AppSettings.spanEventsRowLimit == 640)
+
+    AppSettings.timelineZoomScale = 1.65
+    #expect(abs(AppSettings.timelineZoomScale - 1.65) < 0.000_1)
+
+    cleanupDefaults()
+  }
+
+  @Test("Runtime and source filter persistence round-trip")
+  func runtimeAndSourceFilterRoundTrip() {
+    cleanupDefaults()
+
+    AppSettings.runtimeFilterRawValue = TraceRuntimeFilter.ollama.rawValue
+    AppSettings.openClawSourceFilterRawValue = OpenClawTraceSourceFilter.gateway.rawValue
+
+    #expect(AppSettings.runtimeFilterRawValue == TraceRuntimeFilter.ollama.rawValue)
+    #expect(AppSettings.openClawSourceFilterRawValue == OpenClawTraceSourceFilter.gateway.rawValue)
 
     cleanupDefaults()
   }

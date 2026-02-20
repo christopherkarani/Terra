@@ -15,7 +15,7 @@ private struct SpanLayout: Identifiable {
 }
 
 private struct TimelineEventMarker: Identifiable {
-    enum Kind {
+    enum Kind: String {
         case promptEval
         case decode
         case tokenLifecycle
@@ -32,6 +32,71 @@ private struct TimelineEventMarker: Identifiable {
     let y: CGFloat
     let kind: Kind
     let label: String
+}
+
+private struct TimelineMarkerCompactionResult {
+    let markers: [TimelineEventMarker]
+    let sourceCount: Int
+    let coalescedCount: Int
+    let sampledCount: Int
+    let maxMarkerLimit: Int
+
+    var aggregationLevel: String {
+        if sampledCount > 0 { return "sampled" }
+        if coalescedCount > 0 { return "coalesced" }
+        return "none"
+    }
+}
+
+private struct TimelineMarkerRenderState {
+    var sourceCount: Int = 0
+    var coalescedCount: Int = 0
+    var sampledCount: Int = 0
+    var renderedCount: Int = 0
+    var targetCount: Int = 0
+    var maxMarkerLimit: Int = 0
+    var isRendering: Bool = false
+    var aggregationLevel: String = "none"
+
+    static let empty = TimelineMarkerRenderState()
+
+    var statusText: String {
+        guard sourceCount > 0 else {
+            return "No event markers"
+        }
+
+        var parts: [String] = []
+        parts.append("Markers \(renderedCount)/\(targetCount)")
+
+        if aggregationLevel != "none" {
+            parts.append("aggregation=\(aggregationLevel)")
+        }
+        if coalescedCount > 0 {
+            parts.append("coalesced=\(coalescedCount)")
+        }
+        if sampledCount > 0 {
+            parts.append("sampled=\(sampledCount)")
+        }
+        if isRendering {
+            parts.append("rendering")
+        }
+        parts.append("limit=\(maxMarkerLimit)")
+        return parts.joined(separator: " • ")
+    }
+}
+
+struct TimelineMarkerDebugSample {
+    let x: CGFloat
+    let kind: String
+    let spanHex: String
+}
+
+struct TimelineMarkerDebugStats: Equatable {
+    let sourceCount: Int
+    let keptCount: Int
+    let coalescedCount: Int
+    let sampledCount: Int
+    let aggregationLevel: String
 }
 
 // MARK: - TraceTimelineCanvasView
@@ -53,6 +118,7 @@ struct TraceTimelineCanvasView: View {
 
     /// Callback invoked when a span is tapped.
     var onSelectSpan: ((SpanData) -> Void)?
+    var maxEventMarkers: Int
 
     // MARK: - State
 
@@ -62,6 +128,9 @@ struct TraceTimelineCanvasView: View {
     @State private var contentSize: CGSize = .zero
     @State private var containerWidth: CGFloat = 0
     @State private var eventMarkers: [TimelineEventMarker] = []
+    @State private var markerRenderState: TimelineMarkerRenderState = .empty
+    @State private var markerRenderGeneration: UInt64 = 0
+    @State private var markerRenderTask: Task<Void, Never>?
 
     // MARK: - Layout Constants
 
@@ -75,10 +144,11 @@ struct TraceTimelineCanvasView: View {
     private let labelMinimumWidth: CGFloat = 52
     private let barCornerRadius: CGFloat = 5
     private let laneCornerRadius: CGFloat = 6
-    private let zoomMinimum: CGFloat = 0.5
-    private let zoomMaximum: CGFloat = 5.0
+    private let zoomMinimum: CGFloat = CGFloat(AppSettings.timelineZoomScaleRange.lowerBound)
+    private let zoomMaximum: CGFloat = CGFloat(AppSettings.timelineZoomScaleRange.upperBound)
     private let zoomStep: CGFloat = 1.25
-    private let maxEventMarkers = 1200
+    private let markerCoalesceBucketWidth: CGFloat = 2.0
+    private let markerProgressiveBatchSize: Int = 256
 
     // MARK: - Body
 
@@ -102,6 +172,13 @@ struct TraceTimelineCanvasView: View {
         }
         .onChange(of: zoomScale) {
             rebuildLayouts()
+        }
+        .onChange(of: maxEventMarkers) {
+            rebuildLayouts()
+        }
+        .onDisappear {
+            markerRenderTask?.cancel()
+            markerRenderTask = nil
         }
     }
 
@@ -132,9 +209,27 @@ struct TraceTimelineCanvasView: View {
         .overlay {
             hitTestOverlay
         }
+        .overlay(alignment: .bottomTrailing) {
+            markerStatusOverlay
+                .padding(10)
+        }
         .gesture(zoomGesture)
         .accessibilityLabel("Trace timeline")
         .accessibilityHint("Displays span bars in a waterfall layout. Use VoiceOver to navigate individual spans.")
+    }
+
+    @ViewBuilder
+    private var markerStatusOverlay: some View {
+        if markerRenderState.sourceCount > 0 {
+            Text(markerRenderState.statusText)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .foregroundStyle(.secondary)
+                .background(.ultraThinMaterial, in: Capsule())
+                .accessibilityLabel("Timeline marker status")
+                .accessibilityValue(markerRenderState.statusText)
+        }
     }
 
     // MARK: - Drawing
@@ -345,7 +440,7 @@ struct TraceTimelineCanvasView: View {
     }
 
     private func resetZoom() {
-        zoomScale = 1.0
+        zoomScale = CGFloat(AppSettings.defaultTimelineZoomScale)
     }
 
     // MARK: - Layout Computation
@@ -357,6 +452,10 @@ struct TraceTimelineCanvasView: View {
         guard !lanes.isEmpty else {
             layouts = []
             contentSize = .zero
+            eventMarkers = []
+            markerRenderState = .empty
+            markerRenderTask?.cancel()
+            markerRenderTask = nil
             return
         }
 
@@ -393,11 +492,12 @@ struct TraceTimelineCanvasView: View {
         }
 
         layouts = newLayouts
-        eventMarkers = buildTimelineEventMarkers(
+        let markerCompaction = buildTimelineEventMarkers(
             layouts: newLayouts,
             totalWidth: totalWidth,
             availableWidth: availableWidth
         )
+        renderEventMarkersProgressively(using: markerCompaction)
         contentSize = CGSize(width: totalWidth, height: totalHeight)
     }
 
@@ -417,7 +517,7 @@ struct TraceTimelineCanvasView: View {
         layouts: [SpanLayout],
         totalWidth: CGFloat,
         availableWidth: CGFloat
-    ) -> [TimelineEventMarker] {
+    ) -> TimelineMarkerCompactionResult {
         let effectiveWidth = max(totalWidth, minimumCanvasWidth)
         let effectiveAvailableWidth = availableWidth > 0 ? availableWidth : (effectiveWidth - leftPadding - rightPadding)
         let traceDuration = max(viewModel.trace.duration, 0.001)
@@ -439,7 +539,111 @@ struct TraceTimelineCanvasView: View {
             }
         }
 
-        return downsampledMarkers(markers)
+        return compactedMarkers(markers)
+    }
+
+    private func compactedMarkers(_ markers: [TimelineEventMarker]) -> TimelineMarkerCompactionResult {
+        let resolvedLimit = max(1, maxEventMarkers)
+        guard !markers.isEmpty else {
+            return TimelineMarkerCompactionResult(
+                markers: [],
+                sourceCount: 0,
+                coalescedCount: 0,
+                sampledCount: 0,
+                maxMarkerLimit: resolvedLimit
+            )
+        }
+
+        var buckets: [String: TimelineEventMarker] = [:]
+        buckets.reserveCapacity(markers.count)
+        var orderedBucketKeys: [String] = []
+        orderedBucketKeys.reserveCapacity(markers.count)
+
+        for marker in markers {
+            let bucket = Int((marker.x / markerCoalesceBucketWidth).rounded(.down))
+            let key = "\(bucket)|\(marker.kind.rawValue)|\(marker.spanId.hexString)"
+            if buckets[key] == nil {
+                orderedBucketKeys.append(key)
+                buckets[key] = marker
+            }
+        }
+
+        let coalesced = orderedBucketKeys.compactMap { buckets[$0] }
+        let coalescedCount = max(0, markers.count - coalesced.count)
+
+        guard coalesced.count > resolvedLimit else {
+            return TimelineMarkerCompactionResult(
+                markers: coalesced,
+                sourceCount: markers.count,
+                coalescedCount: coalescedCount,
+                sampledCount: 0,
+                maxMarkerLimit: resolvedLimit
+            )
+        }
+
+        let step = Int(ceil(Double(coalesced.count) / Double(resolvedLimit)))
+        let sampled = stride(from: 0, to: coalesced.count, by: step).map { coalesced[$0] }
+        let sampledCount = max(0, coalesced.count - sampled.count)
+        return TimelineMarkerCompactionResult(
+            markers: sampled,
+            sourceCount: markers.count,
+            coalescedCount: coalescedCount,
+            sampledCount: sampledCount,
+            maxMarkerLimit: resolvedLimit
+        )
+    }
+
+    private func renderEventMarkersProgressively(using compaction: TimelineMarkerCompactionResult) {
+        markerRenderTask?.cancel()
+        markerRenderTask = nil
+        markerRenderGeneration &+= 1
+        let generation = markerRenderGeneration
+
+        let targetMarkers = compaction.markers
+        markerRenderState = TimelineMarkerRenderState(
+            sourceCount: compaction.sourceCount,
+            coalescedCount: compaction.coalescedCount,
+            sampledCount: compaction.sampledCount,
+            renderedCount: 0,
+            targetCount: targetMarkers.count,
+            maxMarkerLimit: compaction.maxMarkerLimit,
+            isRendering: false,
+            aggregationLevel: compaction.aggregationLevel
+        )
+
+        guard !targetMarkers.isEmpty else {
+            eventMarkers = []
+            return
+        }
+
+        if targetMarkers.count <= markerProgressiveBatchSize {
+            eventMarkers = targetMarkers
+            markerRenderState.renderedCount = targetMarkers.count
+            return
+        }
+
+        eventMarkers = Array(targetMarkers.prefix(markerProgressiveBatchSize))
+        markerRenderState.renderedCount = eventMarkers.count
+        markerRenderState.isRendering = true
+
+        markerRenderTask = Task { @MainActor in
+            var index = markerProgressiveBatchSize
+            while index < targetMarkers.count {
+                if Task.isCancelled {
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 8_000_000)
+                if generation != markerRenderGeneration {
+                    return
+                }
+
+                let nextIndex = min(targetMarkers.count, index + markerProgressiveBatchSize)
+                eventMarkers.append(contentsOf: targetMarkers[index..<nextIndex])
+                markerRenderState.renderedCount = eventMarkers.count
+                index = nextIndex
+            }
+            markerRenderState.isRendering = false
+        }
     }
 
     private func eventLayoutMarker(
@@ -456,55 +660,25 @@ struct TraceTimelineCanvasView: View {
 
         let x = leftPadding + CGFloat(normalized) * availableWidth
         let y = spanLayout.rect.midY
-        let kind = eventKind(for: event)
-        if kind == nil { return nil }
+        guard let kind = eventKind(for: event) else { return nil }
 
-        let label = markerLabel(for: event, kind: kind!)
+        let label = markerLabel(for: event, kind: kind)
         return TimelineEventMarker(
             id: "\(spanLayout.span.spanId.hexString)|\(event.timestamp.timeIntervalSinceReferenceDate)|\(event.name)",
             spanId: spanLayout.span.spanId,
             x: x,
             y: y,
-            kind: kind!,
+            kind: kind,
             label: label
         )
     }
 
     private func eventKind(for event: SpanData.Event) -> TimelineEventMarker.Kind? {
-        let normalizedName = event.name.lowercased()
-        if normalizedName.contains("stalled") && normalizedName.contains("token") {
-            return .stall
-        }
-        if normalizedName == "terra.anomaly.stalled_token" || normalizedName == "terra.anomaly" {
-            return .anomaly
-        }
-        if normalizedName == "terra.recommendation" {
-            return .recommendation
-        }
-        if normalizedName.contains("prompt_eval") || normalizedName.contains("prompt-eval") {
-            return .promptEval
-        }
-        if normalizedName == "terra.stage.decode" || normalizedName.contains("decode") {
-            return .decode
-        }
-        if normalizedName == "terra.first_token" || normalizedName == "terra.token.lifecycle" {
-            return .tokenLifecycle
-        }
-        if normalizedName.hasPrefix("terra.hw") || normalizedName.hasPrefix("terra.process") {
-            return .hardware
-        }
-
-        let keys = Set(event.attributes.keys)
-        if keys.contains("terra.process.thermal_state") || keys.contains("terra.hw.memory_pressure") {
-            return .hardware
-        }
-        if keys.contains("terra.recommendation.kind") || keys.contains("terra.recommendation.action") {
-            return .recommendation
-        }
-        if keys.contains("terra.anomaly.kind") || keys.contains("terra.anomaly.score") {
-            return .anomaly
-        }
-        return .unknown
+        let kindName = Self.markerKindName(
+            eventName: event.name,
+            attributes: event.attributes
+        )
+        return TimelineEventMarker.Kind(rawValue: kindName) ?? .unknown
     }
 
     private func markerLabel(for event: SpanData.Event, kind: TimelineEventMarker.Kind) -> String {
@@ -526,12 +700,6 @@ struct TraceTimelineCanvasView: View {
         case .unknown:
             return event.name
         }
-    }
-
-    private func downsampledMarkers(_ markers: [TimelineEventMarker]) -> [TimelineEventMarker] {
-        guard markers.count > maxEventMarkers else { return markers }
-        let step = Int(ceil(Double(markers.count) / Double(maxEventMarkers)))
-        return stride(from: 0, through: markers.count - 1, by: step).map { markers[$0] }
     }
 
     private func markerColor(_ kind: TimelineEventMarker.Kind) -> Color {
@@ -564,5 +732,101 @@ struct TraceTimelineCanvasView: View {
         if layout.isError { label += ", error" }
         if layout.isCritical { label += ", slow" }
         return label
+    }
+
+    static func markerKindName(
+        eventName: String,
+        attributes: [String: OpenTelemetryApi.AttributeValue]
+    ) -> String {
+        let normalizedName = eventName.lowercased()
+        if normalizedName.contains("stalled") && normalizedName.contains("token") {
+            return TimelineEventMarker.Kind.stall.rawValue
+        }
+        if normalizedName == "terra.anomaly.stalled_token" || normalizedName == "terra.anomaly" {
+            return TimelineEventMarker.Kind.anomaly.rawValue
+        }
+        if normalizedName == "terra.recommendation" {
+            return TimelineEventMarker.Kind.recommendation.rawValue
+        }
+        if normalizedName.contains("prompt_eval") || normalizedName.contains("prompt-eval") {
+            return TimelineEventMarker.Kind.promptEval.rawValue
+        }
+        if normalizedName == "terra.stage.decode" || normalizedName.contains("decode") {
+            return TimelineEventMarker.Kind.decode.rawValue
+        }
+        if normalizedName == "terra.first_token"
+            || normalizedName == "terra.token.lifecycle"
+            || normalizedName == "terra.stream.lifecycle"
+        {
+            return TimelineEventMarker.Kind.tokenLifecycle.rawValue
+        }
+        if normalizedName.hasPrefix("terra.hw") || normalizedName.hasPrefix("terra.process") {
+            return TimelineEventMarker.Kind.hardware.rawValue
+        }
+
+        let keys = Set(attributes.keys)
+        if keys.contains("terra.process.thermal_state") || keys.contains("terra.hw.memory_pressure") {
+            return TimelineEventMarker.Kind.hardware.rawValue
+        }
+        if keys.contains("terra.recommendation.kind") || keys.contains("terra.recommendation.action") {
+            return TimelineEventMarker.Kind.recommendation.rawValue
+        }
+        if keys.contains("terra.anomaly.kind") || keys.contains("terra.anomaly.score") {
+            return TimelineEventMarker.Kind.anomaly.rawValue
+        }
+
+        return TimelineEventMarker.Kind.unknown.rawValue
+    }
+
+    static func markerCompactionStats(
+        samples: [TimelineMarkerDebugSample],
+        maxEventMarkers: Int,
+        bucketWidth: CGFloat = 2.0
+    ) -> TimelineMarkerDebugStats {
+        let resolvedLimit = max(1, maxEventMarkers)
+        guard !samples.isEmpty else {
+            return TimelineMarkerDebugStats(
+                sourceCount: 0,
+                keptCount: 0,
+                coalescedCount: 0,
+                sampledCount: 0,
+                aggregationLevel: "none"
+            )
+        }
+
+        let safeBucketWidth = max(0.01, bucketWidth)
+        var seen: Set<String> = []
+        var coalescedKeys: [String] = []
+        coalescedKeys.reserveCapacity(samples.count)
+
+        for sample in samples {
+            let bucket = Int((sample.x / safeBucketWidth).rounded(.down))
+            let key = "\(bucket)|\(sample.kind)|\(sample.spanHex)"
+            if seen.insert(key).inserted {
+                coalescedKeys.append(key)
+            }
+        }
+
+        let coalescedCount = max(0, samples.count - coalescedKeys.count)
+        if coalescedKeys.count <= resolvedLimit {
+            return TimelineMarkerDebugStats(
+                sourceCount: samples.count,
+                keptCount: coalescedKeys.count,
+                coalescedCount: coalescedCount,
+                sampledCount: 0,
+                aggregationLevel: coalescedCount > 0 ? "coalesced" : "none"
+            )
+        }
+
+        let step = Int(ceil(Double(coalescedKeys.count) / Double(resolvedLimit)))
+        let keptCount = Array(stride(from: 0, to: coalescedKeys.count, by: step)).count
+        let sampledCount = max(0, coalescedKeys.count - keptCount)
+        return TimelineMarkerDebugStats(
+            sourceCount: samples.count,
+            keptCount: keptCount,
+            coalescedCount: coalescedCount,
+            sampledCount: sampledCount,
+            aggregationLevel: "sampled"
+        )
     }
 }

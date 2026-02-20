@@ -9,6 +9,8 @@ final class SpanDetailViewController: NSViewController {
 
   private let attributesTable = NSTableView()
   private let eventsTable = NSTableView()
+  private let lifecycleEventsTable = NSTableView()
+  private let policyEventsTable = NSTableView()
   private let recommendationEventsTable = NSTableView()
   private let anomalyEventsTable = NSTableView()
   private let hardwareEventsTable = NSTableView()
@@ -29,6 +31,14 @@ final class SpanDetailViewController: NSViewController {
     configure(table: attributesTable, columns: [("Key", 160), ("Value", 240)])
     configure(
       table: eventsTable,
+      columns: [("Event", 140), ("Timestamp", 125), ("Attributes", 220)]
+    )
+    configure(
+      table: lifecycleEventsTable,
+      columns: [("Event", 140), ("Timestamp", 125), ("Attributes", 220)]
+    )
+    configure(
+      table: policyEventsTable,
       columns: [("Event", 140), ("Timestamp", 125), ("Attributes", 220)]
     )
     configure(
@@ -53,6 +63,14 @@ final class SpanDetailViewController: NSViewController {
     eventsItem.label = "Events"
     eventsItem.view = wrap(table: eventsTable)
 
+    let lifecycleItem = NSTabViewItem(identifier: "lifecycle")
+    lifecycleItem.label = "Lifecycle"
+    lifecycleItem.view = wrap(table: lifecycleEventsTable)
+
+    let policyItem = NSTabViewItem(identifier: "policy")
+    policyItem.label = "Policy"
+    policyItem.view = wrap(table: policyEventsTable)
+
     let recommendationItem = NSTabViewItem(identifier: "recommendations")
     recommendationItem.label = "Recommendations"
     recommendationItem.view = wrap(table: recommendationEventsTable)
@@ -71,6 +89,8 @@ final class SpanDetailViewController: NSViewController {
 
     tabView.addTabViewItem(attributesItem)
     tabView.addTabViewItem(eventsItem)
+    tabView.addTabViewItem(lifecycleItem)
+    tabView.addTabViewItem(policyItem)
     tabView.addTabViewItem(recommendationItem)
     tabView.addTabViewItem(anomalyItem)
     tabView.addTabViewItem(hardwareItem)
@@ -108,6 +128,8 @@ final class SpanDetailViewController: NSViewController {
   private func reloadTables() {
     attributesTable.reloadData()
     eventsTable.reloadData()
+    lifecycleEventsTable.reloadData()
+    policyEventsTable.reloadData()
     recommendationEventsTable.reloadData()
     anomalyEventsTable.reloadData()
     hardwareEventsTable.reloadData()
@@ -144,13 +166,17 @@ extension SpanDetailViewController: NSTableViewDataSource, NSTableViewDelegate {
     case attributesTable:
       return viewModel.attributeItems.count
     case eventsTable:
-      return viewModel.eventItems.count
+      return limitedEventItems(viewModel.eventItems).count
+    case lifecycleEventsTable:
+      return limitedEventItems(viewModel.lifecycleEventItems).count
+    case policyEventsTable:
+      return limitedEventItems(viewModel.policyEventItems).count
     case recommendationEventsTable:
-      return viewModel.recommendationEventItems.count
+      return limitedEventItems(viewModel.recommendationEventItems).count
     case anomalyEventsTable:
-      return viewModel.anomalyEventItems.count
+      return limitedEventItems(viewModel.anomalyEventItems).count
     case hardwareEventsTable:
-      return viewModel.hardwareEventItems.count
+      return limitedEventItems(viewModel.hardwareEventItems).count
     case linksTable:
       return viewModel.linkItems.count
     default:
@@ -185,16 +211,22 @@ extension SpanDetailViewController: NSTableViewDataSource, NSTableViewDelegate {
       let item = viewModel.attributeItems[row]
       value = tableColumn?.identifier.rawValue == "Key" ? item.key : item.value
     } else if tableView == eventsTable {
-      let item = viewModel.eventItems[row]
+      let item = limitedEventItems(viewModel.eventItems)[row]
+      value = cellValue(for: item, tableColumn: tableColumn)
+    } else if tableView == lifecycleEventsTable {
+      let item = limitedEventItems(viewModel.lifecycleEventItems)[row]
+      value = cellValue(for: item, tableColumn: tableColumn)
+    } else if tableView == policyEventsTable {
+      let item = limitedEventItems(viewModel.policyEventItems)[row]
       value = cellValue(for: item, tableColumn: tableColumn)
     } else if tableView == recommendationEventsTable {
-      let item = viewModel.recommendationEventItems[row]
+      let item = limitedEventItems(viewModel.recommendationEventItems)[row]
       value = cellValue(for: item, tableColumn: tableColumn)
     } else if tableView == anomalyEventsTable {
-      let item = viewModel.anomalyEventItems[row]
+      let item = limitedEventItems(viewModel.anomalyEventItems)[row]
       value = cellValue(for: item, tableColumn: tableColumn)
     } else if tableView == hardwareEventsTable {
-      let item = viewModel.hardwareEventItems[row]
+      let item = limitedEventItems(viewModel.hardwareEventItems)[row]
       value = cellValue(for: item, tableColumn: tableColumn)
     } else if tableView == linksTable {
       let item = viewModel.linkItems[row]
@@ -225,5 +257,13 @@ extension SpanDetailViewController: NSTableViewDataSource, NSTableViewDelegate {
     default:
       return ""
     }
+  }
+
+  private func limitedEventItems(_ items: [EventItem]) -> [EventItem] {
+    let limit = max(1, AppSettings.spanEventsRowLimit)
+    if items.count <= limit {
+      return items
+    }
+    return Array(items.prefix(limit))
   }
 }

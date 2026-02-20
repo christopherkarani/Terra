@@ -11,6 +11,12 @@ enum AppSettings {
     static let traceRetentionDays = "traceMacApp.traceRetentionDays"
     static let otlpReceiverEnabled = "traceMacApp.otlpReceiverEnabled"
     static let otlpReceiverPort = "traceMacApp.otlpReceiverPort"
+    static let tracePageSize = "traceMacApp.tracePageSize"
+    static let timelineMaxEventMarkers = "traceMacApp.timelineMaxEventMarkers"
+    static let spanEventsRowLimit = "traceMacApp.spanEventsRowLimit"
+    static let timelineZoomScale = "traceMacApp.timelineZoomScale"
+    static let runtimeFilter = "traceMacApp.runtimeFilter"
+    static let openClawSourceFilter = "traceMacApp.openClawSourceFilter"
     static let openClawGatewayCaptureEnabled = "traceMacApp.openClawGatewayCaptureEnabled"
     static let openClawTransparentModeEnabled = "traceMacApp.openClawTransparentModeEnabled"
     static let openClawGatewayEndpoint = "traceMacApp.openClawGatewayEndpoint"
@@ -19,6 +25,15 @@ enum AppSettings {
   }
 
   static let defaultOTLPReceiverPort: UInt16 = 4318
+  static let defaultTracePageSize: Int = 100
+  static let defaultTimelineMaxEventMarkers: Int = 1200
+  static let defaultSpanEventsRowLimit: Int = 300
+  static let defaultTimelineZoomScale: Double = 1.0
+
+  static let tracePageSizeRange: ClosedRange<Int> = 25...5_000
+  static let timelineMaxEventMarkersRange: ClosedRange<Int> = 200...25_000
+  static let spanEventsRowLimitRange: ClosedRange<Int> = 25...10_000
+  static let timelineZoomScaleRange: ClosedRange<Double> = 0.5...5.0
 
   private static let defaults: UserDefaults = {
     let ud = UserDefaults.standard
@@ -28,6 +43,12 @@ enum AppSettings {
       Key.traceRetentionDays: 30,
       Key.otlpReceiverEnabled: false,
       Key.otlpReceiverPort: Int(defaultOTLPReceiverPort),
+      Key.tracePageSize: defaultTracePageSize,
+      Key.timelineMaxEventMarkers: defaultTimelineMaxEventMarkers,
+      Key.spanEventsRowLimit: defaultSpanEventsRowLimit,
+      Key.timelineZoomScale: defaultTimelineZoomScale,
+      Key.runtimeFilter: TraceRuntimeFilter.all.rawValue,
+      Key.openClawSourceFilter: OpenClawTraceSourceFilter.all.rawValue,
       Key.openClawGatewayCaptureEnabled: false,
       Key.openClawTransparentModeEnabled: false,
       Key.openClawGatewayEndpoint: "http://localhost:3000/v1/chat/completions",
@@ -90,6 +111,70 @@ enum AppSettings {
     set { defaults.set(Int(newValue), forKey: Key.otlpReceiverPort) }
   }
 
+  static var tracePageSize: Int {
+    get {
+      let value = defaults.integer(forKey: Key.tracePageSize)
+      return clampedInt(
+        value > 0 ? value : defaultTracePageSize,
+        range: tracePageSizeRange
+      )
+    }
+    set {
+      defaults.set(clampedInt(newValue, range: tracePageSizeRange), forKey: Key.tracePageSize)
+    }
+  }
+
+  static var timelineMaxEventMarkers: Int {
+    get {
+      let value = defaults.integer(forKey: Key.timelineMaxEventMarkers)
+      return clampedInt(
+        value > 0 ? value : defaultTimelineMaxEventMarkers,
+        range: timelineMaxEventMarkersRange
+      )
+    }
+    set {
+      defaults.set(
+        clampedInt(newValue, range: timelineMaxEventMarkersRange),
+        forKey: Key.timelineMaxEventMarkers
+      )
+    }
+  }
+
+  static var spanEventsRowLimit: Int {
+    get {
+      let value = defaults.integer(forKey: Key.spanEventsRowLimit)
+      return clampedInt(
+        value > 0 ? value : defaultSpanEventsRowLimit,
+        range: spanEventsRowLimitRange
+      )
+    }
+    set {
+      defaults.set(clampedInt(newValue, range: spanEventsRowLimitRange), forKey: Key.spanEventsRowLimit)
+    }
+  }
+
+  static var timelineZoomScale: CGFloat {
+    get {
+      let value = defaults.double(forKey: Key.timelineZoomScale)
+      let safeValue = value > 0 ? value : defaultTimelineZoomScale
+      return CGFloat(clampedDouble(safeValue, range: timelineZoomScaleRange))
+    }
+    set {
+      let clamped = clampedDouble(Double(newValue), range: timelineZoomScaleRange)
+      defaults.set(clamped, forKey: Key.timelineZoomScale)
+    }
+  }
+
+  static var runtimeFilterRawValue: String {
+    get { defaults.string(forKey: Key.runtimeFilter) ?? TraceRuntimeFilter.all.rawValue }
+    set { defaults.set(newValue, forKey: Key.runtimeFilter) }
+  }
+
+  static var openClawSourceFilterRawValue: String {
+    get { defaults.string(forKey: Key.openClawSourceFilter) ?? OpenClawTraceSourceFilter.all.rawValue }
+    set { defaults.set(newValue, forKey: Key.openClawSourceFilter) }
+  }
+
   static var isOpenClawGatewayCaptureEnabled: Bool {
     get { defaults.bool(forKey: Key.openClawGatewayCaptureEnabled) }
     set { defaults.set(newValue, forKey: Key.openClawGatewayCaptureEnabled) }
@@ -130,5 +215,13 @@ enum AppSettings {
     if name == "diagnostics.jsonl" || name == "gateway.log" { return true }
     let pattern = #"^openclaw-\d{4}-\d{2}-\d{2}\.log$"#
     return name.range(of: pattern, options: .regularExpression) != nil
+  }
+
+  private static func clampedInt(_ value: Int, range: ClosedRange<Int>) -> Int {
+    min(max(value, range.lowerBound), range.upperBound)
+  }
+
+  private static func clampedDouble(_ value: Double, range: ClosedRange<Double>) -> Double {
+    min(max(value, range.lowerBound), range.upperBound)
   }
 }

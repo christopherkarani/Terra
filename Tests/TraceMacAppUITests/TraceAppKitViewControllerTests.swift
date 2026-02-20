@@ -126,10 +126,48 @@ struct TraceAppKitViewControllerTests {
     viewController.clear()
 
     let tabView = try #require(allSubviews(of: NSTabView.self, in: viewController.view).first)
-    #expect(tabView.numberOfTabViewItems == 6)
+    #expect(tabView.numberOfTabViewItems == 8)
 
     let tables = allSubviews(of: NSTableView.self, in: viewController.view)
     #expect(!tables.isEmpty)
     #expect(tables.allSatisfy { $0.numberOfRows == 0 })
+  }
+
+  @Test("SpanDetailViewController applies AppSettings span event row limit")
+  func spanDetailViewControllerAppliesConfiguredEventRowLimit() throws {
+    AppSettings.spanEventsRowLimit = 30
+    defer { AppSettings.spanEventsRowLimit = AppSettings.defaultSpanEventsRowLimit }
+
+    let traceId = TraceId()
+    var span = makeSpan(
+      name: "Root",
+      traceId: traceId,
+      start: Date(timeIntervalSince1970: 1),
+      end: Date(timeIntervalSince1970: 2)
+    )
+    let events = (0..<40).map { index in
+      SpanData.Event(
+        name: "provider.event.\(index)",
+        timestamp: Date(),
+        attributes: ["idx": .int(index)]
+      )
+    }
+    span = span.settingEvents(events)
+
+    let viewController = SpanDetailViewController()
+    viewController.loadViewIfNeeded()
+    viewController.updateSpan(span)
+
+    let tabView = try #require(allSubviews(of: NSTabView.self, in: viewController.view).first)
+    let eventTables = tabView.tabViewItems
+      .compactMap { $0.view as? NSScrollView }
+      .compactMap { $0.documentView as? NSTableView }
+      .filter { table in
+        table.tableColumns.count == 3
+          && table.tableColumns.first?.title == "Event"
+      }
+    #expect(!eventTables.isEmpty)
+    #expect(eventTables.contains(where: { $0.numberOfRows == 30 }))
+    #expect(eventTables.contains(where: { $0.numberOfRows == 40 }) == false)
   }
 }
