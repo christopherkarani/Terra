@@ -56,13 +56,13 @@
           "token_count": 20
         },
         {
-          "name": "terra.stream.lifecycle",
+          "name": "terra.token.lifecycle",
           "stage": "decode",
           "token_index": 1,
           "token_gap_ms": 0
         },
         {
-          "name": "terra.stream.lifecycle",
+          "name": "terra.token.lifecycle",
           "stage": "decode",
           "token_index": 5,
           "token_gap_ms": 18

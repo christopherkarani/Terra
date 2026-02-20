@@ -43,7 +43,7 @@
       },
       "events": [
         {
-          "name": "terra.stream.lifecycle",
+          "name": "terra.token.lifecycle",
           "stage": "prompt_eval",
           "token_index": 1,
           "token_gap_ms": 0.0,
@@ -55,7 +55,7 @@
           "token_count": 7
         },
         {
-          "name": "terra.stream.lifecycle",
+          "name": "terra.token.lifecycle",
           "stage": "decode",
           "token_index": 2,
           "token_gap_ms": 32.0

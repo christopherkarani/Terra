@@ -39,7 +39,7 @@ Terra emits spans with these names:
 - `terra.inference`
 - `terra.stage.prompt_eval`
 - `terra.stage.decode`
-- `terra.stream.lifecycle`
+- `terra.stream.lifecycle` (span name for lifecycle scope)
 
 The telemetry pipeline may emit additional events for compatibility, but these names are the
 interop baseline.
@@ -62,7 +62,7 @@ constraints:
 
 Per-token lifecycle events are recorded for streaming paths:
 
-- `terra.stream.lifecycle`
+- `terra.token.lifecycle`
 - `terra.stage.prompt_eval`
 - `terra.stage.decode`
 - optional token anomaly events: `terra.anomaly.stalled_token`

@@ -192,8 +192,8 @@ final class TerraV1FixtureTests: XCTestCase {
 
       XCTAssertFalse(events.isEmpty, "No stream events in \(file.lastPathComponent)")
       XCTAssertTrue(
-        events.contains { $0["name"] as? String == "terra.stream.lifecycle" },
-        "Missing stream lifecycle event in \(file.lastPathComponent)"
+        events.contains { $0["name"] as? String == "terra.token.lifecycle" },
+        "Missing token lifecycle event in \(file.lastPathComponent)"
       )
 
       if runtime == "openclaw_gateway" {

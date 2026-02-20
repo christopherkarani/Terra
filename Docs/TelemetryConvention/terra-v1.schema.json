@@ -164,13 +164,13 @@
         "events": {
           "type": "object",
           "required": [
-            "terra.stream.lifecycle",
+            "terra.token.lifecycle",
             "terra.first_token",
             "terra.stage.prompt_eval",
             "terra.stage.decode"
           ],
           "properties": {
-            "terra.stream.lifecycle": {
+            "terra.token.lifecycle": {
               "type": "string"
             },
             "terra.first_token": {
@@ -197,20 +197,20 @@
         "attributes": {
           "type": "object",
           "required": [
-            "terra.stream.token.index",
-            "terra.stream.token.gap_ms",
-            "terra.stream.token.stage"
+            "terra.token.index",
+            "terra.token.gap_ms",
+            "terra.token.stage"
           ],
           "properties": {
-            "terra.stream.token.index": {
+            "terra.token.index": {
               "type": "integer",
               "minimum": 0
             },
-            "terra.stream.token.gap_ms": {
+            "terra.token.gap_ms": {
               "type": "number",
               "minimum": 0
             },
-            "terra.stream.token.stage": {
+            "terra.token.stage": {
               "type": "string",
               "enum": [
                 "model_load",
@@ -219,13 +219,10 @@
                 "finish"
               ]
             },
-            "terra.stream.token.logprob": {
+            "terra.token.logprob": {
               "type": "number"
             },
-            "terra.token.stage": {
-              "type": "string"
-            },
-            "terra.stream.token.threshold_ms": {
+            "terra.stall.threshold_ms": {
               "type": "number",
               "minimum": 0
             }

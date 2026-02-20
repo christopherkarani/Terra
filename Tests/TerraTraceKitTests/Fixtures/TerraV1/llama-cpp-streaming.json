@@ -34,7 +34,7 @@
       },
       "events": [
         {
-          "name": "terra.stream.lifecycle",
+          "name": "terra.token.lifecycle",
           "stage": "decode",
           "token_index": 1,
           "token_gap_ms": 0
