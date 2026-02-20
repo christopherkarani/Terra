@@ -756,7 +756,6 @@ struct TraceTimelineCanvasView: View {
         }
         if normalizedName == "terra.first_token"
             || normalizedName == "terra.token.lifecycle"
-            || normalizedName == "terra.stream.lifecycle"
         {
             return TimelineEventMarker.Kind.tokenLifecycle.rawValue
         }
