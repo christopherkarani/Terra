@@ -42,9 +42,9 @@ extension Terra {
       enableLogs: Bool = false,
       enableSignposts: Bool = true,
       enableSessions: Bool = true,
-      otlpTracesEndpoint: URL = defaultOltpHttpTracesEndpoint(),
+      otlpTracesEndpoint: URL = defaultOtlpHttpTracesEndpoint(),
       otlpMetricsEndpoint: URL = defaultOtlpHttpMetricsEndpoint(),
-      otlpLogsEndpoint: URL = defaultOltpHttpLoggingEndpoint(),
+      otlpLogsEndpoint: URL = defaultOtlpHttpLogsEndpoint(),
       metricsExportInterval: TimeInterval = 60,
       persistence: PersistenceConfiguration? = nil
     ) {
@@ -113,15 +113,14 @@ extension Terra {
   /// - Throws: `InstallOpenTelemetryError.alreadyInstalled` if called more than once with a different configuration.
   public static func installOpenTelemetry(_ configuration: OpenTelemetryConfiguration) throws {
     openTelemetryInstallLock.lock()
+    defer { openTelemetryInstallLock.unlock() }
     if let installed = installedOpenTelemetryConfiguration {
-      openTelemetryInstallLock.unlock()
       if installed == configuration {
         return
       }
       throw InstallOpenTelemetryError.alreadyInstalled
     }
     installedOpenTelemetryConfiguration = configuration
-    openTelemetryInstallLock.unlock()
 
     do {
       if let persistence = configuration.persistence {
@@ -149,11 +148,36 @@ extension Terra {
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
     } catch {
-      openTelemetryInstallLock.lock()
       installedOpenTelemetryConfiguration = nil
-      openTelemetryInstallLock.unlock()
       throw error
     }
+  }
+
+  public static func defaultOtlpHttpTracesEndpoint() -> URL {
+    URL(string: "http://localhost:4318/v1/traces")!
+  }
+
+  public static func defaultOtlpHttpMetricsEndpoint() -> URL {
+    URL(string: "http://localhost:4318/v1/metrics")!
+  }
+
+  public static func defaultOtlpHttpLogsEndpoint() -> URL {
+    URL(string: "http://localhost:4318/v1/logs")!
+  }
+
+  @available(*, deprecated, message: "Use defaultOtlpHttpTracesEndpoint().")
+  public static func defaultOltpHttpTracesEndpoint() -> URL {
+    defaultOtlpHttpTracesEndpoint()
+  }
+
+  @available(*, deprecated, message: "Use defaultOtlpHttpMetricsEndpoint().")
+  public static func defaultOltpHttpMetricsEndpoint() -> URL {
+    defaultOtlpHttpMetricsEndpoint()
+  }
+
+  @available(*, deprecated, message: "Use defaultOtlpHttpLogsEndpoint().")
+  public static func defaultOtlpHttpLoggingEndpoint() -> URL {
+    defaultOtlpHttpLogsEndpoint()
   }
 
   // MARK: - Tracing

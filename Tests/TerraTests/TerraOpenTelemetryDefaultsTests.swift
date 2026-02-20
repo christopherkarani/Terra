@@ -1,0 +1,20 @@
+import XCTest
+
+@testable import Terra
+
+final class TerraOpenTelemetryDefaultsTests: XCTestCase {
+  func testDefaultOtlpHttpEndpoints_useLocalhost4318() {
+    XCTAssertEqual(
+      Terra.defaultOtlpHttpTracesEndpoint().absoluteString,
+      "http://localhost:4318/v1/traces"
+    )
+    XCTAssertEqual(
+      Terra.defaultOtlpHttpMetricsEndpoint().absoluteString,
+      "http://localhost:4318/v1/metrics"
+    )
+    XCTAssertEqual(
+      Terra.defaultOtlpHttpLogsEndpoint().absoluteString,
+      "http://localhost:4318/v1/logs"
+    )
+  }
+}
