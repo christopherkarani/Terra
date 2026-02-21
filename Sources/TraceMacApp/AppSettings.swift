@@ -210,10 +210,10 @@ enum AppSettings {
   }
 
   /// Returns true for OpenClaw diagnostic file names:
-  /// diagnostics.jsonl, gateway.log, openclaw-YYYY-MM-DD.log
+  /// diagnostics.jsonl, gateway.log, openclaw-YYYY-MM-DD.log, openclaw-YYYY-MM-DD.jsonl
   static func isSupportedOpenClawTraceFileName(_ name: String) -> Bool {
     if name == "diagnostics.jsonl" || name == "gateway.log" { return true }
-    let pattern = #"^openclaw-\d{4}-\d{2}-\d{2}\.log$"#
+    let pattern = #"^openclaw-\d{4}-\d{2}-\d{2}\.(log|jsonl)$"#
     return name.range(of: pattern, options: .regularExpression) != nil
   }
 

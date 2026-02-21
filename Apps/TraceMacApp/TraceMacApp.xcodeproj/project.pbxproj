@@ -31,6 +31,9 @@
 		C3B2A1D0E4F5A6B7C8D9E100 /* LicenseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3E6D2A1B4C5D6E7F8A9B0D0 /* LicenseManager.swift */; };
 		C3B2A1D0E4F5A6B7C8D9E101 /* AppLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3E6D2A1B4C5D6E7F8A9B0D1 /* AppLog.swift */; };
 		C3B2A1D0E4F5A6B7C8D9E102 /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3E6D2A1B4C5D6E7F8A9B0D2 /* UpdaterController.swift */; };
+		D4A112B9A0E245DC9D8B1F03 /* TraceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A112B9A0E245DC9D8B1F04 /* TraceRuntime.swift */; };
+		D4A112B9A0E245DC9D8B1F05 /* OpenClawTraceSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A112B9A0E245DC9D8B1F06 /* OpenClawTraceSource.swift */; };
+		D4A112B9A0E245DC9D8B1F01 /* OllamaLogTraceLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A112B9A0E245DC9D8B1F02 /* OllamaLogTraceLoader.swift */; };
 		9E5AB8512F345C81001C6D10 /* TerraTraceKit in Frameworks */ = {isa = PBXBuildFile; productRef = 98FC7F868181E1B88E4C8915 /* TerraTraceKit */; };
 		A77CF202D4DB52FE2F136F14 /* AppCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3444AB8AD9FBB6977B0D815C /* AppCoordinator.swift */; };
 		A8FF1DAC6109B370964015BA /* TraceSplitViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF1BB59137B7FE5C741F97F /* TraceSplitViewController.swift */; };
@@ -45,7 +48,7 @@
 		2D58C891FFEEC4DA6CF54BE9 /* TraceToolbarProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraceToolbarProvider.swift; sourceTree = "<group>"; };
 		3444AB8AD9FBB6977B0D815C /* AppCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 		4BC09D84C8A9111B254C585B /* SpanDetailViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpanDetailViewController.swift; sourceTree = "<group>"; };
-		56750D53BA59100C74D24848 /* TraceMacApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraceMacApp.swift; sourceTree = "<group>"; };
+		56750D53BA59100C74D24848 /* TraceMacApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ../TraceMacAppExecutable/TraceMacApp.swift; sourceTree = "<group>"; };
 		94236251269A53DCB1449E9B /* SpanListViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpanListViewController.swift; sourceTree = "<group>"; };
 		9F1870132EEEE9E7525D2615 /* TraceTimelineViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraceTimelineViewController.swift; sourceTree = "<group>"; };
 		A630779538627C6D6D3EFA11 /* TraceTimelineView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraceTimelineView.swift; sourceTree = "<group>"; };
@@ -71,6 +74,9 @@
 		F3E6D2A1B4C5D6E7F8A9B0D0 /* LicenseManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LicenseManager.swift; sourceTree = "<group>"; };
 		F3E6D2A1B4C5D6E7F8A9B0D1 /* AppLog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppLog.swift; sourceTree = "<group>"; };
 		F3E6D2A1B4C5D6E7F8A9B0D2 /* UpdaterController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UpdaterController.swift; sourceTree = "<group>"; };
+		D4A112B9A0E245DC9D8B1F04 /* TraceRuntime.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TraceRuntime.swift; sourceTree = "<group>"; };
+		D4A112B9A0E245DC9D8B1F06 /* OpenClawTraceSource.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OpenClawTraceSource.swift; sourceTree = "<group>"; };
+		D4A112B9A0E245DC9D8B1F02 /* OllamaLogTraceLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OllamaLogTraceLoader.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,6 +105,8 @@
 			children = (
 				56750D53BA59100C74D24848 /* TraceMacApp.swift */,
 				F3E6D2A1B4C5D6E7F8A9B0C1 /* AppSettings.swift */,
+				D4A112B9A0E245DC9D8B1F04 /* TraceRuntime.swift */,
+				D4A112B9A0E245DC9D8B1F06 /* OpenClawTraceSource.swift */,
 				F3E6D2A1B4C5D6E7F8A9B0D1 /* AppLog.swift */,
 				F3E6D2A1B4C5D6E7F8A9B0D2 /* UpdaterController.swift */,
 				F3E6D2A1B4C5D6E7F8A9B0C9 /* Clock.swift */,
@@ -109,6 +117,7 @@
 				F3E6D2A1B4C5D6E7F8A9B0CE /* TrialState.swift */,
 				F3E6D2A1B4C5D6E7F8A9B0CF /* KeychainStore.swift */,
 				F3E6D2A1B4C5D6E7F8A9B0D0 /* LicenseManager.swift */,
+				D4A112B9A0E245DC9D8B1F02 /* OllamaLogTraceLoader.swift */,
 				3444AB8AD9FBB6977B0D815C /* AppCoordinator.swift */,
 				F3E6D2A1B4C5D6E7F8A9B0C2 /* MainMenuBuilder.swift */,
 				F3E6D2A1B4C5D6E7F8A9B0C3 /* OnboardingWindowController.swift */,
@@ -234,6 +243,8 @@
 			files = (
 				1F929AD0725E3606A1E5D4B0 /* TraceMacApp.swift in Sources */,
 				C3B2A1D0E4F5A6B7C8D9E0F1 /* AppSettings.swift in Sources */,
+				D4A112B9A0E245DC9D8B1F03 /* TraceRuntime.swift in Sources */,
+				D4A112B9A0E245DC9D8B1F05 /* OpenClawTraceSource.swift in Sources */,
 				C3B2A1D0E4F5A6B7C8D9E101 /* AppLog.swift in Sources */,
 				C3B2A1D0E4F5A6B7C8D9E102 /* UpdaterController.swift in Sources */,
 				C3B2A1D0E4F5A6B7C8D9E0F9 /* Clock.swift in Sources */,
@@ -244,6 +255,7 @@
 				C3B2A1D0E4F5A6B7C8D9E0FE /* TrialState.swift in Sources */,
 				C3B2A1D0E4F5A6B7C8D9E0FF /* KeychainStore.swift in Sources */,
 				C3B2A1D0E4F5A6B7C8D9E100 /* LicenseManager.swift in Sources */,
+				D4A112B9A0E245DC9D8B1F01 /* OllamaLogTraceLoader.swift in Sources */,
 				A77CF202D4DB52FE2F136F14 /* AppCoordinator.swift in Sources */,
 				C3B2A1D0E4F5A6B7C8D9E0F2 /* MainMenuBuilder.swift in Sources */,
 				C3B2A1D0E4F5A6B7C8D9E0F3 /* OnboardingWindowController.swift in Sources */,

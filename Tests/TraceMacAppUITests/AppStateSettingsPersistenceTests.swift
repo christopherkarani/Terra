@@ -132,6 +132,25 @@ struct AppStateSettingsPersistenceTests {
     #expect(AppSettings.openClawSourceFilterRawValue == OpenClawTraceSourceFilter.gateway.rawValue)
   }
 
+  @Test("AppState viewOllamaTraces applies Ollama-focused filters")
+  func appStateViewOllamaTracesAppliesFilters() {
+    cleanupDefaults()
+    defer { cleanupDefaults() }
+
+    let state = AppState(isWatchFolderFeatureEnabled: { false })
+    state.runtimeFilter = .all
+    state.openClawSourceFilter = .gateway
+    state.searchQuery = "chat"
+
+    state.viewOllamaTraces()
+
+    #expect(state.runtimeFilter == .ollama)
+    #expect(state.openClawSourceFilter == .all)
+    #expect(state.searchQuery.isEmpty)
+    #expect(AppSettings.runtimeFilterRawValue == TraceRuntimeFilter.ollama.rawValue)
+    #expect(AppSettings.openClawSourceFilterRawValue == OpenClawTraceSourceFilter.all.rawValue)
+  }
+
   private func waitUntilLoaded(
     state: AppState,
     timeoutSeconds: TimeInterval

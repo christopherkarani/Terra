@@ -40,6 +40,18 @@ struct TraceListView: View {
             .controlSize(.small)
             .padding(.horizontal, 8)
 
+            Button {
+                appState.viewOllamaTraces()
+            } label: {
+                Label("View Ollama Traces", systemImage: "dot.radiowaves.left.and.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .padding(.horizontal, 8)
+            .disabled(appState.isLoading)
+
             if appState.canLoadMoreTraces {
                 Button {
                     appState.loadMoreTraces()

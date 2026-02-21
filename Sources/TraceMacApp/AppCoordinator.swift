@@ -72,6 +72,14 @@ public final class AppCoordinator: NSObject, MainMenuCoordinating {
     }
   }
 
+  public func showMainWindow() {
+    if !window.isVisible {
+      window.center()
+    }
+    window.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+  }
+
   @objc public func reloadTraces(_ sender: Any? = nil) {
     appState.loadTraces()
   }

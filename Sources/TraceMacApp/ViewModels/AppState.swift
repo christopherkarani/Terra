@@ -320,14 +320,16 @@ final class AppState {
             }
             await MainActor.run { [weak self] in
                 guard let self else { return }
+                let ollamaLoad = OllamaLogTraceLoader.loadRecent(maxEntries: self.requestedTraceFileCount)
+                let previousSelectedId = self.selectedTrace?.id
+
                 switch result {
                 case .success(let loaded):
-                    self.loadedTraceFileCount = loaded.loadedFileCount
-                    self.totalTraceFileCount = loaded.totalFileCount
-                    let previousSelectedId = self.selectedTrace?.id
-                    self.traces = loaded.traces
+                    self.loadedTraceFileCount = loaded.loadedFileCount + ollamaLoad.traces.count
+                    self.totalTraceFileCount = loaded.totalFileCount + ollamaLoad.totalEntries
+                    self.traces = Self.mergeTraces(primary: loaded.traces, secondary: ollamaLoad.traces)
                     if let previousSelectedId {
-                        self.selectedTrace = loaded.traces.first { $0.id == previousSelectedId }
+                        self.selectedTrace = self.traces.first { $0.id == previousSelectedId }
                     }
                     if self.selectedTrace == nil {
                         self.selectedSpan = nil
@@ -342,6 +344,17 @@ final class AppState {
                     }
                 case .failure(let error):
                     self.errorMessage = error.localizedDescription
+                    self.loadedTraceFileCount = ollamaLoad.traces.count
+                    self.totalTraceFileCount = ollamaLoad.totalEntries
+                    self.traces = ollamaLoad.traces
+                    if let previousSelectedId {
+                        self.selectedTrace = self.traces.first { $0.id == previousSelectedId }
+                    } else {
+                        self.selectedTrace = nil
+                    }
+                    if self.selectedTrace == nil {
+                        self.selectedSpan = nil
+                    }
                 }
                 self.isLoading = false
             }
@@ -370,6 +383,19 @@ final class AppState {
         guard canLoadMoreTraces else { return }
         requestedTraceFileCount += tracePageSize
         loadTraces()
+    }
+
+    func viewOllamaTraces() {
+        runtimeFilter = .ollama
+        openClawSourceFilter = .all
+        searchQuery = ""
+
+        if selectedTrace?.detectedRuntime != .ollama {
+            selectedTrace = nil
+            selectedSpan = nil
+        }
+
+        loadTraces(resetPagination: true)
     }
 
     func chooseTracesFolder() {
@@ -573,6 +599,18 @@ final class AppState {
         let lower = CGFloat(AppSettings.timelineZoomScaleRange.lowerBound)
         let upper = CGFloat(AppSettings.timelineZoomScaleRange.upperBound)
         return min(max(value, lower), upper)
+    }
+
+    private static func mergeTraces(primary: [Trace], secondary: [Trace]) -> [Trace] {
+        var mergedByID: [String: Trace] = [:]
+        mergedByID.reserveCapacity(primary.count + secondary.count)
+        for trace in primary {
+            mergedByID[trace.id] = trace
+        }
+        for trace in secondary {
+            mergedByID[trace.id] = trace
+        }
+        return Array(mergedByID.values)
     }
 
     private nonisolated func pruneStaleTracesIfNeeded() async {
