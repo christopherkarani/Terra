@@ -61,3 +61,10 @@ await Terra.withInferenceSpan(request) { scope in
 - Do **not** attach raw prompts, tool arguments, or model outputs as span attributes.
 - Prefer numeric **metrics** (counts/latencies) over per-token/per-step span events.
 - If you need content capture, use `Terra.Privacy` with `CaptureIntent.optIn` + redaction.
+
+## See Also
+
+- Persistence paths and storage configuration: `README.md`
+- Instrumentation version access: `README.md`
+- CI status badge and test commands: `README.md`
+- Licensing: `README.md`

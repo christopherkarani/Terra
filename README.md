@@ -187,6 +187,34 @@ Telemetry destinations:
 - Keep sessions enabled when you need cross-span session context.
 - Keep `Task.detached` out of instrumented paths that require parent/child trace relationships.
 
+## TraceMacApp (macOS)
+
+TraceMacApp is a lightweight macOS viewer that runs a local OTLP/HTTP trace receiver and renders incoming spans in a native AppKit UI.
+
+Run it:
+
+```bash
+swift run TraceMacApp
+```
+
+Defaults:
+- Listener: `127.0.0.1:4318` (OTLP/HTTP)
+- Trace endpoint: `http://127.0.0.1:4318/v1/traces`
+
+Point your SDK to the local receiver (trace-only). Example with Terra:
+
+```swift
+try Terra.installOpenTelemetry(
+  .init(
+    enableMetrics: false,
+    enableLogs: false,
+    otlpTracesEndpoint: URL(string: "http://127.0.0.1:4318/v1/traces")!
+  )
+)
+```
+
+To use a different host or port, update `AppCoordinator` in `Sources/TraceMacApp/AppCoordinator.swift` and rebuild.
+
 ## Integrations
 
 - `TerraCoreML`: attach normalized Core ML runtime metadata (`terra.runtime`, `terra.coreml.compute_units`).

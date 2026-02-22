@@ -296,6 +296,19 @@ let package = Package(
       name: "TerraSample",
       dependencies: ["Terra"],
       path: "Examples/Terra Sample"
+    ),
+    .executableTarget(
+      name: "TerraCLI",
+      dependencies: [
+        "TerraTraceKit",
+        .product(name: "ArgumentParser", package: "swift-argument-parser")
+      ],
+      path: "Sources/terra-cli"
+    ),
+    .executableTarget(
+      name: "TraceMacApp",
+      dependencies: ["TerraTraceKit"],
+      path: "Sources/TraceMacApp"
     )
   ]
 )
