@@ -19,6 +19,8 @@ public actor TraceStore {
 
     var accepted: [SpanRecord] = []
     accepted.reserveCapacity(spans.count)
+    var acceptedKeys: [SpanKey] = []
+    acceptedKeys.reserveCapacity(spans.count)
 
     for span in spans {
       let key = SpanKey(traceID: span.traceID, spanID: span.spanID)
@@ -26,10 +28,20 @@ public actor TraceStore {
       spansByKey[key] = span
       insertionOrder.append(key)
       accepted.append(span)
+      acceptedKeys.append(key)
     }
 
-    enforceMaxSpans()
-    return accepted
+    let evictedKeys = enforceMaxSpans()
+    guard !evictedKeys.isEmpty else { return accepted }
+
+    var filtered: [SpanRecord] = []
+    filtered.reserveCapacity(accepted.count)
+    for (index, span) in accepted.enumerated() {
+      if !evictedKeys.contains(acceptedKeys[index]) {
+        filtered.append(span)
+      }
+    }
+    return filtered
   }
 
   public func snapshot(filter: TraceFilter? = nil) -> TraceSnapshot {
@@ -40,13 +52,16 @@ public actor TraceStore {
     return TraceSnapshot(allSpans: ordered, traces: traces)
   }
 
-  private func enforceMaxSpans() {
-    guard maxSpans >= 0 else { return }
+  private func enforceMaxSpans() -> Set<SpanKey> {
+    var evicted: Set<SpanKey> = []
+    guard maxSpans >= 0 else { return evicted }
     while spansByKey.count > maxSpans {
       guard !insertionOrder.isEmpty else { break }
       let oldestKey = insertionOrder.removeFirst()
       spansByKey.removeValue(forKey: oldestKey)
+      evicted.insert(oldestKey)
     }
+    return evicted
   }
 }
 

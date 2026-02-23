@@ -39,6 +39,7 @@ public final class TraceListViewModel {
     let base = traces.sorted { $0.fileTimestamp > $1.fileTimestamp }
     guard !query.isEmpty else {
       filteredTraces = base
+      reconcileSelection()
       return
     }
 
@@ -46,6 +47,16 @@ public final class TraceListViewModel {
       trace.id.lowercased().contains(query)
         || trace.displayName.lowercased().contains(query)
         || trace.traceId.hexString.lowercased().contains(query)
+    }
+    reconcileSelection()
+  }
+
+  private func reconcileSelection() {
+    guard let selectedTrace else { return }
+    if let updated = filteredTraces.first(where: { $0.id == selectedTrace.id }) {
+      self.selectedTrace = updated
+    } else {
+      self.selectedTrace = nil
     }
   }
 }

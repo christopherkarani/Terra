@@ -57,6 +57,20 @@ final class TraceStoreTests: XCTestCase {
     XCTAssertEqual(traceSnapshot.traces.count, 1)
     XCTAssertEqual(traceSnapshot.traces[primarySpans[0].traceID]?.count, primarySpans.count)
   }
+
+  func testIngestReturnsOnlyRetainedSpansWhenMaxExceeded() async throws {
+    let decoder = OTLPRequestDecoder(maxBodyBytes: 1_000_000, maxDecompressedBytes: 1_000_000)
+    let body = try OTLPTestFixtures.serializedRequest()
+    let spans = try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+
+    let store = TraceStore(maxSpans: 1)
+    let accepted = await store.ingest(spans)
+    let snapshot = await store.snapshot(filter: nil)
+
+    XCTAssertEqual(snapshot.allSpans.count, 1)
+    XCTAssertEqual(accepted.count, 1)
+    XCTAssertEqual(Set(accepted), Set(snapshot.allSpans))
+  }
 }
 
 private extension TraceStoreTests {
