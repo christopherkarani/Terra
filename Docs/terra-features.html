@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terra — Feature Reference</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Lato:wght@300;400;700;900&display=swap');
+
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+:root {
+  --bg-base: #0D1117;
+  --bg-surface: #0F141A;
+  --bg-raised: #11161D;
+  --bg-elevated: #17181C;
+  --bg-card: #1A2027;
+  --border: #262A2F;
+  --border-dim: #222426;
+  --border-accent: #2A3139;
+  --text-primary: #F2F5F8;
+  --text-secondary: #9CA3AF;
+  --text-tertiary: #6F7883;
+  --text-muted: #4A5260;
+  --green: #10B981;
+  --green-dim: rgba(16,185,129,0.12);
+  --orange: #F97316;
+  --orange-dim: rgba(249,115,22,0.1);
+  --blue: #60A5FA;
+  --blue-dim: rgba(96,165,250,0.1);
+  --red: #EF4444;
+  --code-bg: #0B0F14;
+  --kw: #C792EA;
+  --str: #C3E88D;
+  --fn: #82AAFF;
+  --ty: #FFCB6B;
+  --cm: #546E7A;
+  --num: #F78C6C;
+  --op: #89DDFF;
+  --at: #FF5370;
+  --nav-w: 260px;
+  --header-h: 56px;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Lato', sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  line-height: 1.7;
+  font-weight: 400;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+a { color: var(--green); text-decoration: underline; text-underline-offset: 4px; text-decoration-color: var(--text-tertiary); }
+a:hover { text-decoration-color: var(--green); }
+
+/* ── HEADER ── */
+.header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--header-h);
+  background: rgba(13,17,23,0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-dim);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.brand-name {
+  font-family: 'Instrument Serif', serif;
+  font-size: 22px;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.brand-sep {
+  color: var(--border);
+  font-weight: 300;
+}
+
+.brand-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.header-link {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.header-link:hover { color: var(--text-primary); }
+
+.header-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--green);
+  padding: 4px 10px;
+  background: var(--green-dim);
+  border: 1px solid rgba(16,185,129,0.2);
+  border-radius: 2px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.header-badge::before {
+  content: '';
+  width: 6px; height: 6px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: pulse 2s ease infinite;
+}
+
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  position: fixed;
+  top: var(--header-h); left: 0; bottom: 0;
+  width: var(--nav-w);
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-dim);
+  overflow-y: auto;
+  padding: 20px 0;
+  z-index: 50;
+}
+
+.sidebar::-webkit-scrollbar { display: none; }
+
+.nav-group {
+  padding: 10px 20px 4px;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-muted);
+}
+
+.nav-link {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 20px;
+  text-decoration: none;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  transition: all 0.15s;
+  border-left: 2px solid transparent;
+}
+
+.nav-link:hover {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.02);
+}
+
+.nav-link.active {
+  color: var(--green);
+  border-left-color: var(--green);
+  background: var(--green-dim);
+}
+
+.nav-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--text-muted);
+  min-width: 16px;
+}
+
+.nav-sep {
+  height: 1px;
+  background: var(--border-dim);
+  margin: 10px 20px;
+}
+
+/* ── MAIN ── */
+.main {
+  margin-left: var(--nav-w);
+  margin-top: var(--header-h);
+}
+
+.content {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 40px 40px 100px;
+}
+
+/* ── HERO ── */
+.hero {
+  padding: 64px 0 48px;
+}
+
+.hero-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--green);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-eyebrow::before {
+  content: '';
+  width: 24px; height: 1px;
+  background: var(--green);
+}
+
+.hero h1 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 54px;
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin-bottom: 24px;
+  color: var(--text-primary);
+}
+
+.hero h1 em {
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.hero-desc {
+  font-size: 16px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  max-width: 580px;
+  font-weight: 300;
+}
+
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 48px;
+}
+
+.hero-metric {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hero-metric-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.hero-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.hero-metric-bar {
+  height: 3px;
+  border-radius: 2px;
+  margin-top: 8px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.hero-metric-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--green);
+}
+
+/* ── SECTIONS ── */
+.section {
+  padding: 48px 0 24px;
+  scroll-margin-top: calc(var(--header-h) + 20px);
+}
+
+.section-head {
+  margin-bottom: 6px;
+}
+
+.section-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+
+.section h2 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 30px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.section-line {
+  height: 1px;
+  background: var(--border);
+  margin: 14px 0 24px;
+}
+
+.module-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-accent);
+  border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+  background: var(--bg-elevated);
+}
+
+.module-tag::before {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+/* ── TEXT ── */
+h3 {
+  font-family: 'Lato', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 24px 0 10px;
+  color: var(--text-primary);
+}
+
+p {
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+strong { color: var(--text-primary); font-weight: 700; }
+
+ul, ol { padding-left: 18px; margin-bottom: 14px; }
+
+li {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 5px;
+  line-height: 1.65;
+}
+
+li strong { color: var(--text-primary); }
+
+/* ── CODE ── */
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82em;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: var(--green);
+  font-weight: 500;
+}
+
+.codeblock {
+  margin: 16px 0;
+  background: var(--code-bg);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.codeblock-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border-dim);
+  background: rgba(255,255,255,0.015);
+}
+
+.codeblock-lang {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.codeblock-dots { display: flex; gap: 5px; }
+.codeblock-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
+
+.codeblock pre {
+  padding: 14px 18px;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.codeblock pre code {
+  background: none; border: none; padding: 0;
+  font-size: inherit; color: inherit; font-weight: 400;
+}
+
+.kw { color: var(--kw); }
+.str { color: var(--str); }
+.fn { color: var(--fn); }
+.ty { color: var(--ty); }
+.cm { color: var(--cm); font-style: italic; }
+.num { color: var(--num); }
+.op { color: var(--op); }
+.at { color: var(--at); }
+
+/* ── TABLES ── */
+.tbl {
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+thead { background: var(--bg-elevated); }
+
+th {
+  padding: 8px 14px;
+  text-align: left;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-dim);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,0.01); }
+td code { color: var(--fn); font-size: 11px; }
+
+/* ── CARDS ── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: border-color 0.3s;
+}
+
+.card:hover { border-color: var(--border-accent); }
+
+.card-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-title::before {
+  content: '';
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+}
+
+.card-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.55;
+}
+
+/* ── TIERS ── */
+.tier-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.tier {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  position: relative;
+}
+
+.tier-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tier-badge .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+
+.tier-badge .dot-1 { background: var(--green); }
+.tier-badge .dot-2 { background: var(--orange); }
+.tier-badge .dot-3 { background: var(--blue); }
+
+.tier h4 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 20px;
+  font-weight: 400;
+  margin-bottom: 8px;
+}
+
+.tier p {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── CALLOUT ── */
+.callout {
+  padding: 14px 18px;
+  background: var(--green-dim);
+  border: 1px solid rgba(16,185,129,0.15);
+  border-left: 3px solid var(--green);
+  border-radius: 6px;
+  margin: 16px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.callout strong { color: var(--green); }
+
+.callout-orange {
+  background: var(--orange-dim);
+  border-color: rgba(249,115,22,0.15);
+  border-left-color: var(--orange);
+}
+
+.callout-orange strong { color: var(--orange); }
+
+/* ── PLATFORMS ── */
+.plat-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.plat {
+  text-align: center;
+  padding: 20px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.plat-name {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.plat-ver {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green);
+}
+
+/* ── FOOTER ── */
+.footer {
+  margin-top: 64px;
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-l {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.footer-r {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  letter-spacing: 0.04em;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 1080px) {
+  .sidebar { display: none; }
+  .main { margin-left: 0; }
+  .content { padding: 24px 20px 80px; }
+  .hero h1 { font-size: 38px; }
+  .tier-row, .card-grid { grid-template-columns: 1fr; }
+  .plat-row { grid-template-columns: repeat(3, 1fr); }
+  .hero-metrics { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <a class="brand" href="#top">
+      <span class="brand-name">Terra</span>
+      <span class="brand-sep">/</span>
+      <span class="brand-sub">Features</span>
+    </a>
+    <div class="header-right">
+      <a class="header-link" href="#schema">Schema</a>
+      <a class="header-link" href="#viewer">Trace Viewer</a>
+      <div class="header-badge">v1 Live</div>
+    </div>
+  </div>
+</header>
+
+<nav class="sidebar" id="sidebar">
+  <div class="nav-group">Getting Started</div>
+  <a class="nav-link" href="#integration"><span class="nav-num">01</span> Integration Tiers</a>
+  <a class="nav-link" href="#spans"><span class="nav-num">02</span> Span Types</a>
+  <a class="nav-link" href="#runtimes"><span class="nav-num">03</span> Runtime Support</a>
+  <div class="nav-sep"></div>
+
+  <div class="nav-group">Auto-Instrumentation</div>
+  <a class="nav-link" href="#coreml"><span class="nav-num">04</span> CoreML</a>
+  <a class="nav-link" href="#http"><span class="nav-num">05</span> HTTP AI APIs</a>
+  <div class="nav-sep"></div>
+
+  <div class="nav-group">Runtime Integrations</div>
+  <a class="nav-link" href="#foundation"><span class="nav-num">06</span> Foundation Models</a>
+  <a class="nav-link" href="#mlx"><span class="nav-num">07</span> MLX</a>
+  <a class="nav-link" href="#llama"><span class="nav-num">08</span> llama.cpp</a>
+  <a class="nav-link" href="#accelerate"><span class="nav-num">09</span> Accelerate</a>
+  <div class="nav-sep"></div>
+
+  <div class="nav-group">Capabilities</div>
+  <a class="nav-link" href="#streaming"><span class="nav-num">10</span> Streaming</a>
+  <a class="nav-link" href="#privacy"><span class="nav-num">11</span> Privacy</a>
+  <a class="nav-link" href="#compliance"><span class="nav-num">12</span> Compliance</a>
+  <a class="nav-link" href="#sysprof"><span class="nav-num">13</span> System Profiling</a>
+  <a class="nav-link" href="#gpu"><span class="nav-num">14</span> GPU Profiling</a>
+  <a class="nav-link" href="#recs"><span class="nav-num">15</span> Recommendations</a>
+  <div class="nav-sep"></div>
+
+  <div class="nav-group">Infrastructure</div>
+  <a class="nav-link" href="#otel"><span class="nav-num">16</span> OpenTelemetry</a>
+  <a class="nav-link" href="#persist"><span class="nav-num">17</span> Persistence</a>
+  <a class="nav-link" href="#sessions"><span class="nav-num">18</span> Sessions</a>
+  <a class="nav-link" href="#metrics"><span class="nav-num">19</span> Metrics</a>
+  <a class="nav-link" href="#schema"><span class="nav-num">20</span> Schema</a>
+  <div class="nav-sep"></div>
+
+  <div class="nav-group">Tools</div>
+  <a class="nav-link" href="#viewer"><span class="nav-num">21</span> Trace Viewer</a>
+  <a class="nav-link" href="#cli"><span class="nav-num">22</span> CLI</a>
+  <a class="nav-link" href="#openclaw"><span class="nav-num">23</span> OpenClaw</a>
+  <a class="nav-link" href="#proxy"><span class="nav-num">24</span> HTTP Proxy</a>
+  <a class="nav-link" href="#platforms"><span class="nav-num">25</span> Platforms</a>
+</nav>
+
+<main class="main">
+<div class="content">
+
+<!-- HERO -->
+<div class="hero" id="top">
+  <div class="hero-eyebrow">On-Device GenAI Observability</div>
+  <h1>Terra<br><em>Feature Reference</em></h1>
+  <p class="hero-desc">A comprehensive SDK for Swift that instruments model inference, embeddings, agent steps, tool calls, and safety checks across all Apple platforms. Built on OpenTelemetry with privacy-first defaults.</p>
+  <div class="hero-metrics">
+    <div class="hero-metric">
+      <span class="hero-metric-val">8</span>
+      <span class="hero-metric-label">Span Types</span>
+      <div class="hero-metric-bar"><div class="hero-metric-bar-fill" style="width:100%"></div></div>
+    </div>
+    <div class="hero-metric">
+      <span class="hero-metric-val">8</span>
+      <span class="hero-metric-label">Runtimes</span>
+      <div class="hero-metric-bar"><div class="hero-metric-bar-fill" style="width:100%"></div></div>
+    </div>
+    <div class="hero-metric">
+      <span class="hero-metric-val">13</span>
+      <span class="hero-metric-label">Modules</span>
+      <div class="hero-metric-bar"><div class="hero-metric-bar-fill" style="width:86%"></div></div>
+    </div>
+    <div class="hero-metric">
+      <span class="hero-metric-val">5</span>
+      <span class="hero-metric-label">Platforms</span>
+      <div class="hero-metric-bar"><div class="hero-metric-bar-fill" style="width:62%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 01 -->
+<section class="section" id="integration">
+  <div class="section-head"><span class="section-num">01</span></div>
+  <h2>Three-Tier Integration</h2>
+  <div class="section-line"></div>
+  <p>Terra offers three progressively detailed integration tiers, from zero-code setup to full manual control.</p>
+
+  <div class="tier-row">
+    <div class="tier">
+      <div class="tier-badge"><span class="dot dot-1"></span> Tier 1</div>
+      <h4>Zero-Code Auto</h4>
+      <p>A single <code>Terra.start()</code> call instruments CoreML and HTTP AI requests automatically. No application code changes.</p>
+    </div>
+    <div class="tier">
+      <div class="tier-badge"><span class="dot dot-2"></span> Tier 2</div>
+      <h4>@Traced Macro</h4>
+      <p>Annotate async functions with <code>@Traced(model:)</code>. Auto-detects prompt and maxTokens parameters at compile time.</p>
+    </div>
+    <div class="tier">
+      <div class="tier-badge"><span class="dot dot-3"></span> Tier 3</div>
+      <h4>Closure Wrappers</h4>
+      <p>Full control over span lifecycle, attributes, events, and error recording via typed <code>Scope&lt;Kind&gt;</code> wrappers.</p>
+    </div>
+  </div>
+
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift &mdash; Tier 1</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="kw">import</span> <span class="ty">Terra</span>
+
+<span class="kw">try</span> <span class="ty">Terra</span>.<span class="fn">installOpenTelemetry</span>(.<span class="fn">init</span>(
+  <span class="fn">persistence</span>: .<span class="fn">init</span>(<span class="fn">storageURL</span>: <span class="ty">Terra</span>.<span class="fn">defaultPersistenceStorageURL</span>())
+))
+<span class="ty">Terra</span>.<span class="fn">install</span>(.<span class="fn">init</span>(<span class="fn">privacy</span>: .default))
+<span class="kw">try</span> <span class="ty">Terra</span>.<span class="fn">start</span>()</code></pre>
+  </div>
+
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift &mdash; Tier 2</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="at">@Traced</span>(<span class="fn">model</span>: <span class="str">"llama-3.2-1B"</span>)
+<span class="kw">func</span> <span class="fn">generate</span>(<span class="fn">prompt</span>: <span class="ty">String</span>, <span class="fn">maxTokens</span>: <span class="ty">Int</span> = <span class="num">512</span>) <span class="kw">async throws</span> -> <span class="ty">String</span> {
+    <span class="cm">// your inference code</span>
+}</code></pre>
+  </div>
+
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift &mdash; Tier 3</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="kw">let</span> result = <span class="kw">try await</span> <span class="ty">Terra</span>.<span class="fn">withInferenceSpan</span>(
+    .<span class="fn">init</span>(<span class="fn">model</span>: <span class="str">"llama-3.2-1B"</span>, <span class="fn">prompt</span>: prompt, <span class="fn">maxOutputTokens</span>: <span class="num">256</span>)
+) { scope <span class="kw">in</span>
+    <span class="kw">let</span> output = <span class="kw">try await</span> myModel.<span class="fn">generate</span>(prompt)
+    scope.<span class="fn">setAttributes</span>([<span class="str">"custom.key"</span>: .<span class="fn">string</span>(<span class="str">"value"</span>)])
+    <span class="kw">return</span> output
+}</code></pre>
+  </div>
+</section>
+
+<!-- 02 -->
+<section class="section" id="spans">
+  <div class="section-head"><span class="section-num">02</span></div>
+  <h2>Span Types &amp; Instrumentation</h2>
+  <div class="section-line"></div>
+  <p>8 canonical span types covering the full GenAI lifecycle. All async, structured concurrency compatible, with typed <code>Scope&lt;Kind&gt;</code> wrappers.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Span Name</th><th>Method</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>terra.inference</code></td><td><code>withInferenceSpan</code></td><td>Model inference requests</td></tr>
+      <tr><td><code>terra.model.load</code></td><td><code>withModelLoadSpan</code></td><td>Model loading operations</td></tr>
+      <tr><td><code>terra.stage.prompt_eval</code></td><td><code>withInferenceStageSpan(.promptEval)</code></td><td>Prompt evaluation sub-stage</td></tr>
+      <tr><td><code>terra.stage.decode</code></td><td><code>withInferenceStageSpan(.decode)</code></td><td>Token decoding sub-stage</td></tr>
+      <tr><td><code>terra.stream.lifecycle</code></td><td><code>withInferenceStageSpan(.streamLifecycle)</code></td><td>Stream metadata</td></tr>
+      <tr><td><code>terra.embeddings</code></td><td><code>withEmbeddingSpan</code></td><td>Embedding generation</td></tr>
+      <tr><td><code>terra.agent</code></td><td><code>withAgentInvocationSpan</code></td><td>Agent invocation</td></tr>
+      <tr><td><code>terra.tool</code></td><td><code>withToolExecutionSpan</code></td><td>Tool/function call execution</td></tr>
+      <tr><td><code>terra.safety_check</code></td><td><code>withSafetyCheckSpan</code></td><td>Safety/moderation checks</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 03 -->
+<section class="section" id="runtimes">
+  <div class="section-head"><span class="section-num">03</span></div>
+  <h2>Runtime Support</h2>
+  <div class="section-line"></div>
+  <p>8 ML runtime environments with automatic detection via multi-signal heuristics and confidence scoring (0.0&ndash;1.0).</p>
+  <div class="card-grid">
+    <div class="card"><div class="card-title">CoreML</div><div class="card-desc">Apple CoreML framework</div></div>
+    <div class="card"><div class="card-title">Foundation Models</div><div class="card-desc">Apple Foundation Models (macOS 26+)</div></div>
+    <div class="card"><div class="card-title">MLX</div><div class="card-desc">MLX-swift framework</div></div>
+    <div class="card"><div class="card-title">Ollama</div><div class="card-desc">Ollama local server</div></div>
+    <div class="card"><div class="card-title">LM Studio</div><div class="card-desc">LM Studio local server</div></div>
+    <div class="card"><div class="card-title">llama.cpp</div><div class="card-desc">llama.cpp C/C++ engine</div></div>
+    <div class="card"><div class="card-title">OpenClaw Gateway</div><div class="card-desc">OpenClaw proxy gateway</div></div>
+    <div class="card"><div class="card-title">HTTP API</div><div class="card-desc">OpenAI, Anthropic, Google, etc.</div></div>
+  </div>
+</section>
+
+<!-- 04 -->
+<section class="section" id="coreml">
+  <div class="section-head"><span class="section-num">04</span></div>
+  <h2>Auto-Instrumentation: CoreML</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TerraCoreML</div>
+  <p>Transparent instrumentation of all CoreML predictions via Objective-C runtime method swizzling.</p>
+  <h3>Captured per prediction</h3>
+  <ul>
+    <li><strong>Timing:</strong> Monotonic duration via <code>ContinuousClock</code> (nanosecond precision)</li>
+    <li><strong>Compute units:</strong> <code>all</code>, <code>cpu_only</code>, <code>cpu_and_gpu</code>, <code>cpu_and_ane</code></li>
+    <li><strong>Model name:</strong> Resolved from metadata, display name, or fallback</li>
+    <li><strong>Memory delta:</strong> Resident memory change during prediction</li>
+    <li><strong>GPU metrics:</strong> Compute time via <code>TerraMetalProfiler</code></li>
+  </ul>
+  <div class="callout"><strong>Smart dedup:</strong> Checks for an active span before creating a new one to avoid double-tracing in nested contexts.</div>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="ty">CoreMLInstrumentation</span>.<span class="fn">install</span>(.<span class="fn">init</span>(
+    <span class="fn">excludedModelNames</span>: [<span class="str">"fast-classifier"</span>]
+))</code></pre>
+  </div>
+</section>
+
+<!-- 05 -->
+<section class="section" id="http">
+  <div class="section-head"><span class="section-num">05</span></div>
+  <h2>Auto-Instrumentation: HTTP AI APIs</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TerraHTTPInstrument</div>
+  <p>Callback-based URLSession instrumentation. Recognizes OpenAI, Anthropic, Google, Together.ai, Mistral, Groq, Cohere, Fireworks.ai, Ollama (11434), LM Studio (1234).</p>
+  <h3>From streaming responses (SSE / NDJSON)</h3>
+  <ul>
+    <li>Time to first token (TTFT), tokens/sec, chunk count</li>
+    <li>Per-stage durations (prompt eval, decode, model load)</li>
+    <li>Stall detection (gap &ge; 300ms)</li>
+    <li>Inter-token gap tracking</li>
+  </ul>
+  <div class="callout-orange callout"><strong>Safety:</strong> Max 10 MiB body parsing. No prompt/completion text captured &mdash; only structured metadata.</div>
+</section>
+
+<!-- 06 -->
+<section class="section" id="foundation">
+  <div class="section-head"><span class="section-num">06</span></div>
+  <h2>Foundation Models</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TerraFoundationModels</div>
+  <p>Wraps Apple's <code>LanguageModelSession</code> (macOS 26+) with traced equivalents for text, structured output, and streaming.</p>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="kw">let</span> session = <span class="ty">TerraTracedSession</span>(<span class="fn">model</span>: .default)
+
+<span class="kw">let</span> text = <span class="kw">try await</span> session.<span class="fn">respond</span>(<span class="fn">to</span>: <span class="str">"Hello"</span>)
+
+<span class="kw">let</span> result = <span class="kw">try await</span> session.<span class="fn">respond</span>(
+    <span class="fn">to</span>: <span class="str">"Classify this"</span>,
+    <span class="fn">generating</span>: <span class="ty">Classification</span>.<span class="kw">self</span>
+)
+
+<span class="kw">for try await</span> chunk <span class="kw">in</span> session.<span class="fn">streamResponse</span>(<span class="fn">to</span>: <span class="str">"Tell me a story"</span>) {
+    <span class="fn">print</span>(chunk)
+}</code></pre>
+  </div>
+</section>
+
+<!-- 07 -->
+<section class="section" id="mlx">
+  <div class="section-head"><span class="section-num">07</span></div>
+  <h2>MLX Integration</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TerraMLX</div>
+  <p>Non-invasive. Users retain full control of MLX-swift generation. Terra wraps execution in a tracing span.</p>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="kw">let</span> result = <span class="kw">try await</span> <span class="ty">TerraMLX</span>.<span class="fn">traced</span>(
+    <span class="fn">model</span>: <span class="str">"mlx-community/Llama-3.2-1B"</span>,
+    <span class="fn">maxTokens</span>: <span class="num">256</span>,
+    <span class="fn">device</span>: <span class="str">"gpu"</span>
+) {
+    <span class="kw">try await</span> myMLXModel.<span class="fn">generate</span>(prompt)
+}
+
+<span class="ty">TerraMLX</span>.<span class="fn">recordFirstToken</span>()
+<span class="ty">TerraMLX</span>.<span class="fn">recordTokenCount</span>(<span class="num">42</span>)</code></pre>
+  </div>
+</section>
+
+<!-- 08 -->
+<section class="section" id="llama">
+  <div class="section-head"><span class="section-num">08</span></div>
+  <h2>llama.cpp Integration</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TerraLlama</div>
+  <p>Full C interop via handle-based callback bridge. Thread-safe mapping with <code>@_cdecl</code> exported functions.</p>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">C</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="kw">#include</span> <span class="str">"TerraLlamaHooks.h"</span>
+
+<span class="fn">terra_llama_record_token_event</span>(handle, idx, latency_ms, logprob, kv_pct);
+<span class="fn">terra_llama_record_stage_event</span>(handle, TERRA_LLAMA_STAGE_DECODE, ms, count);
+<span class="fn">terra_llama_record_stall_event</span>(handle, gap_ms, threshold_ms, baseline_tps);
+<span class="fn">terra_llama_finish_stream</span>(handle);</code></pre>
+  </div>
+</section>
+
+<!-- 09 -->
+<section class="section" id="accelerate">
+  <div class="section-head"><span class="section-num">09</span></div>
+  <h2>Accelerate Framework</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TerraAccelerate</div>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="kw">let</span> attrs = <span class="ty">TerraAccelerate</span>.<span class="fn">attributes</span>(
+    <span class="fn">backend</span>: <span class="str">"vDSP"</span>,
+    <span class="fn">operation</span>: <span class="str">"fft_forward"</span>,
+    <span class="fn">durationMS</span>: <span class="num">12.5</span>
+)</code></pre>
+  </div>
+</section>
+
+<!-- 10 -->
+<section class="section" id="streaming">
+  <div class="section-head"><span class="section-num">10</span></div>
+  <h2>Streaming Inference</h2>
+  <div class="section-line"></div>
+  <p>First-class streaming with <code>StreamingInferenceScope</code> for fine-grained token-level telemetry.</p>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="kw">try await</span> <span class="ty">Terra</span>.<span class="fn">withStreamingInferenceSpan</span>(request) { streamScope <span class="kw">in</span>
+    <span class="kw">for try await</span> token <span class="kw">in</span> myStream {
+        streamScope.<span class="fn">recordToken</span>()
+        streamScope.<span class="fn">recordChunk</span>()
+    }
+}</code></pre>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Metric</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>terra.latency.ttft_ms</code></td><td>Time to first token</td></tr>
+      <tr><td><code>terra.stream.tokens_per_second</code></td><td>Decode throughput</td></tr>
+      <tr><td><code>terra.stream.output_tokens</code></td><td>Total output tokens</td></tr>
+      <tr><td><code>terra.stream.chunk_count</code></td><td>Total chunks</td></tr>
+      <tr><td><code>terra.latency.e2e_ms</code></td><td>End-to-end duration</td></tr>
+      <tr><td><code>terra.latency.prompt_eval_ms</code></td><td>Prompt eval duration</td></tr>
+      <tr><td><code>terra.latency.decode_ms</code></td><td>Decode phase duration</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 11 -->
+<section class="section" id="privacy">
+  <div class="section-head"><span class="section-num">11</span></div>
+  <h2>Privacy &amp; Content Control</h2>
+  <div class="section-line"></div>
+  <p><strong>No content is captured by default.</strong></p>
+  <div class="tbl"><table>
+    <thead><tr><th>Policy</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>.never</code> (default)</td><td>Never capture prompt/completion/thinking text</td></tr>
+      <tr><td><code>.optIn</code></td><td>Capture only with explicit <code>CaptureIntent.optIn</code></td></tr>
+      <tr><td><code>.always</code></td><td>Always capture content</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Redaction</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>.drop</code></td><td>Silently remove excluded content</td></tr>
+      <tr><td><code>.lengthOnly</code></td><td>Replace with character count</td></tr>
+      <tr><td><code>.hashSHA256</code> (default)</td><td>Anonymized SHA-256 hash</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Anonymization</h3>
+  <ul>
+    <li>HMAC-SHA256 with rotating keys (24h default)</li>
+    <li>Per-purpose secrets prevent cross-correlation</li>
+    <li>Key ID attached to spans for audit trail</li>
+  </ul>
+</section>
+
+<!-- 12 -->
+<section class="section" id="compliance">
+  <div class="section-head"><span class="section-num">12</span></div>
+  <h2>Compliance &amp; Export Controls</h2>
+  <div class="section-line"></div>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="kw">let</span> compliance = <span class="ty">CompliancePolicy</span>(
+    <span class="fn">exportControl</span>: .<span class="fn">init</span>(
+        <span class="fn">allowedRuntimes</span>: [.coreML, .foundationModels],
+        <span class="fn">blockOnViolation</span>: <span class="kw">true</span>
+    )
+)</code></pre>
+  </div>
+  <ul>
+    <li><strong>Retention:</strong> Max age (7 days), max storage (256 MB), LRU/oldest-first eviction</li>
+    <li><strong>Audit logging:</strong> Policy violations, schema rejections, version mismatches (max 1,024 buffered)</li>
+    <li><strong>Cross-process consent boundary</strong> prevents telemetry leaking</li>
+  </ul>
+</section>
+
+<!-- 13 -->
+<section class="section" id="sysprof">
+  <div class="section-head"><span class="section-num">13</span></div>
+  <h2>System Profiling</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TerraSystemProfiler</div>
+  <div class="card-grid">
+    <div class="card"><div class="card-title">Memory</div><div class="card-desc">Resident delta &amp; peak via <code>mach_task_basic_info</code>. Auto-attached to inference spans.</div></div>
+    <div class="card"><div class="card-title">Threads</div><div class="card-desc">Active count via <code>task_threads()</code>. Falls back to <code>ProcessInfo</code> on non-Darwin.</div></div>
+    <div class="card"><div class="card-title">Thermal</div><div class="card-desc">Thermal pressure label auto-attached. Neural Engine probe (experimental, env-gated).</div></div>
+  </div>
+</section>
+
+<!-- 14 -->
+<section class="section" id="gpu">
+  <div class="section-head"><span class="section-num">14</span></div>
+  <h2>Metal / GPU Profiling</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TerraMetalProfiler</div>
+  <p>Zero overhead when not installed.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Attribute</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>metal.gpu_utilization</code></td><td>GPU utilization %</td></tr>
+      <tr><td><code>metal.memory_in_flight_mb</code></td><td>In-flight GPU memory (MB)</td></tr>
+      <tr><td><code>metal.compute_time_ms</code></td><td>GPU compute duration (ms)</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 15 -->
+<section class="section" id="recs">
+  <div class="section-head"><span class="section-num">15</span></div>
+  <h2>Recommendations Engine</h2>
+  <div class="section-line"></div>
+  <p>Surfaces performance suggestions with configurable confidence, cooldown, and dedup.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Kind</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>thermalSlowdown</code></td><td>Device thermal throttling</td></tr>
+      <tr><td><code>promptCacheMiss</code></td><td>Cache miss impacting latency</td></tr>
+      <tr><td><code>modelSwapRegression</code></td><td>Perf regression after model change</td></tr>
+      <tr><td><code>stalledToken</code></td><td>Token generation stall</td></tr>
+      <tr><td><code>custom</code></td><td>User-defined</td></tr>
+    </tbody>
+  </table></div>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="ty">Terra</span>.<span class="fn">install</span>(.<span class="fn">init</span>(
+    <span class="fn">recommendationSink</span>: { rec <span class="kw">in</span>
+        <span class="fn">print</span>(<span class="str">"</span>\(rec.action) <span class="str">&mdash;</span> \(rec.reason)<span class="str">"</span>)
+    }
+))</code></pre>
+  </div>
+</section>
+
+<!-- 16 -->
+<section class="section" id="otel">
+  <div class="section-head"><span class="section-num">16</span></div>
+  <h2>OpenTelemetry Integration</h2>
+  <div class="section-line"></div>
+  <p>Built on OpenTelemetry Swift. OTLP/HTTP export, Instruments.app signposts, automatic sessions.</p>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Swift</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="kw">try</span> <span class="ty">Terra</span>.<span class="fn">installOpenTelemetry</span>(.<span class="fn">init</span>(
+    <span class="fn">tracesEndpoint</span>: <span class="ty">URL</span>(<span class="fn">string</span>: <span class="str">"http://localhost:4318/v1/traces"</span>)!,
+    <span class="fn">enableSignposts</span>: <span class="kw">true</span>,
+    <span class="fn">enableSessions</span>: <span class="kw">true</span>,
+    <span class="fn">samplingRatio</span>: <span class="num">1.0</span>
+))</code></pre>
+  </div>
+  <h3>Span processors</h3>
+  <ul>
+    <li><strong>TerraSpanEnrichmentProcessor</strong> &mdash; adds privacy, schema version, redaction, anonymization key</li>
+    <li><strong>TerraSessionSpanProcessor</strong> &mdash; attaches session ID to Terra spans</li>
+  </ul>
+</section>
+
+<!-- 17 -->
+<section class="section" id="persist">
+  <div class="section-head"><span class="section-num">17</span></div>
+  <h2>On-Device Persistence</h2>
+  <div class="section-line"></div>
+  <p>Offline buffering. Spans written to disk when network is unavailable, auto-replayed on reconnect.</p>
+  <ul>
+    <li><code>~/.cache/opentelemetry/terra/traces/</code></li>
+    <li><code>~/.cache/opentelemetry/terra/metrics/</code></li>
+    <li><code>~/.cache/opentelemetry/terra/logs/</code></li>
+  </ul>
+</section>
+
+<!-- 18 -->
+<section class="section" id="sessions">
+  <div class="section-head"><span class="section-num">18</span></div>
+  <h2>Session Management</h2>
+  <div class="section-line"></div>
+  <p>Automatic session context. ID generated per app launch with previous session tracking.</p>
+  <ul>
+    <li><code>terra.session.id</code> &mdash; current session</li>
+    <li><code>terra.session.previous_id</code> &mdash; continuity tracking</li>
+  </ul>
+</section>
+
+<!-- 19 -->
+<section class="section" id="metrics">
+  <div class="section-head"><span class="section-num">19</span></div>
+  <h2>Metrics</h2>
+  <div class="section-line"></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Metric</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>terra.inference.count</code></td><td>Counter</td><td>Total inference operations</td></tr>
+      <tr><td><code>terra.inference.duration_ms</code></td><td>Histogram</td><td>Inference duration distribution</td></tr>
+      <tr><td><code>terra.recommendation.count</code></td><td>Counter</td><td>Recommendations surfaced</td></tr>
+      <tr><td><code>terra.anomaly.count</code></td><td>Counter</td><td>Anomalies detected</td></tr>
+      <tr><td><code>terra.stall.count</code></td><td>Counter</td><td>Token generation stalls</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 20 -->
+<section class="section" id="schema">
+  <div class="section-head"><span class="section-num">20</span></div>
+  <h2>Telemetry Schema (terra.v1)</h2>
+  <div class="section-line"></div>
+  <h3>Required contract attributes</h3>
+  <ul>
+    <li><code>terra.semantic.version</code> &mdash; <code>v1</code></li>
+    <li><code>terra.schema.family</code> &mdash; <code>terra</code></li>
+    <li><code>terra.runtime</code> &mdash; one of 8 runtimes</li>
+    <li><code>terra.request.id</code> &mdash; per-request UUID</li>
+    <li><code>terra.session.id</code> &mdash; session identifier</li>
+    <li><code>terra.model.fingerprint</code> &mdash; pipe-delimited identity</li>
+  </ul>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Fingerprint</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="fn">model</span>=<span class="str">llama-3.2-1B</span>|<span class="fn">runtime</span>=<span class="str">coreml</span>|<span class="fn">quant</span>=<span class="str">q4_0</span>|<span class="fn">tokenizer</span>=<span class="str">v2</span>|<span class="fn">backend</span>=<span class="str">ane</span></code></pre>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Namespace</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>gen_ai.*</code></td><td>OTel GenAI semantic conventions</td></tr>
+      <tr><td><code>terra.*</code></td><td>Runtime, streaming, latency, privacy</td></tr>
+      <tr><td><code>terra.content.*</code></td><td>Privacy-governed content</td></tr>
+      <tr><td><code>terra.hw.*</code></td><td>Hardware (RSS, GPU, ANE)</td></tr>
+      <tr><td><code>terra.stream.*</code></td><td>Streaming (TTFT, TPS, chunks)</td></tr>
+      <tr><td><code>terra.latency.*</code></td><td>Timing metrics</td></tr>
+      <tr><td><code>terra.policy.*</code></td><td>Compliance annotations</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 21 -->
+<section class="section" id="viewer">
+  <div class="section-head"><span class="section-num">21</span></div>
+  <h2>Trace Viewer macOS App</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TraceMacApp</div>
+  <div class="card-grid">
+    <div class="card"><div class="card-title">Trace List</div><div class="card-desc">Filterable, sortable with runtime badges and search.</div></div>
+    <div class="card"><div class="card-title">Timeline</div><div class="card-desc">Canvas rendering, non-overlapping lanes, zoom &amp; pan.</div></div>
+    <div class="card"><div class="card-title">Span Tree</div><div class="card-desc">Hierarchical layout with edge rendering, color-coded.</div></div>
+    <div class="card"><div class="card-title">Inspector</div><div class="card-desc">Attributes, events (classified), links, raw JSON.</div></div>
+    <div class="card"><div class="card-title">Dashboard</div><div class="card-desc">p50/p95/p99 latency, TTFT, anomaly &amp; stall counts.</div></div>
+    <div class="card"><div class="card-title">Live Mode</div><div class="card-desc">Auto-select newest trace every 2s. OTLP receiver on 4318.</div></div>
+  </div>
+  <h3>Data sources</h3>
+  <ul>
+    <li><strong>File system</strong> &mdash; <code>~/.cache/opentelemetry/terra/traces/</code></li>
+    <li><strong>OTLP receiver</strong> &mdash; built-in HTTP server on port 4318</li>
+    <li><strong>Ollama logs</strong> &mdash; parsed into trace format</li>
+    <li><strong>File watcher</strong> &mdash; auto-reload on directory changes</li>
+  </ul>
+</section>
+
+<!-- 22 -->
+<section class="section" id="cli">
+  <div class="section-head"><span class="section-num">22</span></div>
+  <h2>CLI Tool</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TerraCLI</div>
+  <div class="codeblock">
+    <div class="codeblock-bar"><span class="codeblock-lang">Bash</span><div class="codeblock-dots"><span></span><span></span><span></span></div></div>
+    <pre><code><span class="cm"># Stream format, localhost:4318</span>
+terra trace serve
+
+<span class="cm"># Hierarchical tree output</span>
+terra trace serve --format tree
+
+<span class="cm"># Accept from devices on LAN</span>
+terra trace serve --bind-all --port <span class="num">4318</span>
+
+<span class="cm"># Diagnostics</span>
+terra trace doctor</code></pre>
+  </div>
+</section>
+
+<!-- 23 -->
+<section class="section" id="openclaw">
+  <div class="section-head"><span class="section-num">23</span></div>
+  <h2>OpenClaw Integration</h2>
+  <div class="section-line"></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Mode</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>.disabled</code></td><td>No integration</td></tr>
+      <tr><td><code>.diagnosticsOnly</code></td><td>JSONL export for dashboard</td></tr>
+      <tr><td><code>.gatewayOnly</code></td><td>Instrument gateway requests</td></tr>
+      <tr><td><code>.dualPath</code></td><td>Both diagnostics and gateway</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- 24 -->
+<section class="section" id="proxy">
+  <div class="section-head"><span class="section-num">24</span></div>
+  <h2>HTTP Proxy Instrumentation</h2>
+  <div class="section-line"></div>
+  <div class="module-tag">TerraAutoInstrument</div>
+  <p>Transparent <code>URLProtocol</code> proxy for local AI servers. Marks traffic with <code>X-Terra-Proxy: active</code> to prevent loops.</p>
+  <ul>
+    <li>Ollama (port 11434)</li>
+    <li>LM Studio (port 1234)</li>
+    <li>Any local inference server</li>
+  </ul>
+</section>
+
+<!-- 25 -->
+<section class="section" id="platforms">
+  <div class="section-head"><span class="section-num">25</span></div>
+  <h2>Platform Support</h2>
+  <div class="section-line"></div>
+  <p>Swift 5.9+ with <code>#if canImport</code> guards for graceful degradation.</p>
+  <div class="plat-row">
+    <div class="plat"><div class="plat-name">macOS</div><div class="plat-ver">14.0+</div></div>
+    <div class="plat"><div class="plat-name">iOS</div><div class="plat-ver">13.0+</div></div>
+    <div class="plat"><div class="plat-name">tvOS</div><div class="plat-ver">13.0+</div></div>
+    <div class="plat"><div class="plat-name">watchOS</div><div class="plat-ver">6.0+</div></div>
+    <div class="plat"><div class="plat-name">visionOS</div><div class="plat-ver">1.0+</div></div>
+  </div>
+</section>
+
+<footer class="footer">
+  <span class="footer-l">Terra &mdash; On-Device GenAI Observability for Swift</span>
+  <span class="footer-r">terra.v1 &middot; Swift 5.9+</span>
+</footer>
+
+</div>
+</main>
+
+<script>
+const sections=document.querySelectorAll('.section');
+const navLinks=document.querySelectorAll('.nav-link');
+const obs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      navLinks.forEach(l=>l.classList.remove('active'));
+      const a=document.querySelector(`.nav-link[href="#${e.target.id}"]`);
+      if(a)a.classList.add('active');
+    }
+  });
+},{rootMargin:'-72px 0px -60% 0px',threshold:0});
+sections.forEach(s=>obs.observe(s));
+</script>
+</body>
+</html>

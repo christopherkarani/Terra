@@ -1,23 +1,23 @@
 import OpenTelemetryApi
 
-package enum TerraTelemetryClassifier {
-  package static let recommendationEventName = "terra.recommendation"
-  package static let recommendationAttributePrefix = "terra.recommendation."
+public enum TerraTelemetryClassifier {
+  public static let recommendationEventName = "terra.recommendation"
+  public static let recommendationAttributePrefix = "terra.recommendation."
 
-  package static let anomalyNamePrefix = "terra.anomaly"
-  package static let anomalyAttributePrefix = "terra.anomaly."
+  public static let anomalyNamePrefix = "terra.anomaly"
+  public static let anomalyAttributePrefix = "terra.anomaly."
 
-  package static let policyNamePrefix = "terra.policy"
-  package static let auditNamePrefix = "terra.audit"
-  package static let policyAttributePrefix = "terra.policy."
-  package static let auditAttributePrefix = "terra.audit."
+  public static let policyNamePrefix = "terra.policy"
+  public static let auditNamePrefix = "terra.audit"
+  public static let policyAttributePrefix = "terra.policy."
+  public static let auditAttributePrefix = "terra.audit."
 
-  package static let lifecycleEventNames: Set<String> = [
+  public static let lifecycleEventNames: Set<String> = [
     "terra.first_token",
     "terra.token.lifecycle",
     "terra.stream.lifecycle",
   ]
-  package static let lifecycleAttributeKeys: Set<String> = [
+  public static let lifecycleAttributeKeys: Set<String> = [
     "terra.token.stage",
     "terra.token.index",
     "terra.token.gap_ms",
@@ -26,11 +26,11 @@ package enum TerraTelemetryClassifier {
     "terra.stream.time_to_first_token_ms",
   ]
 
-  package static let hardwareNamePrefixes = [
+  public static let hardwareNamePrefixes = [
     "terra.process.",
     "terra.hw.",
   ]
-  package static let hardwareAttributeKeys: Set<String> = [
+  public static let hardwareAttributeKeys: Set<String> = [
     "terra.process.thermal_state",
     "terra.process.memory_resident_delta_mb",
     "terra.process.memory_peak_mb",
@@ -42,7 +42,7 @@ package enum TerraTelemetryClassifier {
     "terra.hw.ane_utilization_pct",
   ]
 
-  package static func isRecommendationEvent(
+  public static func isRecommendationEvent(
     name: String,
     attributes: [String: OpenTelemetryApi.AttributeValue]
   ) -> Bool {
@@ -52,7 +52,7 @@ package enum TerraTelemetryClassifier {
     return attributes.keys.contains(where: { $0.hasPrefix(recommendationAttributePrefix) })
   }
 
-  package static func isAnomalyEvent(
+  public static func isAnomalyEvent(
     name: String,
     attributes: [String: OpenTelemetryApi.AttributeValue]
   ) -> Bool {
@@ -62,7 +62,7 @@ package enum TerraTelemetryClassifier {
     return attributes.keys.contains(where: { $0.hasPrefix(anomalyAttributePrefix) })
   }
 
-  package static func isPolicyEvent(
+  public static func isPolicyEvent(
     name: String,
     attributes: [String: OpenTelemetryApi.AttributeValue]
   ) -> Bool {
@@ -74,7 +74,7 @@ package enum TerraTelemetryClassifier {
     }
   }
 
-  package static func isLifecycleEvent(
+  public static func isLifecycleEvent(
     name: String,
     attributes: [String: OpenTelemetryApi.AttributeValue]
   ) -> Bool {
@@ -86,7 +86,7 @@ package enum TerraTelemetryClassifier {
     }
   }
 
-  package static func isHardwareEvent(
+  public static func isHardwareEvent(
     name: String,
     attributes: [String: OpenTelemetryApi.AttributeValue]
   ) -> Bool {
