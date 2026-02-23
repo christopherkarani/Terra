@@ -8,7 +8,7 @@ on:
 
 jobs:
   swift:
-    name: SwiftPM + TraceMacApp build
+    name: SwiftPM build + test
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -38,15 +38,3 @@ jobs:
           set -euo pipefail
           swift package diagnose-api-breaking-changes Terra
           swift package diagnose-api-breaking-changes TerraTraceKit
-
-      - name: TraceMacApp (unsigned) build
-        run: |
-          set -euo pipefail
-          xcodebuild \
-            -project Apps/TraceMacApp/TraceMacApp.xcodeproj \
-            -scheme TraceMacApp \
-            -configuration Release \
-            -destination "platform=macOS" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            build

@@ -24,13 +24,9 @@ let package = Package(
     .library(name: "TerraLlama", targets: ["TerraLlama"]),
     .library(name: "TerraAccelerate", targets: ["TerraAccelerate"]),
     .library(name: "TerraTracedMacro", targets: ["TerraTracedMacro"]),
-    .library(name: "TraceMacAppUI", targets: ["TraceMacAppUI"]),
-    .executable(name: "TerraSample", targets: ["TerraSample"]),
-    .executable(name: "TraceMacApp", targets: ["TraceMacApp"]),
-    .executable(name: "terra", targets: ["TerraCLI"])
+    .executable(name: "TerraSample", targets: ["TerraSample"])
   ],
   dependencies: [
-    .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
     .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.25.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", from: "2.3.0"),
@@ -169,25 +165,13 @@ let package = Package(
       path: "Sources/TerraTracedMacro"
     ),
 
-    // MARK: - TraceMacApp UI
-
-    .target(
-      name: "TraceMacAppUI",
-      dependencies: [
-        "TerraTraceKit",
-        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
-        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
-      ],
-      path: "Sources/TraceMacApp",
-      exclude: ["TraceMacApp.swift"]
-    ),
-
     // MARK: - Test Targets
 
     .testTarget(
       name: "TerraTests",
       dependencies: [
         "TerraCore",
+        "TerraLlama",
         "TerraTraceKit",
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core")
@@ -215,7 +199,10 @@ let package = Package(
         .product(name: "SwiftProtobuf", package: "swift-protobuf"),
         .product(name: "Testing", package: "swift-testing"),
       ],
-      path: "Tests/TerraTraceKitTests"
+      path: "Tests/TerraTraceKitTests",
+      resources: [
+        .copy("Fixtures/TerraV1")
+      ]
     ),
     .testTarget(
       name: "TerraHTTPInstrumentTests",
@@ -246,6 +233,8 @@ let package = Package(
       dependencies: [
         "Terra",
         "TerraCore",
+        "TerraMetalProfiler",
+        "TerraSystemProfiler",
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
@@ -276,28 +265,6 @@ let package = Package(
       ],
       path: "Tests/TerraTracedMacroTests"
     ),
-    .testTarget(
-      name: "TraceMacAppTests",
-      dependencies: [
-        "TraceMacAppUI",
-        "TerraTraceKit",
-        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
-        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
-        .product(name: "Testing", package: "swift-testing"),
-      ],
-      path: "Tests/TraceMacAppTests"
-    ),
-    .testTarget(
-      name: "TraceMacAppUITests",
-      dependencies: [
-        "TraceMacAppUI",
-        "TerraTraceKit",
-        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
-        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
-        .product(name: "Testing", package: "swift-testing"),
-      ],
-      path: "Tests/TraceMacAppUITests"
-    ),
 
     // MARK: - Examples
 
@@ -305,23 +272,6 @@ let package = Package(
       name: "TerraSample",
       dependencies: ["Terra"],
       path: "Examples/Terra Sample"
-    ),
-    .executableTarget(
-      name: "TerraCLI",
-      dependencies: [
-        "TerraTraceKit",
-        .product(name: "ArgumentParser", package: "swift-argument-parser")
-      ],
-      path: "Sources/terra-cli"
-    ),
-    .executableTarget(
-      name: "TraceMacApp",
-      dependencies: [
-        "TraceMacAppUI",
-        "TerraTraceKit"
-      ],
-      path: "Sources/TraceMacApp",
-      sources: ["TraceMacApp.swift"]
     )
   ]
 )
