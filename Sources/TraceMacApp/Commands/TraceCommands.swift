@@ -26,6 +26,12 @@ struct TraceCommands: Commands {
                 appState?.loadSampleTraces()
             }
 
+            Button("Clear Traces") {
+                appState?.clearTraces()
+            }
+            .keyboardShortcut(.delete, modifiers: [.command, .shift])
+            .disabled(appState?.traces.isEmpty ?? true)
+
             Divider()
 
             Button("Export Selected Trace\u{2026}") {

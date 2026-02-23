@@ -71,6 +71,12 @@ extension Terra {
     public var temperature: Double?
     public var stream: Bool?
 
+    // Content telemetry (privacy-governed)
+    public var systemPrompt: String?
+    public var completionText: String?
+    public var thinkingText: String?
+    public var finishReason: String?
+
     public init(
       model: String,
       prompt: String? = nil,
@@ -80,7 +86,11 @@ extension Terra {
       modelFingerprint: ModelFingerprint? = nil,
       maxOutputTokens: Int? = nil,
       temperature: Double? = nil,
-      stream: Bool? = nil
+      stream: Bool? = nil,
+      systemPrompt: String? = nil,
+      completionText: String? = nil,
+      thinkingText: String? = nil,
+      finishReason: String? = nil
     ) {
       self.model = model
       self.prompt = prompt
@@ -91,6 +101,10 @@ extension Terra {
       self.maxOutputTokens = maxOutputTokens
       self.temperature = temperature
       self.stream = stream
+      self.systemPrompt = systemPrompt
+      self.completionText = completionText
+      self.thinkingText = thinkingText
+      self.finishReason = finishReason
     }
   }
 
@@ -107,10 +121,19 @@ extension Terra {
   public struct Agent: Sendable, Hashable {
     public var name: String
     public var id: String?
+    public var delegationPrompt: String?
+    public var delegationCapture: CaptureIntent
 
-    public init(name: String, id: String? = nil) {
+    public init(
+      name: String,
+      id: String? = nil,
+      delegationPrompt: String? = nil,
+      delegationCapture: CaptureIntent = .default
+    ) {
       self.name = name
       self.id = id
+      self.delegationPrompt = delegationPrompt
+      self.delegationCapture = delegationCapture
     }
   }
 
@@ -126,9 +149,20 @@ extension Terra {
 
   public struct ToolCall: Sendable, Hashable {
     public var id: String
+    public var input: String?
+    public var output: String?
+    public var contentCapture: CaptureIntent
 
-    public init(id: String) {
+    public init(
+      id: String,
+      input: String? = nil,
+      output: String? = nil,
+      contentCapture: CaptureIntent = .default
+    ) {
       self.id = id
+      self.input = input
+      self.output = output
+      self.contentCapture = contentCapture
     }
   }
 

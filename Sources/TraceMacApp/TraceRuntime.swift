@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import TerraTraceKit
 import OpenTelemetryApi
 
@@ -13,6 +14,21 @@ enum TraceRuntimeFilter: String, CaseIterable, Sendable {
     case openClawGateway
     case httpAPI
     case other
+
+    var accentColor: Color {
+        switch self {
+        case .all:              return DashboardTheme.Colors.textSecondary
+        case .coreML:           return DashboardTheme.Colors.nodeInference
+        case .foundationModels: return DashboardTheme.Colors.nodeSafety
+        case .mlx:              return DashboardTheme.Colors.nodeAgent
+        case .ollama:           return DashboardTheme.Colors.nodeTool
+        case .lmStudio:         return DashboardTheme.Colors.nodeEmbedding
+        case .llamaCpp:         return DashboardTheme.Colors.nodeStage
+        case .openClawGateway:  return DashboardTheme.Colors.accentActive
+        case .httpAPI:          return DashboardTheme.Colors.textSecondary
+        case .other:            return DashboardTheme.Colors.textTertiary
+        }
+    }
 
     var title: String {
         switch self {

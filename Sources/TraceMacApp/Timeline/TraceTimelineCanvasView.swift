@@ -225,8 +225,8 @@ struct TraceTimelineCanvasView: View {
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .foregroundStyle(.secondary)
-                .background(.ultraThinMaterial, in: Capsule())
+                .foregroundStyle(DashboardTheme.Colors.textTertiary)
+                .background(DashboardTheme.Colors.surfaceRaised, in: Capsule())
                 .accessibilityLabel("Timeline marker status")
                 .accessibilityValue(markerRenderState.statusText)
         }
@@ -249,7 +249,11 @@ struct TraceTimelineCanvasView: View {
             guard laneRect.intersects(CGRect(origin: .zero, size: size)) else { continue }
             let lanePath = RoundedRectangle(cornerRadius: laneCornerRadius)
                 .path(in: laneRect)
-            context.fill(lanePath, with: .color(.gray.opacity(0.08)))
+            // Alternating lane backgrounds
+            let bgColor = laneIndex % 2 == 0
+                ? DashboardTheme.Colors.surfaceRaised
+                : DashboardTheme.Colors.windowBackground
+            context.fill(lanePath, with: .color(bgColor))
         }
     }
 
@@ -277,7 +281,7 @@ struct TraceTimelineCanvasView: View {
 
             context.stroke(
                 path,
-                with: .color(DashboardTheme.textTertiary.opacity(0.5)),
+                with: .color(DashboardTheme.Colors.borderDefault),
                 style: StrokeStyle(lineWidth: 0.5, dash: [3, 2])
             )
         }
@@ -304,14 +308,14 @@ struct TraceTimelineCanvasView: View {
                 context.fill(barPath, with: .color(.white.opacity(0.18)))
             }
 
-            // Selection ring
+            // Selection ring — textPrimary (black) instead of teal
             if layout.span.spanId == selectedSpanId {
                 let selectionRect = layout.rect.insetBy(dx: -1, dy: -1)
                 let selectionPath = RoundedRectangle(cornerRadius: barCornerRadius - 1)
                     .path(in: selectionRect)
                 context.stroke(
                     selectionPath,
-                    with: .color(DashboardTheme.accentNormal),
+                    with: .color(DashboardTheme.Colors.textPrimary),
                     lineWidth: 2
                 )
             }
@@ -503,11 +507,12 @@ struct TraceTimelineCanvasView: View {
 
     // MARK: - Helpers
 
+    /// Span bars: grayscale (hashed by name), red for errors, amber for critical.
     private func barColor(for layout: SpanLayout) -> Color {
         if layout.isError {
-            return DashboardTheme.accentError
+            return DashboardTheme.Colors.accentError
         } else if layout.isCritical {
-            return DashboardTheme.accentWarning
+            return DashboardTheme.Colors.accentWarning
         } else {
             return DashboardTheme.Colors.serviceColor(for: layout.span.name)
         }
@@ -705,19 +710,19 @@ struct TraceTimelineCanvasView: View {
     private func markerColor(_ kind: TimelineEventMarker.Kind) -> Color {
         switch kind {
         case .promptEval:
-            return .purple
+            return DashboardTheme.Colors.categoryLifecycle
         case .decode:
-            return .blue
+            return DashboardTheme.Colors.categoryPolicy
         case .tokenLifecycle:
-            return .mint
+            return DashboardTheme.Colors.categoryHardware
         case .stall:
-            return .red
+            return DashboardTheme.Colors.categoryAnomalies
         case .recommendation:
-            return .green
+            return DashboardTheme.Colors.categoryRecommendations
         case .anomaly:
-            return .orange
-        case .hardware:
             return DashboardTheme.Colors.accentWarning
+        case .hardware:
+            return DashboardTheme.Colors.categoryHardware
         case .unknown:
             return .secondary
         }

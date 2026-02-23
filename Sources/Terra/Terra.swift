@@ -60,6 +60,49 @@ public enum Terra {
       ) { _, new in new }
     }
 
+    let shouldCaptureContent = privacy.shouldCapture(promptCapture: request.promptCapture)
+
+    if let systemPrompt = request.systemPrompt, shouldCaptureContent {
+      attributes.merge(
+        contentAttributes(
+          original: systemPrompt,
+          contentKey: Keys.Terra.systemPrompt,
+          lengthKey: Keys.Terra.systemPromptLength,
+          hashKey: Keys.Terra.systemPromptSHA256,
+          using: privacy
+        )
+      ) { _, new in new }
+    }
+
+    if let completion = request.completionText, shouldCaptureContent {
+      attributes.merge(
+        contentAttributes(
+          original: completion,
+          contentKey: Keys.Terra.completionText,
+          lengthKey: Keys.Terra.completionLength,
+          hashKey: Keys.Terra.completionSHA256,
+          using: privacy
+        )
+      ) { _, new in new }
+    }
+
+    if let thinking = request.thinkingText, shouldCaptureContent {
+      attributes.merge(
+        contentAttributes(
+          original: thinking,
+          contentKey: Keys.Terra.thinkingText,
+          lengthKey: Keys.Terra.thinkingLength,
+          hashKey: Keys.Terra.thinkingSHA256,
+          using: privacy
+        )
+      ) { _, new in new }
+    }
+
+    if let finishReason = request.finishReason {
+      attributes[Keys.Terra.finishReason] = .string(finishReason)
+      attributes[Keys.GenAI.responseFinishReason] = .string(finishReason)
+    }
+
     return try await withSpan(
       name: SpanNames.inference,
       kind: .internal,
@@ -188,12 +231,27 @@ public enum Terra {
     agent: Agent,
     _ body: @Sendable (Scope<AgentInvocationSpan>) async throws -> R
   ) async rethrows -> R {
+    let privacy = Runtime.shared.privacy
+
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.invokeAgent.rawValue),
       Keys.GenAI.agentName: .string(agent.name),
     ]
     if let id = agent.id {
       attributes[Keys.GenAI.agentID] = .string(id)
+    }
+
+    if let delegation = agent.delegationPrompt,
+       privacy.shouldCapture(promptCapture: agent.delegationCapture) {
+      attributes.merge(
+        contentAttributes(
+          original: delegation,
+          contentKey: Keys.Terra.agentDelegationPrompt,
+          lengthKey: Keys.Terra.agentDelegationLength,
+          hashKey: Keys.Terra.agentDelegationSHA256,
+          using: privacy
+        )
+      ) { _, new in new }
     }
 
     return try await withSpan(
@@ -210,6 +268,8 @@ public enum Terra {
     call: ToolCall,
     _ body: @Sendable (Scope<ToolExecutionSpan>) async throws -> R
   ) async rethrows -> R {
+    let privacy = Runtime.shared.privacy
+
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.executeTool.rawValue),
       Keys.GenAI.toolName: .string(tool.name),
@@ -217,6 +277,32 @@ public enum Terra {
     ]
     if let type = tool.type {
       attributes[Keys.GenAI.toolType] = .string(type)
+    }
+
+    let shouldCaptureContent = privacy.shouldCapture(promptCapture: call.contentCapture)
+
+    if let input = call.input, shouldCaptureContent {
+      attributes.merge(
+        contentAttributes(
+          original: input,
+          contentKey: Keys.Terra.toolInput,
+          lengthKey: Keys.Terra.toolInputLength,
+          hashKey: Keys.Terra.toolInputSHA256,
+          using: privacy
+        )
+      ) { _, new in new }
+    }
+
+    if let output = call.output, shouldCaptureContent {
+      attributes.merge(
+        contentAttributes(
+          original: output,
+          contentKey: Keys.Terra.toolOutput,
+          lengthKey: Keys.Terra.toolOutputLength,
+          hashKey: Keys.Terra.toolOutputSHA256,
+          using: privacy
+        )
+      ) { _, new in new }
     }
 
     return try await withSpan(
@@ -546,6 +632,31 @@ public enum Terra {
       return tracerProvider.get(instrumentationName: instrumentationName, instrumentationVersion: version)
     }
     return tracerProvider.get(instrumentationName: instrumentationName)
+  }
+
+  private static func contentAttributes(
+    original: String,
+    contentKey: String,
+    lengthKey: String,
+    hashKey: String,
+    using privacy: Privacy
+  ) -> [String: AttributeValue] {
+    switch privacy.contentPolicy {
+    case .always:
+      // Full content capture — include text + length
+      return [
+        contentKey: .string(original),
+        lengthKey: .int(original.count),
+      ]
+    case .optIn, .never:
+      // Fall through to redaction strategy for structural data
+      return redactedStringAttributes(
+        original: original,
+        lengthKey: lengthKey,
+        hashKey: hashKey,
+        using: privacy.redaction
+      )
+    }
   }
 
   private static func redactedStringAttributes(

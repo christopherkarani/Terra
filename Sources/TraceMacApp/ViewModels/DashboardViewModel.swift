@@ -30,6 +30,16 @@ struct DashboardMetrics {
     let anomalyCount: Int
     let hardwareTelemetryEventCount: Int
     let runtimeCounts: [TraceRuntimeFilter: Int]
+    let totalEventCount: Int
+    let peakGPUPercent: Double
+    let peakMemoryMB: Double
+}
+
+struct HardwareTimeSeriesPoint: Identifiable {
+    let id = UUID()
+    let relativeTime: TimeInterval
+    let gpuPercent: Double?
+    let memoryMB: Double?
 }
 
 enum DashboardViewModel {
@@ -116,6 +126,19 @@ enum DashboardViewModel {
         let stalledRate = Double(stalledEvents.count) / Double(inferenceSpanCount)
         let promptDecodeSplit = promptDecodeSplitPercent(promptEvalSamples, decodeSamples)
 
+        let totalEventCount = allSpanAttributes.count
+
+        var peakGPU = 0.0
+        var peakMem = 0.0
+        for span in traces.flatMap(\.spans) {
+            if let gpuVal = attributeToDouble(span.attributes["terra.hw.gpu_occupancy_pct"]) {
+                peakGPU = max(peakGPU, gpuVal)
+            }
+            if let memVal = attributeToDouble(span.attributes["terra.process.memory_peak_mb"]) {
+                peakMem = max(peakMem, memVal)
+            }
+        }
+
         return DashboardMetrics(
             totalTraces: totalTraces,
             totalSpans: totalSpans,
@@ -143,8 +166,45 @@ enum DashboardViewModel {
             recommendationCount: recommendationEvents.count,
             anomalyCount: anomalyEvents.count,
             hardwareTelemetryEventCount: hardwareEvents.count,
-            runtimeCounts: runtimeCounts
+            runtimeCounts: runtimeCounts,
+            totalEventCount: totalEventCount,
+            peakGPUPercent: peakGPU,
+            peakMemoryMB: peakMem
         )
+    }
+
+    static func hardwareTimeSeries(from trace: Trace) -> [HardwareTimeSeriesPoint] {
+        var points: [HardwareTimeSeriesPoint] = []
+        let traceStart = trace.startTime
+
+        for span in trace.spans {
+            for event in span.events {
+                let relTime = event.timestamp.timeIntervalSince(traceStart)
+                let gpu = attributeToDouble(event.attributes["terra.hw.gpu_occupancy_pct"])
+                let mem = attributeToDouble(event.attributes["terra.process.memory_peak_mb"])
+                    ?? attributeToDouble(event.attributes["terra.hw.rss_mb"])
+
+                if gpu != nil || mem != nil {
+                    points.append(HardwareTimeSeriesPoint(
+                        relativeTime: relTime,
+                        gpuPercent: gpu,
+                        memoryMB: mem
+                    ))
+                }
+            }
+        }
+
+        return points.sorted { $0.relativeTime < $1.relativeTime }
+    }
+
+    private static func attributeToDouble(_ value: OpenTelemetryApi.AttributeValue?) -> Double? {
+        guard let value else { return nil }
+        switch value {
+        case .double(let d): return d
+        case .int(let i): return Double(i)
+        case .string(let s): return Double(s)
+        default: return nil
+        }
     }
 
     private static func percentile(_ sorted: [TimeInterval], _ p: Double) -> TimeInterval {

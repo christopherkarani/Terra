@@ -1,24 +1,16 @@
 import SwiftUI
 
-/// A view modifier that applies the standard dashboard card style:
-/// system background, rounded corners, thin border, and soft shadow.
+/// Dashboard card style: white background, 6px radius, 1px border.
+/// No shadows, no materials, no gradients.
 struct DashboardCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .background(.ultraThinMaterial)
+            .background(DashboardTheme.Colors.windowBackground)
             .clipShape(.rect(cornerRadius: DashboardTheme.Spacing.cornerRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: DashboardTheme.Spacing.cornerRadius)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [.white.opacity(0.15), .clear],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.5
-                    )
+                    .strokeBorder(DashboardTheme.Colors.borderDefault, lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
     }
 }
 

@@ -107,7 +107,23 @@ final class AppState {
             AppSettings.spanEventsRowLimit = normalized
         }
     }
+    var lastTraceReceivedAt: Date?
     var isApplyingTransparentMode: Bool = false
+    var traceViewMode: TraceViewMode = .events
+    var showOnlyErrors: Bool = false
+    var sidebarCollapsed: Bool = false
+    var expandedRuntimes: Set<TraceRuntimeFilter> = []
+    var bottomPanelHeight: CGFloat = 250
+    var streamCategoryFilter: SpanStreamCategory? = nil
+    var expandedStreamSpanId: String? = nil
+    var traceSortOrder: TraceSortOrder = .newestFirst
+    var isLiveMode: Bool = false {
+        didSet {
+            if isLiveMode { startLivePolling() } else { stopLivePolling() }
+        }
+    }
+    var flowGraphModel: FlowGraphModel?
+    private var streamingController: FlowGraphStreamingController?
     var openClawTransparentModeLastMessage: String?
 
     // MARK: - Computed
@@ -132,14 +148,33 @@ final class AppState {
                 return trace.detectedRuntime == runtimeFilter
             }
         }
-        let sorted = runtimeFiltered.sorted { lhs, rhs in
-            if lhs.fileTimestamp != rhs.fileTimestamp {
-                return lhs.fileTimestamp > rhs.fileTimestamp
+        let errorFiltered = showOnlyErrors ? runtimeFiltered.filter(\.hasError) : runtimeFiltered
+        let sorted: [Trace]
+        switch traceSortOrder {
+        case .newestFirst:
+            sorted = errorFiltered.sorted { lhs, rhs in
+                if lhs.fileTimestamp != rhs.fileTimestamp {
+                    return lhs.fileTimestamp > rhs.fileTimestamp
+                }
+                if lhs.id != rhs.id {
+                    return lhs.id < rhs.id
+                }
+                return lhs.traceId.hexString < rhs.traceId.hexString
             }
-            if lhs.id != rhs.id {
-                return lhs.id < rhs.id
+        case .oldestFirst:
+            sorted = errorFiltered.sorted { lhs, rhs in
+                if lhs.fileTimestamp != rhs.fileTimestamp {
+                    return lhs.fileTimestamp < rhs.fileTimestamp
+                }
+                if lhs.id != rhs.id {
+                    return lhs.id < rhs.id
+                }
+                return lhs.traceId.hexString < rhs.traceId.hexString
             }
-            return lhs.traceId.hexString < rhs.traceId.hexString
+        case .durationDesc:
+            sorted = errorFiltered.sorted { $0.duration > $1.duration }
+        case .durationAsc:
+            sorted = errorFiltered.sorted { $0.duration < $1.duration }
         }
         guard !query.isEmpty else { return sorted }
         return sorted.filter { trace in
@@ -252,6 +287,7 @@ final class AppState {
     // MARK: - OTLP Receiver
 
     var isOTLPReceiverRunning: Bool { otlpReceiver?.isRunning ?? false }
+    var isFileWatcherRunning: Bool { watcher != nil }
 
     func startOTLPReceiver() {
         stopOTLPReceiver()
@@ -281,6 +317,8 @@ final class AppState {
     private var otlpReceiver: OTLPReceiver?
     private var loader: TraceLoader
     private let isWatchFolderFeatureEnabled: () -> Bool
+    private var livePollingTask: Task<Void, Never>?
+    private var knownTraceIDs: Set<String> = []
 
     // MARK: - Init
 
@@ -309,6 +347,7 @@ final class AppState {
         }
         isLoading = true
         errorMessage = nil
+        let previousTraceCount = self.traces.count
         let loader = self.loader
         Task(priority: .userInitiated) {
             let result: Result<TraceLoadResult, Error>
@@ -328,7 +367,13 @@ final class AppState {
                     self.loadedTraceFileCount = loaded.loadedFileCount + ollamaLoad.traces.count
                     self.totalTraceFileCount = loaded.totalFileCount + ollamaLoad.totalEntries
                     self.traces = Self.mergeTraces(primary: loaded.traces, secondary: ollamaLoad.traces)
-                    if let previousSelectedId {
+                    if self.traces.count > previousTraceCount {
+                        self.lastTraceReceivedAt = Date()
+                    }
+                    if let previousSelectedId,
+                       let updatedTrace = self.traces.first(where: { $0.id == previousSelectedId }) {
+                        self.selectedTrace = updatedTrace
+                    } else if let previousSelectedId {
                         self.selectedTrace = self.traces.first { $0.id == previousSelectedId }
                     }
                     if self.selectedTrace == nil {
@@ -356,6 +401,21 @@ final class AppState {
                         self.selectedSpan = nil
                     }
                 }
+                // Feed updated trace to streaming controller for live phase transitions
+                if let updatedTrace = self.selectedTrace {
+                    self.streamingController?.update(with: updatedTrace)
+                }
+                if self.isLiveMode {
+                    let currentIDs = Set(self.traces.map(\.id))
+                    let newIDs = currentIDs.subtracting(self.knownTraceIDs)
+                    if !newIDs.isEmpty,
+                       let newest = self.traces
+                           .filter({ newIDs.contains($0.id) })
+                           .max(by: { $0.fileTimestamp < $1.fileTimestamp }) {
+                        self.selectTrace(newest)
+                    }
+                    self.knownTraceIDs = currentIDs
+                }
                 self.isLoading = false
             }
         }
@@ -364,10 +424,30 @@ final class AppState {
     func selectTrace(_ trace: Trace?) {
         selectedTrace = trace
         selectedSpan = nil
+        expandedStreamSpanId = nil
+        if let trace {
+            let model = FlowGraphModel()
+            model.build(from: trace)
+            flowGraphModel = model
+            streamingController = FlowGraphStreamingController(flowModel: model)
+        } else {
+            flowGraphModel = nil
+            streamingController = nil
+        }
     }
 
     func selectSpan(_ span: SpanData?) {
         selectedSpan = span
+    }
+
+    func clearTraces() {
+        traces = []
+        selectedTrace = nil
+        selectedSpan = nil
+        flowGraphModel = nil
+        streamingController = nil
+        knownTraceIDs = []
+        lastTraceReceivedAt = nil
     }
 
     func loadSampleTraces() {
@@ -564,12 +644,34 @@ final class AppState {
     }
 
     func configureTracesDirectory(_ directoryURL: URL) {
+        stopLivePolling()
         AppSettings.tracesDirectoryURL = directoryURL
         loader = Self.makeLoader(for: directoryURL)
         loadTraces(resetPagination: true)
         if AppSettings.isWatchingTracesDirectory {
             startWatching()
         }
+        if isLiveMode {
+            startLivePolling()
+        }
+    }
+
+    private func startLivePolling() {
+        stopLivePolling()
+        knownTraceIDs = Set(traces.map(\.id))
+        if watcher == nil { startWatching() }
+        livePollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled, let self, !self.isLoading else { continue }
+                self.loadTraces()
+            }
+        }
+    }
+
+    private func stopLivePolling() {
+        livePollingTask?.cancel()
+        livePollingTask = nil
     }
 
     private static func makeLoader(for directoryURL: URL) -> TraceLoader {

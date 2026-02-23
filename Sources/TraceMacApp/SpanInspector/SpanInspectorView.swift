@@ -2,21 +2,15 @@ import SwiftUI
 import TerraTraceKit
 import OpenTelemetrySdk
 
-/// The right-column panel showing a hierarchical span tree and
-/// tabbed detail view for the selected span.
+/// The right-column panel showing the tabbed detail view for the selected span.
+/// The tree is now the primary content view, so no redundant tree here.
 struct SpanInspectorView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
         Group {
-            if let trace = appState.selectedTrace {
-                VSplitView {
-                    SpanTreeView(trace: trace)
-                        .frame(minHeight: 120)
-
-                    SpanDetailView()
-                        .frame(minHeight: 120)
-                }
+            if appState.selectedTrace != nil {
+                SpanDetailView()
             } else {
                 emptyState
             }

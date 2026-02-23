@@ -117,6 +117,9 @@ extension Terra {
       public static let toolName = "gen_ai.tool.name"
       public static let toolType = "gen_ai.tool.type"
       public static let toolCallID = "gen_ai.tool.call.id"
+
+      // MARK: Response attributes
+      public static let responseFinishReason = "gen_ai.response.finish_reason"
     }
 
     public enum Terra {
@@ -210,6 +213,28 @@ extension Terra {
       public static let anomalyKind = "terra.anomaly.kind"
       public static let anomalyScore = "terra.anomaly.score"
       public static let anomalyBaselineKey = "terra.anomaly.baseline_key"
+
+      // MARK: Content telemetry (privacy-governed)
+      public static let promptText = "terra.content.prompt"
+      public static let completionText = "terra.content.completion"
+      public static let systemPrompt = "terra.content.system_prompt"
+      public static let thinkingText = "terra.content.thinking"
+      public static let toolInput = "terra.content.tool_input"
+      public static let toolOutput = "terra.content.tool_output"
+      public static let agentDelegationPrompt = "terra.content.agent_delegation_prompt"
+      public static let finishReason = "terra.content.finish_reason"
+      public static let completionLength = "terra.completion.length"
+      public static let completionSHA256 = "terra.completion.sha256"
+      public static let thinkingLength = "terra.thinking.length"
+      public static let thinkingSHA256 = "terra.thinking.sha256"
+      public static let toolInputLength = "terra.tool_input.length"
+      public static let toolInputSHA256 = "terra.tool_input.sha256"
+      public static let toolOutputLength = "terra.tool_output.length"
+      public static let toolOutputSHA256 = "terra.tool_output.sha256"
+      public static let agentDelegationLength = "terra.agent_delegation.length"
+      public static let agentDelegationSHA256 = "terra.agent_delegation.sha256"
+      public static let systemPromptLength = "terra.system_prompt.length"
+      public static let systemPromptSHA256 = "terra.system_prompt.sha256"
 
       // MARK: Compliance and control
       public static let policyBlocked = "terra.policy.blocked"

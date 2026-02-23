@@ -8,7 +8,7 @@ struct LoadingOverlayView: View {
     var body: some View {
         ZStack {
             if isVisible {
-                Color(.windowBackgroundColor)
+                DashboardTheme.Colors.windowBackground
                     .opacity(0.7)
 
                 VStack(spacing: 8) {
@@ -21,6 +21,6 @@ struct LoadingOverlayView: View {
                 }
             }
         }
-        .animation(DashboardTheme.Animation.standard, value: isVisible)
+        .animation(DashboardTheme.Animation.accessible(DashboardTheme.Animation.standard), value: isVisible)
     }
 }

@@ -6,6 +6,7 @@ import TerraTraceKit
 public final class AppCoordinator: NSObject, MainMenuCoordinating {
   private let window: NSWindow
   private let appState: AppState
+  private let relativeClock: RelativeClock
   private let toolbarProvider: TraceToolbarProvider
 
   private var onboardingWindowController: OnboardingWindowController?
@@ -19,9 +20,11 @@ public final class AppCoordinator: NSObject, MainMenuCoordinating {
     self.appState = AppState(isWatchFolderFeatureEnabled: {
       licenseManager.isFeatureEnabled(.watchFolder)
     })
+    let clock = RelativeClock()
+    self.relativeClock = clock
     toolbarProvider = TraceToolbarProvider()
     window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 1200, height: 720),
+      contentRect: NSRect(x: 0, y: 0, width: 1400, height: 800),
       styleMask: [.titled, .closable, .miniaturizable, .resizable],
       backing: .buffered,
       defer: false
@@ -29,9 +32,10 @@ public final class AppCoordinator: NSObject, MainMenuCoordinating {
     window.title = "Terra Trace Viewer"
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
+    window.minSize = NSSize(width: 960, height: 600)
 
     let hosting = NSHostingController(
-      rootView: DashboardView().environment(appState)
+      rootView: DashboardView().environment(appState).environment(clock)
     )
     window.contentViewController = hosting
     window.isReleasedWhenClosed = false
@@ -57,6 +61,10 @@ public final class AppCoordinator: NSObject, MainMenuCoordinating {
   }
 
   public func start() {
+    relativeClock.start()
+    if window.frame.height < window.minSize.height || window.frame.width < window.minSize.width {
+      window.setContentSize(NSSize(width: 1400, height: 800))
+    }
     window.center()
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)

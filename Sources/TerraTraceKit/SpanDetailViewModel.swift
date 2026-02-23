@@ -69,6 +69,17 @@ public final class SpanDetailViewModel {
   /// Links prepared for display.
   public private(set) var linkItems: [LinkItem] = []
 
+  /// Category counts for the merged events tab filter chips.
+  public var eventCategoryCounts: [String: Int] {
+    [
+      "Lifecycle": lifecycleEventItems.count,
+      "Policy": policyEventItems.count,
+      "Recs": recommendationEventItems.count,
+      "Anomalies": anomalyEventItems.count,
+      "Hardware": hardwareEventItems.count,
+    ]
+  }
+
   /// Creates an empty detail view model.
   public init() {}
 

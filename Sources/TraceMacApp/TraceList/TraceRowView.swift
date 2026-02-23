@@ -3,110 +3,194 @@ import TerraTraceKit
 
 struct TraceRowView: View {
     let trace: Trace
+    var isLive: Bool = false
+
+    @Environment(RelativeClock.self) private var clock
+    @State private var isHovered = false
+    @State private var isFlashing = false
+    @State private var isRunningPulse = false
+    @State private var relativeTime: String = ""
+    @State private var metrics: TraceRowMetrics?
 
     var body: some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(trace.hasError ? DashboardTheme.accentError : .green)
-                .frame(width: 8, height: 8)
+            // Status dot
+            statusDot
 
+            // Name + runtime/model + metrics (3-line layout)
             VStack(alignment: .leading, spacing: 2) {
-                Text(trace.displayName)
-                    .font(DashboardTheme.rowTitle)
-                    .lineLimit(1)
+                // Line 1: display name + duration
+                HStack {
+                    Text(trace.displayName)
+                        .font(DashboardTheme.Fonts.rowTitle)
+                        .foregroundStyle(DashboardTheme.Colors.textPrimary)
+                        .lineLimit(1)
 
-                HStack(spacing: 6) {
-                    if trace.detectedRuntime != .other {
-                        Text(trace.detectedRuntime.title)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(runtimeForeground)
-                            .background(runtimeBackground)
-                            .clipShape(.capsule)
-                    }
-                    if trace.openClawSource != .other {
-                        Text(trace.openClawSource.title)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(sourceForeground)
-                            .background(sourceBackground)
-                            .clipShape(.capsule)
-                    }
+                    Spacer()
+
                     Text(TraceFormatter.duration(trace.duration))
-                    Text(TraceFormatter.timestamp(trace.fileTimestamp))
+                        .font(Font.system(size: 11, design: .monospaced))
+                        .foregroundStyle(DashboardTheme.Colors.textSecondary)
                 }
-                .font(DashboardTheme.rowMeta)
-                .foregroundStyle(.secondary)
+
+                // Line 2: runtime pill + model name (if available)
+                if let metrics, metrics.runtime != .other {
+                    HStack(spacing: 6) {
+                        // Runtime indicator
+                        HStack(spacing: 3) {
+                            Circle()
+                                .fill(metrics.runtime.accentColor)
+                                .frame(width: 5, height: 5)
+                            Text(metrics.runtime.title)
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(DashboardTheme.Colors.textSecondary)
+                        }
+
+                        // Model name
+                        if let modelName = metrics.modelName {
+                            Text(modelName)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(DashboardTheme.Colors.textTertiary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+
+                // Line 3: TTFT + tok/s + span count + error badge + relative time
+                HStack(spacing: 0) {
+                    metaLine
+
+                    if errorCount > 0 {
+                        Text(" ")
+                        Text("\(errorCount) err")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(DashboardTheme.Colors.accentError)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(DashboardTheme.Colors.errorBackground)
+                            .clipShape(.rect(cornerRadius: DashboardTheme.Spacing.cornerRadiusSmall))
+                    }
+                }
             }
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: DashboardTheme.Spacing.cornerRadius)
+                .fill(flashBackground)
+        )
         .contentShape(.rect)
-    }
-
-    private var sourceForeground: Color {
-        switch trace.openClawSource {
-        case .gateway:
-            return DashboardTheme.Colors.accentSuccess
-        case .diagnostics:
-            return DashboardTheme.Colors.accentWarning
-        case .other:
-            return DashboardTheme.Colors.textSecondary
+        .animation(DashboardTheme.Animation.accessible(DashboardTheme.Animation.micro), value: isHovered)
+        .onHover { hovering in isHovered = hovering }
+        .onAppear {
+            relativeTime = Self.formatRelativeTime(trace.fileTimestamp)
+            metrics = TraceRowMetrics(trace: trace)
+            // New-trace flash: if trace is <5 seconds old
+            if trace.fileTimestamp.timeIntervalSinceNow > -5 {
+                isFlashing = true
+                withAnimation(.easeOut(duration: 1.5)) {
+                    isFlashing = false
+                }
+            }
+            // Running-span pulse
+            if hasRunningSpan {
+                isRunningPulse = true
+            }
+        }
+        .onChange(of: clock.tick) {
+            relativeTime = Self.formatRelativeTime(trace.fileTimestamp)
         }
     }
 
-    private var sourceBackground: Color {
-        switch trace.openClawSource {
-        case .gateway:
-            return DashboardTheme.Colors.accentSuccess.opacity(0.15)
-        case .diagnostics:
-            return DashboardTheme.Colors.accentWarning.opacity(0.15)
-        case .other:
-            return DashboardTheme.Colors.textTertiary.opacity(0.12)
+    // MARK: - Meta line
+
+    private var metaSeparator: some View {
+        Text(" \u{00b7} ")
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundStyle(DashboardTheme.Colors.textQuaternary)
+    }
+
+    @ViewBuilder
+    private var metaLine: some View {
+        // TTFT
+        if let formattedTTFT = metrics?.formattedTTFT {
+            let ttftWarning = (metrics?.ttftMs ?? 0) > 2000
+            HStack(spacing: 2) {
+                Text("TTFT")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(DashboardTheme.Colors.textQuaternary)
+                Text(formattedTTFT)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(ttftWarning ? DashboardTheme.Colors.accentWarning : DashboardTheme.Colors.textTertiary)
+            }
+            metaSeparator
+        }
+
+        // Tok/s
+        if let formattedTPS = metrics?.formattedTokensPerSec {
+            Text(formattedTPS)
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(DashboardTheme.Colors.textTertiary)
+            metaSeparator
+        }
+
+        // Span count
+        Text("\(trace.spans.count) spans")
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundStyle(DashboardTheme.Colors.textTertiary)
+
+        metaSeparator
+
+        // Relative time
+        Text(relativeTime)
+            .font(DashboardTheme.Fonts.rowMeta)
+            .foregroundStyle(DashboardTheme.Colors.textTertiary)
+    }
+
+    // MARK: - Subviews
+
+    @ViewBuilder
+    private var statusDot: some View {
+        if hasRunningSpan {
+            // Running span: blue dot with pulsing ring
+            ZStack {
+                Circle()
+                    .fill(DashboardTheme.Colors.accentActive)
+                    .frame(width: 6, height: 6)
+
+                Circle()
+                    .stroke(DashboardTheme.Colors.accentActive.opacity(0.3), lineWidth: 1.5)
+                    .frame(width: 10, height: 10)
+                    .scaleEffect(isRunningPulse ? 1.5 : 1.0)
+                    .opacity(isRunningPulse ? 0.0 : 0.6)
+                    .animation(DashboardTheme.Animation.accessible(DashboardTheme.Animation.pulse), value: isRunningPulse)
+            }
+            .frame(width: 12, height: 12)
+        } else {
+            Circle()
+                .fill(trace.hasError ? DashboardTheme.Colors.accentError : DashboardTheme.Colors.accentSuccess)
+                .frame(width: 6, height: 6)
         }
     }
 
-    private var runtimeForeground: Color {
-        switch trace.detectedRuntime {
-        case .coreML, .foundationModels:
-            return .purple
-        case .mlx:
-            return .blue
-        case .ollama:
-            return .orange
-        case .lmStudio:
-            return .indigo
-        case .llamaCpp:
-            return .teal
-        case .openClawGateway:
-            return DashboardTheme.Colors.accentSuccess
-        case .httpAPI:
-            return DashboardTheme.Colors.accentWarning
-        case .other:
-            return DashboardTheme.Colors.textSecondary
-        case .all:
-            return DashboardTheme.Colors.textSecondary
+    private var flashBackground: Color {
+        if isFlashing {
+            return DashboardTheme.Colors.accentActive.opacity(0.12)
         }
+        return isHovered ? DashboardTheme.Colors.surfaceHover : .clear
     }
 
-    private var runtimeBackground: Color {
-        switch trace.detectedRuntime {
-        case .coreML, .foundationModels:
-            return Color.purple.opacity(0.12)
-        case .mlx:
-            return Color.blue.opacity(0.12)
-        case .ollama:
-            return Color.orange.opacity(0.12)
-        case .lmStudio:
-            return Color.indigo.opacity(0.12)
-        case .llamaCpp:
-            return Color.teal.opacity(0.12)
-        case .openClawGateway:
-            return DashboardTheme.Colors.accentSuccess.opacity(0.15)
-        case .httpAPI:
-            return DashboardTheme.Colors.accentWarning.opacity(0.15)
-        case .other, .all:
-            return DashboardTheme.Colors.textTertiary.opacity(0.12)
-        }
+    // MARK: - Helpers
+
+    private var errorCount: Int {
+        trace.spans.filter { $0.status.isError }.count
+    }
+
+    private var hasRunningSpan: Bool {
+        trace.spans.contains { $0.endTime <= $0.startTime }
+    }
+
+    private static func formatRelativeTime(_ date: Date) -> String {
+        TraceFormatter.relativeTime(date)
     }
 }

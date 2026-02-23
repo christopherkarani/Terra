@@ -80,4 +80,20 @@ enum TraceFormatter {
   static func timestamp(_ date: Date) -> String {
     timestampFormatter.string(from: date)
   }
+
+  static func errorRate(_ rate: Double) -> String {
+    let percentage = rate * 100
+    if percentage == 0 { return "0%" }
+    return percentage.formatted(.number.precision(.fractionLength(1))) + "%"
+  }
+
+  static func relativeTime(_ date: Date) -> String {
+    let interval = -date.timeIntervalSinceNow
+    if interval < 0 { return "just now" }
+    if interval < 5 { return "just now" }
+    if interval < 60 { return "\(Int(interval))s ago" }
+    if interval < 3600 { return "\(Int(interval / 60))m ago" }
+    if interval < 86400 { return "\(Int(interval / 3600))h ago" }
+    return timestamp(date)
+  }
 }
