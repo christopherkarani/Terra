@@ -15,16 +15,27 @@ extension Terra {
   public enum RedactionStrategy: Sendable, Hashable {
     case drop
     case lengthOnly
+    case hashHMACSHA256
+    /// Legacy deterministic hash mode kept for compatibility.
     case hashSHA256
   }
 
   public struct Privacy: Sendable, Hashable {
     public var contentPolicy: ContentPolicy
     public var redaction: RedactionStrategy
+    public var anonymizationKey: Data?
+    public var emitLegacySHA256Attributes: Bool
 
-    public init(contentPolicy: ContentPolicy = .never, redaction: RedactionStrategy = .hashSHA256) {
+    public init(
+      contentPolicy: ContentPolicy = .never,
+      redaction: RedactionStrategy = .hashHMACSHA256,
+      anonymizationKey: Data? = nil,
+      emitLegacySHA256Attributes: Bool = false
+    ) {
       self.contentPolicy = contentPolicy
       self.redaction = redaction
+      self.anonymizationKey = anonymizationKey
+      self.emitLegacySHA256Attributes = emitLegacySHA256Attributes
     }
 
     public static let `default` = Privacy()
@@ -43,4 +54,3 @@ extension Terra {
     }
   }
 }
-

@@ -41,7 +41,7 @@ public enum TerraLlama {
     request.stream = true
     return try await Terra.withStreamingInferenceSpan(request) { streamScope in
       streamScope.setAttributes([
-        Terra.Keys.Terra.runtime: .string("llama.cpp"),
+        Terra.Keys.Terra.runtime: .string("llama_cpp"),
         Terra.Keys.Terra.autoInstrumented: .bool(true),
       ])
       return try await body(streamScope)
@@ -54,13 +54,13 @@ public enum TerraLlama {
   ) {
     var attributes: [String: AttributeValue] = [:]
     if let tokensPerSecond = stats.tokensPerSecond {
-      attributes["llama.tokens_per_second"] = .double(tokensPerSecond)
+      attributes[Terra.Keys.Terra.streamTokensPerSecond] = .double(tokensPerSecond)
     }
     if let timeToFirstTokenMS = stats.timeToFirstTokenMS {
-      attributes["llama.time_to_first_token_ms"] = .double(timeToFirstTokenMS)
+      attributes[Terra.Keys.Terra.streamTimeToFirstTokenMs] = .double(timeToFirstTokenMS)
     }
     if let kvCacheUsagePercent = stats.kvCacheUsagePercent {
-      attributes["llama.kv_cache_usage_percent"] = .double(kvCacheUsagePercent)
+      attributes["terra.llama.kv_cache_usage_percent"] = .double(kvCacheUsagePercent)
     }
     scope.setAttributes(attributes)
   }
@@ -71,13 +71,13 @@ public enum TerraLlama {
   ) {
     for metric in metrics {
       var attributes: [String: AttributeValue] = [
-        "llama.layer.name": .string(metric.layerName),
-        "llama.layer.duration_ms": .double(metric.durationMS),
+        "terra.llama.layer.name": .string(metric.layerName),
+        "terra.llama.layer.duration_ms": .double(metric.durationMS),
       ]
       if let memoryMB = metric.memoryMB {
-        attributes["llama.layer.memory_mb"] = .double(memoryMB)
+        attributes["terra.llama.layer.memory_mb"] = .double(memoryMB)
       }
-      scope.addEvent("llama.layer.profile", attributes: attributes)
+      scope.addEvent("terra.llama.layer.profile", attributes: attributes)
     }
   }
 }

@@ -9,6 +9,9 @@ public actor TraceStore {
   private let maxSpans: Int
   private var spansByKey: [SpanKey: SpanRecord] = [:]
   private var insertionOrder: [SpanKey] = []
+  private var insertionHead: Int = 0
+  private var cachedSnapshot: TraceSnapshot?
+  private var snapshotDirty = true
 
   public init(maxSpans: Int = 10_000) {
     self.maxSpans = max(0, maxSpans)
@@ -29,23 +32,37 @@ public actor TraceStore {
     }
 
     enforceMaxSpans()
+    snapshotDirty = true
     return accepted
   }
 
   public func snapshot(filter: TraceFilter? = nil) -> TraceSnapshot {
+    if filter == nil, let cached = cachedSnapshot, !snapshotDirty {
+      return cached
+    }
     let filtered = spansByKey.values.filter { spanMatchesFilter($0, filter: filter) }
     let ordered = filtered.sorted(by: spanStreamSort)
     let grouped = Dictionary(grouping: ordered, by: { $0.traceID })
     let traces = grouped.mapValues { $0.sorted(by: spanTreeSort) }
-    return TraceSnapshot(allSpans: ordered, traces: traces)
+    let snap = TraceSnapshot(allSpans: ordered, traces: traces)
+    if filter == nil {
+      cachedSnapshot = snap
+      snapshotDirty = false
+    }
+    return snap
   }
 
   private func enforceMaxSpans() {
-    guard maxSpans >= 0 else { return }
-    while spansByKey.count > maxSpans {
-      guard !insertionOrder.isEmpty else { break }
-      let oldestKey = insertionOrder.removeFirst()
-      spansByKey.removeValue(forKey: oldestKey)
+    guard maxSpans > 0 else { return }
+    while spansByKey.count > maxSpans, insertionHead < insertionOrder.count {
+      let key = insertionOrder[insertionHead]
+      insertionHead += 1
+      spansByKey.removeValue(forKey: key)
+    }
+    // Compact when half the array is consumed
+    if insertionHead > insertionOrder.count / 2 {
+      insertionOrder.removeFirst(insertionHead)
+      insertionHead = 0
     }
   }
 }
@@ -55,13 +72,8 @@ private func spanStreamSort(_ lhs: SpanRecord, _ rhs: SpanRecord) -> Bool {
   let rhsEnd = endTimeUnixNano(rhs)
   if lhsEnd != rhsEnd { return lhsEnd < rhsEnd }
 
-  let lhsTrace = idString(lhs.traceID)
-  let rhsTrace = idString(rhs.traceID)
-  if lhsTrace != rhsTrace { return lhsTrace < rhsTrace }
-
-  let lhsSpan = idString(lhs.spanID)
-  let rhsSpan = idString(rhs.spanID)
-  if lhsSpan != rhsSpan { return lhsSpan < rhsSpan }
+  if lhs.traceID != rhs.traceID { return lhs.traceID < rhs.traceID }
+  if lhs.spanID != rhs.spanID { return lhs.spanID < rhs.spanID }
 
   return lhs.name < rhs.name
 }
@@ -70,18 +82,12 @@ private func spanMatchesFilter(_ span: SpanRecord, filter: TraceFilter?) -> Bool
   filter?.matches(span) ?? true
 }
 
-private func idString<T>(_ id: T) -> String {
-  String(describing: id)
-}
-
 private func spanTreeSort(_ lhs: SpanRecord, _ rhs: SpanRecord) -> Bool {
   let lhsStart = startTimeUnixNano(lhs)
   let rhsStart = startTimeUnixNano(rhs)
   if lhsStart != rhsStart { return lhsStart < rhsStart }
 
-  let lhsSpan = idString(lhs.spanID)
-  let rhsSpan = idString(rhs.spanID)
-  if lhsSpan != rhsSpan { return lhsSpan < rhsSpan }
+  if lhs.spanID != rhs.spanID { return lhs.spanID < rhs.spanID }
 
   return lhs.name < rhs.name
 }

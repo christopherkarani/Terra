@@ -29,8 +29,12 @@ final class OTLPHTTPServerTests: XCTestCase {
     }
     defer { server.stop() }
 
-    let actualPort = Int(server.port)
+    let actualPort = try await waitForBoundPort(server, timeout: 2.0)
     XCTAssertGreaterThan(actualPort, 0)
+    guard actualPort > 0 else {
+      XCTFail("Server did not bind to an ephemeral port within timeout")
+      return
+    }
     let requestBytes = makeRawRequest(
       host: "127.0.0.1",
       port: actualPort,
@@ -55,6 +59,107 @@ final class OTLPHTTPServerTests: XCTestCase {
     let lines = renderer.render(spans: snapshot.allSpans)
     XCTAssertFalse(lines.isEmpty)
   }
+
+  func testOTLPHTTPServer_headerReadTimeoutReturns408() async throws {
+    let store = TraceStore(maxSpans: 50)
+    let server = OTLPHTTPServer(
+      host: "127.0.0.1",
+      port: 0,
+      traceStore: store,
+      limits: .init(
+        maxHeaderBytes: 32 * 1024,
+        maxBodyBytes: 10 * 1024 * 1024,
+        headerReadTimeout: 0.2,
+        bodyReadTimeout: 2
+      )
+    )
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = try await waitForBoundPort(server, timeout: 2.0)
+    XCTAssertGreaterThan(actualPort, 0)
+    guard actualPort > 0 else {
+      XCTFail("Server did not bind to an ephemeral port within timeout")
+      return
+    }
+
+    var partial = "POST /v1/traces HTTP/1.1\r\n"
+    partial += "Host: 127.0.0.1:\(actualPort)\r\n"
+    let response = try await sendRawRequest(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      request: Data(partial.utf8)
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 408, "Response body: \(parseBody(from: response))")
+    let snapshot = await store.snapshot(filter: nil)
+    XCTAssertTrue(snapshot.allSpans.isEmpty)
+  }
+
+  func testOTLPHTTPServer_bodyReadTimeoutReturns408() async throws {
+    let fullBody = try OTLPTestFixtures.serializedRequest()
+    let partialBody = Data(fullBody.prefix(max(1, fullBody.count / 4)))
+    let store = TraceStore(maxSpans: 50)
+    let server = OTLPHTTPServer(
+      host: "127.0.0.1",
+      port: 0,
+      traceStore: store,
+      limits: .init(
+        maxHeaderBytes: 32 * 1024,
+        maxBodyBytes: 10 * 1024 * 1024,
+        headerReadTimeout: 2,
+        bodyReadTimeout: 0.2
+      )
+    )
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = try await waitForBoundPort(server, timeout: 2.0)
+    XCTAssertGreaterThan(actualPort, 0)
+    guard actualPort > 0 else {
+      XCTFail("Server did not bind to an ephemeral port within timeout")
+      return
+    }
+
+    let requestBytes = makeRawRequestWithContentLength(
+      host: "127.0.0.1",
+      port: actualPort,
+      declaredContentLength: fullBody.count,
+      body: partialBody
+    )
+    let response = try await sendRawRequest(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      request: requestBytes
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 408, "Response body: \(parseBody(from: response))")
+    let snapshot = await store.snapshot(filter: nil)
+    XCTAssertTrue(snapshot.allSpans.isEmpty)
+  }
+}
+
+private func waitForBoundPort(
+  _ server: OTLPHTTPServer,
+  timeout: TimeInterval
+) async throws -> Int {
+  let deadline = Date().addingTimeInterval(timeout)
+  var port = Int(server.port)
+  while port == 0 && Date() < deadline {
+    try await Task.sleep(nanoseconds: 50_000_000)
+    port = Int(server.port)
+  }
+  return port
 }
 
 private func makeRawRequest(host: String, port: Int, body: Data) -> Data {
@@ -63,6 +168,25 @@ private func makeRawRequest(host: String, port: Int, body: Data) -> Data {
   request += "Content-Type: application/x-protobuf\r\n"
   request += "Content-Encoding: identity\r\n"
   request += "Content-Length: \(body.count)\r\n"
+  request += "Connection: close\r\n"
+  request += "\r\n"
+
+  var data = Data(request.utf8)
+  data.append(body)
+  return data
+}
+
+private func makeRawRequestWithContentLength(
+  host: String,
+  port: Int,
+  declaredContentLength: Int,
+  body: Data
+) -> Data {
+  var request = "POST /v1/traces HTTP/1.1\r\n"
+  request += "Host: \(host):\(port)\r\n"
+  request += "Content-Type: application/x-protobuf\r\n"
+  request += "Content-Encoding: identity\r\n"
+  request += "Content-Length: \(declaredContentLength)\r\n"
   request += "Connection: close\r\n"
   request += "\r\n"
 

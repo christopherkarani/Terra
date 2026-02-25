@@ -32,6 +32,7 @@ public struct TimelineLane: Equatable {
 }
 
 /// View model that packs spans into non-overlapping timeline lanes.
+@MainActor
 public final class TimelineViewModel {
   /// Duration threshold used to flag critical spans.
   public static let criticalDurationThreshold: TimeInterval = 5

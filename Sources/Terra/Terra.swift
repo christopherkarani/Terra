@@ -21,7 +21,7 @@ public enum Terra {
     _ body: @Sendable (Scope<InferenceSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
-    let startTime = Date()
+    let startInstant = ContinuousClock.now
 
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.inference.rawValue),
@@ -43,14 +43,16 @@ public enum Terra {
         redactedStringAttributes(
           original: prompt,
           lengthKey: Keys.Terra.promptLength,
-          hashKey: Keys.Terra.promptSHA256,
-          using: privacy.redaction
+          hmacKey: Keys.Terra.promptHMACSHA256,
+          legacySHA256Key: Keys.Terra.promptSHA256,
+          using: privacy
         )
       ) { _, new in new }
     }
 
     defer {
-      let durationMs = Date().timeIntervalSince(startTime) * 1000
+      let elapsed = ContinuousClock.now - startInstant
+      let durationMs = Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
       Runtime.shared.metrics.recordInference(durationMs: durationMs)
     }
 
@@ -58,6 +60,7 @@ public enum Terra {
       name: SpanNames.inference,
       kind: .internal,
       attributes: attributes,
+      allowErrorMessageCapture: privacy.shouldCapture(promptCapture: request.promptCapture),
       body
     )
   }
@@ -72,7 +75,7 @@ public enum Terra {
       streamingRequest.stream = true
     }
 
-    let startedAt = Date()
+    let startedAt = ContinuousClock.now
     return try await withInferenceSpan(streamingRequest) { scope in
       let streamingScope = StreamingInferenceScope(scope: scope, startedAt: startedAt)
       defer { streamingScope.finish() }
@@ -97,6 +100,7 @@ public enum Terra {
       name: SpanNames.agentInvocation,
       kind: .internal,
       attributes: attributes,
+      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(promptCapture: .default),
       body
     )
   }
@@ -120,6 +124,7 @@ public enum Terra {
       name: SpanNames.toolExecution,
       kind: .internal,
       attributes: attributes,
+      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(promptCapture: .default),
       body
     )
   }
@@ -141,6 +146,7 @@ public enum Terra {
       name: SpanNames.embedding,
       kind: .internal,
       attributes: attributes,
+      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(promptCapture: .default),
       body
     )
   }
@@ -162,8 +168,9 @@ public enum Terra {
         redactedStringAttributes(
           original: subject,
           lengthKey: Keys.Terra.safetySubjectLength,
-          hashKey: Keys.Terra.safetySubjectSHA256,
-          using: privacy.redaction
+          hmacKey: Keys.Terra.safetySubjectHMACSHA256,
+          legacySHA256Key: Keys.Terra.safetySubjectSHA256,
+          using: privacy
         )
       ) { _, new in new }
     }
@@ -172,6 +179,7 @@ public enum Terra {
       name: SpanNames.safetyCheck,
       kind: .internal,
       attributes: attributes,
+      allowErrorMessageCapture: privacy.shouldCapture(promptCapture: check.subjectCapture),
       body
     )
   }
@@ -182,18 +190,18 @@ public enum Terra {
     name: String,
     kind: SpanKind,
     attributes: [String: AttributeValue],
+    allowErrorMessageCapture: Bool,
     _ body: @Sendable (Scope<Kind>) async throws -> R
   ) async rethrows -> R {
     let tracer = tracer()
-    var mergedAttributes = attributes
-    mergedAttributes[Keys.Terra.thermalState] = .string(Runtime.thermalStateLabel())
 
     let spanBuilder = tracer.spanBuilder(spanName: name)
       .setSpanKind(spanKind: kind)
 
-    for (key, value) in mergedAttributes {
+    for (key, value) in attributes {
       spanBuilder.setAttribute(key: key, value: value)
     }
+    spanBuilder.setAttribute(key: Keys.Terra.thermalState, value: .string(Runtime.thermalStateLabel()))
 
     let span = spanBuilder.startSpan()
     let startMemorySnapshot = TerraSystemProfiler.isMemoryProfilerEnabled
@@ -221,7 +229,7 @@ public enum Terra {
       } catch let cancellation as CancellationError {
         throw cancellation
       } catch {
-        scope.recordError(error)
+        scope.recordError(error, captureMessage: allowErrorMessageCapture)
         throw error
       }
     }
@@ -229,13 +237,13 @@ public enum Terra {
 
   public final class StreamingInferenceScope: @unchecked Sendable {
     private let scope: Scope<InferenceSpan>
-    private let startedAt: Date
+    private let startedAt: ContinuousClock.Instant
     private let lock = NSLock()
-    private var firstTokenAt: Date?
+    private var firstTokenAt: ContinuousClock.Instant?
     private var outputTokenCount = 0
     private var chunkCount = 0
 
-    init(scope: Scope<InferenceSpan>, startedAt: Date) {
+    init(scope: Scope<InferenceSpan>, startedAt: ContinuousClock.Instant) {
       self.scope = scope
       self.startedAt = startedAt
     }
@@ -250,12 +258,13 @@ public enum Terra {
       scope.setAttributes(attributes)
     }
 
-    public func recordToken(_ count: Int = 1, at timestamp: Date = Date()) {
+    public func recordToken(_ count: Int = 1) {
       guard count > 0 else { return }
+      let now = ContinuousClock.now
       var shouldEmitFirstTokenEvent = false
       lock.lock()
       if firstTokenAt == nil {
-        firstTokenAt = timestamp
+        firstTokenAt = now
         shouldEmitFirstTokenEvent = true
       }
       outputTokenCount += count
@@ -266,12 +275,13 @@ public enum Terra {
       }
     }
 
-    public func recordOutputTokenCount(_ totalCount: Int, at timestamp: Date = Date()) {
+    public func recordOutputTokenCount(_ totalCount: Int) {
       guard totalCount >= 0 else { return }
+      let now = ContinuousClock.now
       var shouldEmitFirstTokenEvent = false
       lock.lock()
       if totalCount > 0, firstTokenAt == nil {
-        firstTokenAt = timestamp
+        firstTokenAt = now
         shouldEmitFirstTokenEvent = true
       }
       outputTokenCount = totalCount
@@ -282,12 +292,13 @@ public enum Terra {
       }
     }
 
-    public func recordChunk(at timestamp: Date = Date()) {
+    public func recordChunk() {
+      let now = ContinuousClock.now
       var shouldEmitFirstTokenEvent = false
       lock.lock()
       chunkCount += 1
       if firstTokenAt == nil {
-        firstTokenAt = timestamp
+        firstTokenAt = now
         shouldEmitFirstTokenEvent = true
       }
       lock.unlock()
@@ -297,7 +308,8 @@ public enum Terra {
       }
     }
 
-    func finish(finishedAt: Date = Date()) {
+    func finish() {
+      let now = ContinuousClock.now
       lock.lock()
       let firstTokenAt = self.firstTokenAt
       let outputTokenCount = self.outputTokenCount
@@ -311,13 +323,23 @@ public enum Terra {
         attributes[Keys.Terra.streamOutputTokens] = .int(outputTokenCount)
       }
       if let firstTokenAt {
-        attributes[Keys.Terra.streamTimeToFirstTokenMs] = .double(firstTokenAt.timeIntervalSince(startedAt) * 1000)
+        let ttft = startedAt.duration(to: firstTokenAt)
+        attributes[Keys.Terra.streamTimeToFirstTokenMs] = .double(durationToMs(ttft))
       }
       if outputTokenCount > 0, let firstTokenAt {
-        let generationSeconds = max(finishedAt.timeIntervalSince(firstTokenAt), 0.000_001)
+        let generationDuration = firstTokenAt.duration(to: now)
+        let generationSeconds = max(durationToSeconds(generationDuration), 0.000_001)
         attributes[Keys.Terra.streamTokensPerSecond] = .double(Double(outputTokenCount) / generationSeconds)
       }
       scope.setAttributes(attributes)
+    }
+
+    private func durationToMs(_ d: Duration) -> Double {
+      Double(d.components.seconds) * 1000 + Double(d.components.attoseconds) / 1_000_000_000_000_000
+    }
+
+    private func durationToSeconds(_ d: Duration) -> Double {
+      Double(d.components.seconds) + Double(d.components.attoseconds) / 1_000_000_000_000_000_000
     }
   }
 
@@ -333,18 +355,31 @@ public enum Terra {
   private static func redactedStringAttributes(
     original: String,
     lengthKey: String,
-    hashKey: String,
-    using strategy: RedactionStrategy
+    hmacKey: String,
+    legacySHA256Key: String,
+    using privacy: Privacy
   ) -> [String: AttributeValue] {
-    switch strategy {
+    switch privacy.redaction {
     case .drop:
       return [:]
     case .lengthOnly:
       return [lengthKey: .int(original.count)]
+    case .hashHMACSHA256:
+      var attributes: [String: AttributeValue] = [lengthKey: .int(original.count)]
+      if Runtime.isHMACSHA256Available, let hash = Runtime.shared.hmacSHA256Hex(original) {
+        attributes[hmacKey] = .string(hash)
+        if let keyID = Runtime.shared.anonymizationKeyIDValue {
+          attributes[Keys.Terra.anonymizationKeyID] = .string(keyID)
+        }
+      }
+      if privacy.emitLegacySHA256Attributes, Runtime.isSHA256Available, let legacyHash = Runtime.sha256Hex(original) {
+        attributes[legacySHA256Key] = .string(legacyHash)
+      }
+      return attributes
     case .hashSHA256:
       var attributes: [String: AttributeValue] = [lengthKey: .int(original.count)]
       if Runtime.isSHA256Available, let hash = Runtime.sha256Hex(original) {
-        attributes[hashKey] = .string(hash)
+        attributes[legacySHA256Key] = .string(hash)
       }
       return attributes
     }

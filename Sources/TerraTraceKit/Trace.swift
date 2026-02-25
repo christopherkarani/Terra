@@ -60,11 +60,17 @@ public struct Trace {
       return lhs.startTime < rhs.startTime
     }
 
-    let start = ordered.map(\.startTime).min() ?? spans[0].startTime
-    let end = ordered.map(\.endTime).max() ?? spans[0].endTime
-
-    let roots = ordered.filter { $0.parentSpanId == nil }
-    let hasError = ordered.contains { $0.status.isError }
+    // Single-pass extraction of start, end, roots, hasError
+    var start = ordered[0].startTime
+    var end = ordered[0].endTime
+    var roots: [SpanData] = []
+    var hasError = false
+    for span in ordered {
+      if span.startTime < start { start = span.startTime }
+      if span.endTime > end { end = span.endTime }
+      if span.parentSpanId == nil { roots.append(span) }
+      if span.status.isError { hasError = true }
+    }
 
     self.id = fileName
     self.fileTimestamp = fileTimestamp

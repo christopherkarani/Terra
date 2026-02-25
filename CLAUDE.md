@@ -50,11 +50,11 @@ All telemetry modules depend on `opentelemetry-swift-core` / `opentelemetry-swif
 
 The core library. Public API: `Terra.install()` for one-time setup, then `Terra.with*Span()` async wrappers. Key files:
 
-- `Terra.swift` — Public facade: `withInferenceSpan`, `withModelLoadSpan`, `withStreamingInferenceSpan`, `withAgentInvocationSpan`, `withToolExecutionSpan`, `withEmbeddingSpan`, `withSafetyCheckSpan`. Also `StreamingInferenceScope` for streaming token telemetry (TTFT, TPS, stall detection).
-- `Terra+Constants.swift` — `SpanNames` (9 canonical names), `Keys` (80+ attribute keys in `gen_ai.*` and `terra.*` namespaces), `RuntimeKind` (8 runtimes), `MetricNames` (5 metrics). This is the single source of truth for the semantic schema.
-- `Terra+Requests.swift` — Request/response models: `InferenceRequest`, `ModelFingerprint` (pipe-delimited `model=X|runtime=Y|quant=Z`), `EmbeddingRequest`, `Agent`, `Tool`, `ToolCall`, `SafetyCheck`, `Recommendation`. Type-safe span markers via empty enums (`InferenceSpan`, `ModelLoadSpan`, etc.).
-- `Terra+Runtime.swift` — `TelemetryConfiguration` (token lifecycle policy, recommendation policy, kill switches), `Installation` (privacy + compliance + telemetry config), `Runtime` singleton (session ID, audit buffer, recommendation dedup, SHA256/HMAC crypto). `TerraMetrics` for OTel counters/histograms.
-- `Terra+Privacy.swift` — `ContentPolicy` (.never/.optIn/.always), `RedactionStrategy` (.drop/.lengthOnly/.hashSHA256), `AnonymizationPolicy` (HMAC rotating keys, 24h default), `CompliancePolicy` (export control with runtime whitelist, retention with max age/size/eviction, audit events), `CaptureIntent` (.default/.optIn).
+- `Terra.swift` — Public facade: `withInferenceSpan`, `withStreamingInferenceSpan`, `withAgentInvocationSpan`, `withToolExecutionSpan`, `withEmbeddingSpan`, `withSafetyCheckSpan`. Also `StreamingInferenceScope` for streaming token telemetry (TTFT, throughput, chunk count).
+- `Terra+Constants.swift` — Span names, semantic attribute keys, and metric names in `gen_ai.*` and `terra.*` namespaces.
+- `Terra+Requests.swift` — Request/response models (`InferenceRequest`, `EmbeddingRequest`, `Agent`, `Tool`, `ToolCall`, `SafetyCheck`) and type-safe span marker enums.
+- `Terra+Runtime.swift` — `Installation`, runtime provider overrides, privacy storage, SHA/HMAC helpers, anonymization key management, and `TerraMetrics`.
+- `Terra+Privacy.swift` — `ContentPolicy` (.never/.optIn/.always), `RedactionStrategy` (.drop/.lengthOnly/.hashHMACSHA256/.hashSHA256 legacy), and `CaptureIntent` (.default/.optIn).
 - `Terra+OpenTelemetry.swift` — `installOpenTelemetry()` wires up OTLP/HTTP export, persistence, signposts, sessions. `TracerProviderStrategy`: `registerNew` vs `augmentExisting`.
 - `Terra+Scope.swift` — Generic `Scope<Kind>` wrapper with `addEvent`, `setAttributes`, `recordError`, and `span` escape hatch.
 - `TerraSessionSpanProcessor.swift` — Injects `session.id` and `session.previousId` on Terra spans.
@@ -64,8 +64,8 @@ The core library. Public API: `Terra.install()` for one-time setup, then `Terra.
 
 The umbrella `Terra` product. Entry point: `Terra.start()` (in `Terra+Start.swift`).
 
-- `Terra+Start.swift` — Orchestrates: installs OTel providers, CoreML swizzling, HTTP instrumentation, memory/GPU profilers, proxy, OpenClaw. Configurable via `AutoInstrumentConfiguration` with `.coreML`, `.httpAIAPIs`, `.proxy`, `.openClawGateway`, `.openClawDiagnostics` option set.
-- `TerraHTTPProxy.swift` — `URLProtocol` subclass that intercepts requests to `listenHost:listenPort`, forwards to upstream (Ollama 11434, LM Studio 1234). Uses `X-Terra-Proxy: active` header to prevent loops.
+- `Terra+Start.swift` — Orchestrates: installs OTel providers, CoreML instrumentation, HTTP instrumentation, memory/GPU profilers, and OpenClaw diagnostics/gateway modes. Configurable via `AutoInstrumentConfiguration` and `Instrumentations`.
+- Proxy instrumentation is currently a reserved configuration path (`.proxy`) and not backed by an in-repo HTTP proxy target.
 - `OpenClawConfiguration.swift` — Modes: `.disabled`, `.diagnosticsOnly`, `.gatewayOnly`, `.dualPath`.
 
 ### Specialized Modules
@@ -94,8 +94,8 @@ Standalone trace processing library (no dependency on Terra SDK). Key files:
 
 - `Models.swift` — `TraceID`, `SpanID`, `SpanRecord`, `TraceSnapshot`, `Attributes` (sorted collection)
 - `Trace.swift` — Aggregates spans into `Trace` objects with root detection and validation
-- `OTLPDecoder.swift` — Decodes OTLP protobuf with terra.v1 contract validation (required: semantic version, schema family, runtime, request ID, session ID, model fingerprint)
-- `OTLPHTTPServer.swift` — HTTP/1.1 server on port 4318 with runtime allowlist, gzip/deflate decompression, audit events
+- `OTLPDecoder.swift` — Decodes OTLP protobuf with compressed/decompressed size limits, span/attribute budgets, and AnyValue depth guards.
+- `OTLPHTTPServer.swift` — HTTP/1.1 server on port 4318 with header/body read deadlines, bounded active connections, and decode-task cancellation on disconnect.
 - `TraceStore.swift` — Actor-based in-memory span storage (10k default, LRU eviction, dedup by traceID+spanID)
 - `TraceLoader.swift` — File discovery from `~/.cache/opentelemetry/terra/traces/` + decoding
 - `TerraTelemetryClassifier.swift` — Event categories: lifecycle, policy, hardware, recommendations, anomalies
@@ -109,28 +109,23 @@ Standalone trace processing library (no dependency on Terra SDK). Key files:
 - `TerraAutoInstrumentTests`, `TerraCoreMLTests`, `TerraFoundationModelsTests`
 - `TerraHTTPInstrumentTests` (6 files), `TerraMLXTests`, `TerraTracedMacroTests`
 
-Tests use `swift-testing` framework with `InMemoryExporter` for span verification. Fixture data in `Tests/TerraV1/`.
+Tests are a mix of `swift-testing` and XCTest, with `InMemoryExporter` used for span verification.
 
 ## CI
 
 GitHub Actions (`.github/workflows/ci.yml`):
 - **swift job**: SPM build + tests, SwiftLint, API compatibility checks
-- **rc-hardening job**: Runs `scripts/rc_hardening.sh` on dispatch/tags
-- Release scripts in `scripts/release/` (build, DMG creation, notarization)
+- SwiftLint is installed at a pinned version from GitHub releases.
 
 ## Key Conventions
 
 - Platform: macOS 14+, iOS 13+, tvOS 13+, watchOS 6+, visionOS 1+. Swift 5.9, swift-tools-version 5.9
-- All span names use `terra.*` prefix (defined in `Terra+Constants.swift` `SpanNames`)
+- Span names align with GenAI semantic conventions (`gen_ai.*`) plus Terra-specific namespaces where required.
 - All attribute keys use `terra.*` or `gen_ai.*` namespaces (defined in `Terra+Constants.swift` `Keys`)
-- Privacy enforced at install time: `ContentPolicy` (.never default), `RedactionStrategy` (.hashSHA256 default). Never capture content without explicit opt-in
-- `RuntimeKind` enum: coreML, foundationModels, mlx, ollama, lmStudio, llamaCpp, openClawGateway, httpAPI
-- Schema version is `v1` — enforced by `OTLPDecoder` contract validation (rejects spans missing required attributes)
+- Privacy enforced at install time: `ContentPolicy` (`.never` default) and keyed redaction (`.hashHMACSHA256` default strategy).
 - `ContinuousClock` for all timing (monotonic, immune to NTP drift)
 - `Scope<Kind>` generic wrappers with empty enum markers for compile-time span type safety
-- Streaming: `StreamingInferenceScope` tracks TTFT, TPS, chunks, stalls. Token lifecycle policy controls sampling (`sampleEveryN`) and budget (`maxEventsPerSpan`)
-- Recommendations: configurable confidence threshold (0.55), cooldown (5s), dedup window (60s)
-- Model fingerprint format: `model=X|runtime=Y|quant=Z|tokenizer=W|backend=V`
+- Streaming: `StreamingInferenceScope` tracks TTFT, output tokens, chunk count, and derived tokens/second metrics.
 
 ## External Dependencies
 

@@ -11,14 +11,23 @@ import OpenTelemetryProtocolExporterHttp
 import OpenTelemetryProtocolExporterHTTP
 #endif
 
-public final class OTLPHTTPServer {
+public final class OTLPHTTPServer: @unchecked Sendable {
   public struct Limits: Sendable {
     public var maxHeaderBytes: Int
     public var maxBodyBytes: Int
+    public var headerReadTimeout: TimeInterval
+    public var bodyReadTimeout: TimeInterval
 
-    public init(maxHeaderBytes: Int = 32 * 1024, maxBodyBytes: Int = 10 * 1024 * 1024) {
+    public init(
+      maxHeaderBytes: Int = 32 * 1024,
+      maxBodyBytes: Int = 10 * 1024 * 1024,
+      headerReadTimeout: TimeInterval = 5,
+      bodyReadTimeout: TimeInterval = 15
+    ) {
       self.maxHeaderBytes = maxHeaderBytes
       self.maxBodyBytes = maxBodyBytes
+      self.headerReadTimeout = headerReadTimeout
+      self.bodyReadTimeout = bodyReadTimeout
     }
   }
 
@@ -31,9 +40,13 @@ public final class OTLPHTTPServer {
   private let configuredPort: UInt16
   private let onSpans: (([SpanRecord]) -> Void)?
 
+  private static let maxActiveConnections = 64
+
   private let queue = DispatchQueue(label: "terra.trace.otlp.httpserver")
   private var listener: NWListener?
   private var activeConnections: [ObjectIdentifier: NWConnection] = [:]
+  private var readTimeoutTimers: [ObjectIdentifier: DispatchSourceTimer] = [:]
+  private var decodeTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
   public var port: UInt16 {
     listener?.port?.rawValue ?? configuredPort
@@ -91,14 +104,25 @@ public final class OTLPHTTPServer {
     queue.async {
       self.listener?.cancel()
       self.listener = nil
-      for connection in self.activeConnections.values {
-        connection.cancel()
+      for id in Array(self.activeConnections.keys) {
+        self.cleanupConnection(id: id)
       }
-      self.activeConnections.removeAll()
+    }
+  }
+
+  deinit {
+    listener?.cancel()
+    listener = nil
+    for id in Array(activeConnections.keys) {
+      cleanupConnection(id: id)
     }
   }
 
   private func handle(_ connection: NWConnection) {
+    guard activeConnections.count < Self.maxActiveConnections else {
+      connection.cancel()
+      return
+    }
     let id = ObjectIdentifier(connection)
     activeConnections[id] = connection
 
@@ -106,21 +130,28 @@ public final class OTLPHTTPServer {
       guard let self else { return }
       switch state {
       case .failed, .cancelled:
-        self.activeConnections.removeValue(forKey: id)
+        self.cleanupConnection(id: id)
       default:
         break
       }
     }
 
     connection.start(queue: queue)
-    receiveHeaders(on: connection, buffer: Data())
+    receiveHeaders(on: connection, connectionID: id, buffer: Data())
   }
 
-  private func receiveHeaders(on connection: NWConnection, buffer: Data) {
+  private func receiveHeaders(on connection: NWConnection, connectionID: ObjectIdentifier, buffer: Data) {
     if buffer.count > limits.maxHeaderBytes {
       sendError(on: connection, status: .headerTooLarge, message: "Request headers too large")
       return
     }
+
+    armReadTimeout(
+      for: connectionID,
+      connection: connection,
+      timeout: limits.headerReadTimeout,
+      message: "Timed out while reading request headers"
+    )
 
     let remaining = max(1, limits.maxHeaderBytes - buffer.count)
     connection.receive(minimumIncompleteLength: 1, maximumLength: remaining) { [weak self] data, _, isComplete, error in
@@ -139,7 +170,12 @@ public final class OTLPHTTPServer {
       if let range = buffer.range(of: Self.headerTerminator) {
         let headData = buffer[..<range.lowerBound]
         let bodyStart = buffer[range.upperBound...]
-        self.handleRequestHead(Data(headData), initialBody: Data(bodyStart), on: connection)
+        self.handleRequestHead(
+          Data(headData),
+          initialBody: Data(bodyStart),
+          on: connection,
+          connectionID: connectionID
+        )
         return
       }
 
@@ -148,11 +184,16 @@ public final class OTLPHTTPServer {
         return
       }
 
-      self.receiveHeaders(on: connection, buffer: buffer)
+      self.receiveHeaders(on: connection, connectionID: connectionID, buffer: buffer)
     }
   }
 
-  private func handleRequestHead(_ data: Data, initialBody: Data, on connection: NWConnection) {
+  private func handleRequestHead(
+    _ data: Data,
+    initialBody: Data,
+    on connection: NWConnection,
+    connectionID: ObjectIdentifier
+  ) {
     let parseResult = parseRequestHead(data)
     switch parseResult {
     case .failure(let error):
@@ -164,24 +205,38 @@ public final class OTLPHTTPServer {
       }
       if initialBody.count >= head.contentLength {
         let body = head.contentLength == 0 ? Data() : Data(initialBody.prefix(head.contentLength))
-        handleBody(body, head: head, on: connection)
+        handleBody(body, head: head, on: connection, connectionID: connectionID)
         return
       }
-      receiveBody(on: connection, expectedLength: head.contentLength, buffer: initialBody, head: head)
+      receiveBody(
+        on: connection,
+        connectionID: connectionID,
+        expectedLength: head.contentLength,
+        buffer: initialBody,
+        head: head
+      )
     }
   }
 
   private func receiveBody(
     on connection: NWConnection,
+    connectionID: ObjectIdentifier,
     expectedLength: Int,
     buffer: Data,
     head: HTTPRequestHead
   ) {
     var buffer = buffer
     if buffer.count >= expectedLength {
-      handleBody(Data(buffer.prefix(expectedLength)), head: head, on: connection)
+      handleBody(Data(buffer.prefix(expectedLength)), head: head, on: connection, connectionID: connectionID)
       return
     }
+
+    armReadTimeout(
+      for: connectionID,
+      connection: connection,
+      timeout: limits.bodyReadTimeout,
+      message: "Timed out while reading request body"
+    )
 
     let remaining = expectedLength - buffer.count
     let maxRead = min(remaining, 64 * 1024)
@@ -198,7 +253,7 @@ public final class OTLPHTTPServer {
       }
 
       if buffer.count >= expectedLength {
-        self.handleBody(Data(buffer.prefix(expectedLength)), head: head, on: connection)
+        self.handleBody(Data(buffer.prefix(expectedLength)), head: head, on: connection, connectionID: connectionID)
         return
       }
 
@@ -207,24 +262,49 @@ public final class OTLPHTTPServer {
         return
       }
 
-      self.receiveBody(on: connection, expectedLength: expectedLength, buffer: buffer, head: head)
+      self.receiveBody(
+        on: connection,
+        connectionID: connectionID,
+        expectedLength: expectedLength,
+        buffer: buffer,
+        head: head
+      )
     }
   }
 
-  private func handleBody(_ body: Data, head: HTTPRequestHead, on connection: NWConnection) {
-    Task { [weak self] in
+  private func handleBody(
+    _ body: Data,
+    head: HTTPRequestHead,
+    on connection: NWConnection,
+    connectionID: ObjectIdentifier
+  ) {
+    cancelReadTimeout(for: connectionID)
+    let task = Task { [weak self] in
       guard let self else { return }
       do {
+        try Task.checkCancellation()
         let spans = try decoder.decode(headers: head.headers, body: body)
+        try Task.checkCancellation()
         let accepted = await traceStore.ingest(spans)
+        try Task.checkCancellation()
         if let onSpans {
           onSpans(accepted)
         }
-        self.queue.async { self.sendSuccess(on: connection) }
+        self.queue.async {
+          guard self.activeConnections[connectionID] != nil else { return }
+          self.sendSuccess(on: connection)
+        }
+      } catch is CancellationError {
+        return
       } catch {
-        self.queue.async { self.sendError(on: connection, status: .badRequest, message: "Invalid OTLP payload") }
+        self.queue.async {
+          guard self.activeConnections[connectionID] != nil else { return }
+          self.sendError(on: connection, status: .badRequest, message: "Invalid OTLP payload")
+        }
       }
     }
+    decodeTasks[connectionID]?.cancel()
+    decodeTasks[connectionID] = task
   }
 
   private func sendSuccess(on connection: NWConnection) {
@@ -278,8 +358,42 @@ public final class OTLPHTTPServer {
 
   private func finish(_ connection: NWConnection) {
     let id = ObjectIdentifier(connection)
-    activeConnections.removeValue(forKey: id)
-    connection.cancel()
+    cleanupConnection(id: id)
+  }
+
+  private func cleanupConnection(id: ObjectIdentifier) {
+    cancelReadTimeout(for: id)
+    decodeTasks[id]?.cancel()
+    decodeTasks.removeValue(forKey: id)
+    if let connection = activeConnections.removeValue(forKey: id) {
+      connection.cancel()
+    }
+  }
+
+  private func cancelReadTimeout(for id: ObjectIdentifier) {
+    if let timer = readTimeoutTimers.removeValue(forKey: id) {
+      timer.setEventHandler {}
+      timer.cancel()
+    }
+  }
+
+  private func armReadTimeout(
+    for id: ObjectIdentifier,
+    connection: NWConnection,
+    timeout: TimeInterval,
+    message: String
+  ) {
+    guard timeout > 0 else { return }
+    cancelReadTimeout(for: id)
+    let timer = DispatchSource.makeTimerSource(queue: queue)
+    timer.schedule(deadline: .now() + timeout)
+    timer.setEventHandler { [weak self] in
+      guard let self else { return }
+      guard self.activeConnections[id] != nil else { return }
+      self.sendError(on: connection, status: .requestTimeout, message: message)
+    }
+    readTimeoutTimers[id] = timer
+    timer.resume()
   }
 
   private func otlpSuccessBody() -> Data {
@@ -383,6 +497,7 @@ private struct HTTPStatus {
   static let badRequest = HTTPStatus(code: 400, reason: "Bad Request")
   static let notFound = HTTPStatus(code: 404, reason: "Not Found")
   static let methodNotAllowed = HTTPStatus(code: 405, reason: "Method Not Allowed")
+  static let requestTimeout = HTTPStatus(code: 408, reason: "Request Timeout")
   static let lengthRequired = HTTPStatus(code: 411, reason: "Length Required")
   static let payloadTooLarge = HTTPStatus(code: 413, reason: "Payload Too Large")
   static let expectationFailed = HTTPStatus(code: 417, reason: "Expectation Failed")

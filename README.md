@@ -155,12 +155,13 @@ try await Terra.withAgentInvocationSpan(agent: agent) { scope in
 Terra defaults to `Terra.Privacy(contentPolicy: .never)`.
 
 - Raw prompt-like content is not emitted as attributes.
-- If capture is enabled, Terra emits bounded metadata (length and optional SHA-256 hash), not raw content.
+- If capture is enabled, Terra emits bounded metadata (length and keyed HMAC-SHA256), not raw content.
+- Legacy `terra.*.sha256` attributes are opt-in via `emitLegacySHA256Attributes`.
 
 Opt-in capture pattern:
 
 ```swift
-Terra.install(.init(privacy: .init(contentPolicy: .optIn, redaction: .hashSHA256)))
+Terra.install(.init(privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256)))
 
 let request = Terra.InferenceRequest(
   model: "local/llama-3.2-1b",
@@ -219,25 +220,11 @@ When present, Terra passes it to the tracer provider so spans can be tagged with
 - MLX: set low-cardinality runtime attributes (see `Docs/Integrations.md`).
 - `TerraTraceKit`: load and model persisted trace files for custom tooling or UIs.
 
-## Trace — macOS Viewer App
+## Trace Viewer
 
-Trace is a native macOS app (in `Apps/TraceMacApp/`) for visualizing on-device traces produced by Terra SDK.
+The Trace macOS viewer app now lives in the separate [TerraViewer](https://github.com/christopherkarani/TerraViewer) repository.
 
-**Current capabilities:**
-- Load and display traces from a local directory (default: `~/Documents/Terra Traces`).
-- Timeline visualization with span hierarchy, lane layout, and duration annotations.
-- Dashboard with KPI cards: total traces, spans, error rate, unique agents, p50/p95/p99 latency.
-- File system watching for live reload when new traces arrive on disk.
-- Diagnostics export (app metadata and file listing for support).
-- Configurable trace retention with automatic pruning.
-
-**Not yet implemented (planned):**
-- Trace content export (re-emit spans as OTLP JSON for external tools).
-- Network-based trace ingestion (OTLP/HTTP receiver for multi-machine workflows).
-- Advanced filtering by date range, duration, error status, or span attributes.
-
-> **Note:** The `Enterprise` bullets at the top describe **Terra SDK** library features (OTLP/HTTP export, on-device persistence, privacy controls).
-> Trace reads persisted traces from disk; network ingestion is tracked separately.
+Terra provides the reusable trace library layer (`TerraTraceKit`) used by TerraViewer and any custom tools/UIs that consume persisted trace files.
 
 ## Included Products in This Repo
 
@@ -245,7 +232,6 @@ Trace is a native macOS app (in `Apps/TraceMacApp/`) for visualizing on-device t
 - `TerraCoreML`: optional Core ML span attribute helpers.
 - `TerraTraceKit`: trace-file discovery, decoding, and view models.
 - `TerraSample`: runnable macOS sample app (`swift run TerraSample`).
-- `TraceMacApp` / `TraceMacAppUI`: the Trace viewer app and its reusable UI layer.
 
 ## Concurrency Behavior
 

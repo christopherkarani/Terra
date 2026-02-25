@@ -61,8 +61,11 @@ public final class TerraTracedSession: @unchecked Sendable {
 
   /// Stream a response with auto-tracing.
   public func streamResponse(to prompt: String, promptCapture: Terra.CaptureIntent = .default) -> AsyncThrowingStream<String, Error> {
-    AsyncThrowingStream { continuation in
-      Task {
+    let modelIdentifier = self.modelIdentifier
+    let session = self.session
+
+    return AsyncThrowingStream { continuation in
+      let task = Task { [weak self] in
         let request = Terra.InferenceRequest(
           model: modelIdentifier,
           prompt: prompt,
@@ -77,8 +80,9 @@ public final class TerraTracedSession: @unchecked Sendable {
             ])
             let stream = session.streamResponse(to: prompt)
             for try await partial in stream {
+              try Task.checkCancellation()
               streamScope.recordChunk()
-              if let explicitCount = explicitOutputTokenCount(from: partial) {
+              if let explicitCount = self?.explicitOutputTokenCount(from: partial) {
                 streamScope.recordOutputTokenCount(explicitCount)
               }
               continuation.yield(partial.content)
@@ -89,24 +93,33 @@ public final class TerraTracedSession: @unchecked Sendable {
           continuation.finish(throwing: error)
         }
       }
+      continuation.onTermination = { _ in
+        task.cancel()
+      }
     }
   }
 
+  private static let supportedTokenCountNames: Set<String> = [
+    "outputTokenCount",
+    "generatedTokenCount",
+    "tokenCount",
+    "tokensGenerated",
+  ]
+
+  /// Tracks whether we've already probed for a token count field and found none.
+  private var tokenCountFieldChecked = false
+
   private func explicitOutputTokenCount(from partial: Any) -> Int? {
-    // Prefer explicit token count values if/when Foundation Models surfaces them.
-    let supportedNames: Set<String> = [
-      "outputTokenCount",
-      "generatedTokenCount",
-      "tokenCount",
-      "tokensGenerated",
-    ]
+    // After first nil result, skip Mirror reflection entirely
+    if tokenCountFieldChecked { return nil }
 
     for child in Mirror(reflecting: partial).children {
-      guard let label = child.label, supportedNames.contains(label) else { continue }
+      guard let label = child.label, Self.supportedTokenCountNames.contains(label) else { continue }
       if let intValue = child.value as? Int, intValue >= 0 {
         return intValue
       }
     }
+    tokenCountFieldChecked = true
     return nil
   }
 }

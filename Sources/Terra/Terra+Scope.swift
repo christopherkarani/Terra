@@ -27,15 +27,21 @@ extension Terra {
       }
     }
 
-    public func recordError(_ error: any Error) {
+    public func recordError(_ error: any Error, captureMessage: Bool = true) {
       let message = String(describing: error)
-      underlyingSpan.status = .error(description: message)
+      let exceptionType = String(reflecting: type(of: error))
+      underlyingSpan.status = .error(description: captureMessage ? message : exceptionType)
+
+      var attributes: [String: AttributeValue] = [
+        "exception.type": .string(exceptionType),
+      ]
+      if captureMessage {
+        attributes["exception.message"] = .string(message)
+      }
+
       underlyingSpan.addEvent(
         name: "exception",
-        attributes: [
-          "exception.message": .string(message),
-          "exception.type": .string(String(reflecting: type(of: error))),
-        ],
+        attributes: attributes,
         timestamp: Date()
       )
     }
@@ -45,4 +51,3 @@ extension Terra {
     }
   }
 }
-

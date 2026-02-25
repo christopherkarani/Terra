@@ -16,6 +16,8 @@ public final class TerraSpanEnrichmentProcessor: SpanProcessor {
     span.setAttribute(key: Terra.Keys.Terra.contentPolicy, value: privacy.contentPolicy.asAttributeValue)
     let redactionValue: AttributeValue
     switch privacy.redaction {
+    case .hashHMACSHA256 where !Runtime.isHMACSHA256Available:
+      redactionValue = .string("hash_unavailable")
     case .hashSHA256 where !Runtime.isSHA256Available:
       redactionValue = .string("hash_unavailable")
     default:
@@ -49,6 +51,12 @@ private extension Terra.RedactionStrategy {
       return .string("drop")
     case .lengthOnly:
       return .string("length_only")
+    case .hashHMACSHA256:
+      if Runtime.isHMACSHA256Available {
+        return .string("hash_hmac_sha256")
+      } else {
+        return .string("hash_unavailable")
+      }
     case .hashSHA256:
       if Runtime.isSHA256Available {
         return .string("hash_sha256")

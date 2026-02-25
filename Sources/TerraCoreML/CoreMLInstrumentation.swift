@@ -36,6 +36,13 @@ public enum CoreMLInstrumentation {
 
   // MARK: - Public API
 
+  /// Thread-safe check if a model name is excluded from tracing.
+  private static func isExcluded(_ modelName: String) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return configuration.excludedModels.contains(modelName)
+  }
+
   /// Installs the auto-instrumentation. Safe to call multiple times; only the first call takes effect.
   ///
   /// - Parameter config: Configuration controlling which models are excluded.
@@ -74,7 +81,7 @@ public enum CoreMLInstrumentation {
 
       let modelName = CoreMLInstrumentation.resolveModelName(model)
 
-      guard !CoreMLInstrumentation.configuration.excludedModels.contains(modelName) else {
+      guard !CoreMLInstrumentation.isExcluded(modelName) else {
         return originalFn(self_, selector, features, errorPtr)
       }
 
@@ -87,14 +94,14 @@ public enum CoreMLInstrumentation {
       }
 
       let span = CoreMLInstrumentation.buildSpan(modelName: modelName, model: model)
-      let startedAt = Date()
+      let startedAt = ContinuousClock.now
       let startMemory = TerraSystemProfiler.isMemoryProfilerEnabled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
       OpenTelemetry.instance.contextProvider.setActiveSpan(span)
 
       let result = originalFn(self_, selector, features, errorPtr)
-      let durationMS = Date().timeIntervalSince(startedAt) * 1000
+      let durationMS = CoreMLInstrumentation.elapsedMs(since: startedAt)
       span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMS))
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
         span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
@@ -137,7 +144,7 @@ public enum CoreMLInstrumentation {
 
       let modelName = CoreMLInstrumentation.resolveModelName(model)
 
-      guard !CoreMLInstrumentation.configuration.excludedModels.contains(modelName) else {
+      guard !CoreMLInstrumentation.isExcluded(modelName) else {
         return originalFn(self_, selector, features, options, errorPtr)
       }
 
@@ -147,14 +154,14 @@ public enum CoreMLInstrumentation {
       }
 
       let span = CoreMLInstrumentation.buildSpan(modelName: modelName, model: model)
-      let startedAt = Date()
+      let startedAt = ContinuousClock.now
       let startMemory = TerraSystemProfiler.isMemoryProfilerEnabled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
       OpenTelemetry.instance.contextProvider.setActiveSpan(span)
 
       let result = originalFn(self_, selector, features, options, errorPtr)
-      let durationMS = Date().timeIntervalSince(startedAt) * 1000
+      let durationMS = CoreMLInstrumentation.elapsedMs(since: startedAt)
       span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMS))
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
         span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
@@ -182,7 +189,7 @@ public enum CoreMLInstrumentation {
     let computeUnitsLabel = model.configuration.computeUnits.terraLabel
     return OpenTelemetry.instance.tracerProvider
       .get(instrumentationName: Terra.instrumentationName)
-      .spanBuilder(spanName: "inference \(modelName)")
+      .spanBuilder(spanName: Terra.SpanNames.inference)
       .setSpanKind(spanKind: .internal)
       .setAttribute(key: Terra.Keys.GenAI.operationName, value: Terra.OperationName.inference.rawValue)
       .setAttribute(key: Terra.Keys.GenAI.requestModel, value: modelName)
@@ -224,6 +231,11 @@ public enum CoreMLInstrumentation {
       return filtered
     }
     return String(filtered.prefix(256))
+  }
+
+  private static func elapsedMs(since start: ContinuousClock.Instant) -> Double {
+    let elapsed = ContinuousClock.now - start
+    return Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
   }
 
   private static func modelLikelyUsesGPU(_ model: MLModel) -> Bool {

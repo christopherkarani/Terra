@@ -25,6 +25,7 @@ enum OpenClawDiagnosticsExporter {
 private final class DiagnosticsJSONLSpanExporter: SpanExporter {
   private let directoryURL: URL
   private let lock = NSLock()
+  private let encoder = JSONEncoder()
 
   init(directoryURL: URL) {
     self.directoryURL = directoryURL
@@ -48,7 +49,6 @@ private final class DiagnosticsJSONLSpanExporter: SpanExporter {
       defer { try? handle.close() }
       try handle.seekToEnd()
 
-      let encoder = JSONEncoder()
       for span in spans where isRelevantOpenClawSpan(span) {
         let data = try encoder.encode(span)
         try handle.write(contentsOf: data)
@@ -70,13 +70,17 @@ private final class DiagnosticsJSONLSpanExporter: SpanExporter {
     _ = explicitTimeout
   }
 
-  private func fileURL(for date: Date) -> URL {
+  private static let dayFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.calendar = Calendar(identifier: .gregorian)
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.timeZone = TimeZone(secondsFromGMT: 0)
     formatter.dateFormat = "yyyy-MM-dd"
-    let dayString = formatter.string(from: date)
+    return formatter
+  }()
+
+  private func fileURL(for date: Date) -> URL {
+    let dayString = Self.dayFormatter.string(from: date)
     return directoryURL.appendingPathComponent("openclaw-\(dayString).jsonl", isDirectory: false)
   }
 

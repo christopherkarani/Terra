@@ -251,3 +251,31 @@ func loaderReturnsEmptyForMissingDir() throws {
   #expect(result.traces.isEmpty)
   #expect(result.failures.isEmpty)
 }
+
+@Test("TraceLoader reports oversized trace files as failures")
+func loaderReportsOversizedFileFailures() throws {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  let oversized = Data(repeating: 0x41, count: 2048)
+  try oversized.write(to: dir.appendingPathComponent("1000000"))
+
+  let loader = TraceLoader(
+    locator: TraceFileLocator(tracesDirectoryURL: dir),
+    reader: TraceFileReader(maxFileSizeBytes: 256)
+  )
+  let result = try loader.loadTracesWithFailures()
+
+  #expect(result.traces.isEmpty)
+  #expect(result.failures.count == 1)
+  if let failure = result.failures.first {
+    if case let TraceFileError.fileTooLarge(_, actualBytes, maxBytes) = failure.error {
+      #expect(actualBytes == 2048)
+      #expect(maxBytes == 256)
+    } else {
+      Issue.record("Expected fileTooLarge failure, got \(failure.error)")
+    }
+  }
+}

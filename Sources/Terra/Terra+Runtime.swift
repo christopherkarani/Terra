@@ -7,6 +7,10 @@ import OpenTelemetryApi
   import Crypto
 #endif
 
+#if canImport(Security)
+  import Security
+#endif
+
 extension Terra {
   public struct Installation {
     public var privacy: Privacy
@@ -38,15 +42,25 @@ final class Runtime {
   private var privacyValue: Terra.Privacy = .default
   private var tracerProviderOverride: (any TracerProvider)?
   private var loggerProviderOverride: (any LoggerProvider)?
+  private var anonymizationKey: Data
+  private var anonymizationKeyID: String
 
   let metrics = TerraMetrics()
 
-  private init() {}
+  private init() {
+    let key = Runtime.loadOrCreateAnonymizationKey()
+    anonymizationKey = key
+    anonymizationKeyID = Runtime.deriveAnonymizationKeyID(from: key)
+  }
 
   func install(_ installation: Terra.Installation) {
     lock.lock()
     defer { lock.unlock() }
     privacyValue = installation.privacy
+    if let providedAnonymizationKey = installation.privacy.anonymizationKey {
+      anonymizationKey = providedAnonymizationKey
+      anonymizationKeyID = Runtime.deriveAnonymizationKeyID(from: providedAnonymizationKey)
+    }
     if let tracerProvider = installation.tracerProvider {
       tracerProviderOverride = tracerProvider
     }
@@ -89,16 +103,59 @@ final class Runtime {
     return loggerProviderOverride
   }
 
-  static func sha256Hex(_ string: String) -> String? {
+  var anonymizationKeyIDValue: String? {
     #if canImport(CryptoKit) || canImport(Crypto)
-      let digest = SHA256.hash(data: Data(string.utf8))
+      lock.lock()
+      defer { lock.unlock() }
+      return anonymizationKeyID
+    #else
+      return nil
+    #endif
+  }
+
+  func hmacSHA256Hex(_ string: String) -> String? {
+    #if canImport(CryptoKit) || canImport(Crypto)
+      lock.lock()
+      let key = anonymizationKey
+      lock.unlock()
+      return Runtime.hmacSHA256Hex(string, key: key)
+    #else
+      return nil
+    #endif
+  }
+
+  static func sha256Hex(_ string: String) -> String? {
+    sha256Hex(data: Data(string.utf8))
+  }
+
+  static func sha256Hex(data: Data) -> String? {
+    #if canImport(CryptoKit) || canImport(Crypto)
+      let digest = SHA256.hash(data: data)
       return digest.map { String(format: "%02x", $0) }.joined()
     #else
       return nil
     #endif
   }
 
+  static func hmacSHA256Hex(_ string: String, key: Data) -> String? {
+    #if canImport(CryptoKit) || canImport(Crypto)
+      let symmetricKey = SymmetricKey(data: key)
+      let mac = HMAC<SHA256>.authenticationCode(for: Data(string.utf8), using: symmetricKey)
+      return Data(mac).map { String(format: "%02x", $0) }.joined()
+    #else
+      return nil
+    #endif
+  }
+
   static var isSHA256Available: Bool {
+    #if canImport(CryptoKit) || canImport(Crypto)
+      return true
+    #else
+      return false
+    #endif
+  }
+
+  static var isHMACSHA256Available: Bool {
     #if canImport(CryptoKit) || canImport(Crypto)
       return true
     #else
@@ -122,6 +179,81 @@ final class Runtime {
   }
 }
 
+private extension Runtime {
+  static let anonymizationKeyLengthBytes = 32
+  static let anonymizationKeychainService = "io.opentelemetry.terra"
+  static let anonymizationKeychainAccount = "anonymization.hmac_sha256"
+
+  static func loadOrCreateAnonymizationKey() -> Data {
+    if let existing = readAnonymizationKeyFromKeychain() {
+      return existing
+    }
+    let generated = generateAnonymizationKey()
+    _ = storeAnonymizationKeyToKeychain(generated)
+    return generated
+  }
+
+  static func deriveAnonymizationKeyID(from key: Data) -> String {
+    guard let digest = sha256Hex(data: key) else { return "unknown" }
+    return String(digest.prefix(16))
+  }
+
+  static func generateAnonymizationKey() -> Data {
+    #if canImport(Security)
+      var bytes = [UInt8](repeating: 0, count: anonymizationKeyLengthBytes)
+      let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+      if status == errSecSuccess {
+        return Data(bytes)
+      }
+    #endif
+    let seed = UUID().uuidString + UUID().uuidString
+    return Data(Data(seed.utf8).prefix(anonymizationKeyLengthBytes))
+  }
+
+  static func readAnonymizationKeyFromKeychain() -> Data? {
+    #if canImport(Security)
+      let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: anonymizationKeychainService,
+        kSecAttrAccount as String: anonymizationKeychainAccount,
+        kSecReturnData as String: true,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+      ]
+      var result: CFTypeRef?
+      let status = SecItemCopyMatching(query as CFDictionary, &result)
+      guard status == errSecSuccess else { return nil }
+      return result as? Data
+    #else
+      return nil
+    #endif
+  }
+
+  static func storeAnonymizationKeyToKeychain(_ key: Data) -> Bool {
+    #if canImport(Security)
+      let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: anonymizationKeychainService,
+        kSecAttrAccount as String: anonymizationKeychainAccount,
+      ]
+      let attributes: [String: Any] = [
+        kSecValueData as String: key,
+      ]
+      let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+      if updateStatus == errSecSuccess {
+        return true
+      }
+      if updateStatus != errSecItemNotFound {
+        return false
+      }
+      var create = query
+      create[kSecValueData as String] = key
+      return SecItemAdd(create as CFDictionary, nil) == errSecSuccess
+    #else
+      return false
+    #endif
+  }
+}
+
 final class TerraMetrics {
   private let lock = NSLock()
   private var inferenceCount: LongCounter?
@@ -142,6 +274,8 @@ final class TerraMetrics {
     inferenceDurationMs = meter.histogramBuilder(name: Terra.MetricNames.inferenceDurationMs).build()
   }
 
+  private static let emptyAttributes: [String: OpenTelemetryApi.AttributeValue] = [:]
+
   func recordInference(durationMs: Double) {
     // Copy references under the lock. OTel SDK instruments are thread-safe,
     // so we release the lock before calling add/record to avoid holding it
@@ -152,7 +286,7 @@ final class TerraMetrics {
     var inferenceDurationMs = inferenceDurationMs
     lock.unlock()
 
-    inferenceCount?.add(value: 1, attributes: [:])
-    inferenceDurationMs?.record(value: durationMs, attributes: [:])
+    inferenceCount?.add(value: 1, attributes: Self.emptyAttributes)
+    inferenceDurationMs?.record(value: durationMs, attributes: Self.emptyAttributes)
   }
 }

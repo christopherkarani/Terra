@@ -137,7 +137,7 @@ Acceptance:
 
 1. Verify Signpost visibility in Instruments for representative inference spans.
 2. Verify OTLP + persistence flow in a local collector/dev backend environment.
-3. Verify TraceMacApp rendering for newly added attributes.
+3. Verify TerraViewer rendering for newly added attributes.
 
 ## Files Expected To Change
 

@@ -10,6 +10,8 @@ jobs:
   swift:
     name: SwiftPM build + test
     runs-on: macos-latest
+    env:
+      SWIFTLINT_VERSION: "0.57.1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,7 +23,12 @@ jobs:
           xcodebuild -version
 
       - name: Install SwiftLint
-        run: brew install swiftlint
+        run: |
+          set -euo pipefail
+          curl -sSLo SwiftLint.pkg "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/SwiftLint.pkg"
+          sudo installer -pkg SwiftLint.pkg -target /
+          rm -f SwiftLint.pkg
+          test "$(swiftlint version)" = "${SWIFTLINT_VERSION}"
 
       - name: SwiftLint
         run: swiftlint lint --reporter github-actions-logging
@@ -33,8 +40,17 @@ jobs:
 
       - name: API breaking changes (SDK targets, PRs only)
         if: github.event_name == 'pull_request'
-        continue-on-error: true
         run: |
           set -euo pipefail
           swift package diagnose-api-breaking-changes Terra
+          swift package diagnose-api-breaking-changes TerraCore
+          swift package diagnose-api-breaking-changes TerraCoreML
           swift package diagnose-api-breaking-changes TerraTraceKit
+          swift package diagnose-api-breaking-changes TerraHTTPInstrument
+          swift package diagnose-api-breaking-changes TerraFoundationModels
+          swift package diagnose-api-breaking-changes TerraMLX
+          swift package diagnose-api-breaking-changes TerraMetalProfiler
+          swift package diagnose-api-breaking-changes TerraSystemProfiler
+          swift package diagnose-api-breaking-changes TerraLlama
+          swift package diagnose-api-breaking-changes TerraAccelerate
+          swift package diagnose-api-breaking-changes TerraTracedMacro

@@ -53,7 +53,8 @@ let package = Package(
           condition: .when(platforms: [.iOS, .macOS, .tvOS, .watchOS, .visionOS])
         )
       ],
-      path: "Sources/Terra"
+      path: "Sources/Terra",
+      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraCoreML",
@@ -64,7 +65,8 @@ let package = Package(
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
       ],
-      path: "Sources/TerraCoreML"
+      path: "Sources/TerraCoreML",
+      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraTraceKit",
@@ -73,7 +75,8 @@ let package = Package(
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetryProtocolExporter", package: "opentelemetry-swift")
       ],
-      path: "Sources/TerraTraceKit"
+      path: "Sources/TerraTraceKit",
+      exclude: ["CLAUDE.md"]
     ),
 
     // MARK: - Auto-Instrumentation Umbrella
@@ -88,7 +91,8 @@ let package = Package(
         "TerraSystemProfiler",
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
       ],
-      path: "Sources/TerraAutoInstrument"
+      path: "Sources/TerraAutoInstrument",
+      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraHTTPInstrument",
@@ -98,7 +102,8 @@ let package = Package(
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "URLSessionInstrumentation", package: "opentelemetry-swift"),
       ],
-      path: "Sources/TerraHTTPInstrument"
+      path: "Sources/TerraHTTPInstrument",
+      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraFoundationModels",
@@ -106,7 +111,8 @@ let package = Package(
         "TerraCore",
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
       ],
-      path: "Sources/TerraFoundationModels"
+      path: "Sources/TerraFoundationModels",
+      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraMLX",
@@ -114,7 +120,8 @@ let package = Package(
         "TerraCore",
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
       ],
-      path: "Sources/TerraMLX"
+      path: "Sources/TerraMLX",
+      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraMetalProfiler",
@@ -154,7 +161,8 @@ let package = Package(
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
         .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
       ],
-      path: "Sources/TerraTracedMacroPlugin"
+      path: "Sources/TerraTracedMacroPlugin",
+      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraTracedMacro",
@@ -162,7 +170,8 @@ let package = Package(
         "TerraTracedMacroPlugin",
         "TerraCore",
       ],
-      path: "Sources/TerraTracedMacro"
+      path: "Sources/TerraTracedMacro",
+      exclude: ["CLAUDE.md"]
     ),
 
     // MARK: - Test Targets
@@ -176,7 +185,8 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core")
       ],
-      path: "Tests/TerraTests"
+      path: "Tests/TerraTests",
+      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraCoreMLTests",
@@ -188,7 +198,8 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "Testing", package: "swift-testing"),
       ],
-      path: "Tests/TerraCoreMLTests"
+      path: "Tests/TerraCoreMLTests",
+      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraTraceKitTests",
@@ -200,9 +211,7 @@ let package = Package(
         .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraTraceKitTests",
-      resources: [
-        .copy("Fixtures/TerraV1")
-      ]
+      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraHTTPInstrumentTests",
@@ -214,7 +223,8 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "Testing", package: "swift-testing"),
       ],
-      path: "Tests/TerraHTTPInstrumentTests"
+      path: "Tests/TerraHTTPInstrumentTests",
+      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraMLXTests",
@@ -226,7 +236,8 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "Testing", package: "swift-testing"),
       ],
-      path: "Tests/TerraMLXTests"
+      path: "Tests/TerraMLXTests",
+      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraAutoInstrumentTests",
@@ -240,7 +251,8 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "Testing", package: "swift-testing"),
       ],
-      path: "Tests/TerraAutoInstrumentTests"
+      path: "Tests/TerraAutoInstrumentTests",
+      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraFoundationModelsTests",
@@ -252,7 +264,8 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "Testing", package: "swift-testing"),
       ],
-      path: "Tests/TerraFoundationModelsTests"
+      path: "Tests/TerraFoundationModelsTests",
+      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraTracedMacroTests",
@@ -263,7 +276,8 @@ let package = Package(
         .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
         .product(name: "Testing", package: "swift-testing"),
       ],
-      path: "Tests/TerraTracedMacroTests"
+      path: "Tests/TerraTracedMacroTests",
+      exclude: ["CLAUDE.md"]
     ),
 
     // MARK: - Examples
@@ -271,7 +285,8 @@ let package = Package(
     .executableTarget(
       name: "TerraSample",
       dependencies: ["Terra"],
-      path: "Examples/Terra Sample"
+      path: "Examples/Terra Sample",
+      exclude: ["CLAUDE.md"]
     )
   ]
 )

@@ -96,10 +96,16 @@ public enum HTTPAIInstrumentation {
                     span.setAttribute(key: Terra.Keys.GenAI.usageOutputTokens, value: outputTokens)
                 }
             },
-            semanticConvention: .stable
+            semanticConvention: .old
         )
 
         instance = URLSessionInstrumentation(configuration: config)
+    }
+
+    static func resetForTesting() {
+        lock.lock()
+        defer { lock.unlock() }
+        instance = nil
     }
 
     private static func isHostMatched(_ host: String, hosts: Set<String>) -> Bool {

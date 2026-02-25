@@ -1,36 +1,54 @@
 import Foundation
 
 public struct TraceID: Hashable, Sendable, Comparable, CustomStringConvertible {
-  public let bytes: [UInt8]
+  /// High 64-bit half of the 128-bit trace ID (big-endian byte order).
+  public let hi: UInt64
+  /// Low 64-bit half of the 128-bit trace ID (big-endian byte order).
+  public let lo: UInt64
 
   public init?(data: Data) {
     guard data.count == 16 else { return nil }
-    bytes = Array(data)
+    var hiValue: UInt64 = 0
+    var loValue: UInt64 = 0
+    _ = withUnsafeMutableBytes(of: &hiValue) { data.copyBytes(to: $0, from: 0..<8) }
+    _ = withUnsafeMutableBytes(of: &loValue) { data.copyBytes(to: $0, from: 8..<16) }
+    hi = UInt64(bigEndian: hiValue)
+    lo = UInt64(bigEndian: loValue)
   }
 
   public init?(hex: String) {
     let cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
     guard cleaned.count == 32 else { return nil }
-    var parsed: [UInt8] = []
-    parsed.reserveCapacity(16)
-    var index = cleaned.startIndex
-    while index < cleaned.endIndex {
-      let nextIndex = cleaned.index(index, offsetBy: 2)
-      let byteString = cleaned[index..<nextIndex]
-      guard let byte = UInt8(byteString, radix: 16) else { return nil }
-      parsed.append(byte)
-      index = nextIndex
-    }
-    bytes = parsed
+    let midIndex = cleaned.index(cleaned.startIndex, offsetBy: 16)
+    let hiHex = String(cleaned[cleaned.startIndex..<midIndex])
+    let loHex = String(cleaned[midIndex..<cleaned.endIndex])
+    guard let hiValue = UInt64(hiHex, radix: 16),
+          let loValue = UInt64(loHex, radix: 16) else { return nil }
+    hi = hiValue
+    lo = loValue
   }
 
   public init?(bytes: [UInt8]) {
     guard bytes.count == 16 else { return nil }
-    self.bytes = bytes
+    self.init(data: Data(bytes))
+  }
+
+  /// Backward-compatible computed property that reconstructs [UInt8] from hi/lo.
+  public var bytes: [UInt8] {
+    var result = [UInt8](repeating: 0, count: 16)
+    let hiBE = hi.bigEndian
+    let loBE = lo.bigEndian
+    withUnsafeBytes(of: hiBE) { buf in
+      for i in 0..<8 { result[i] = buf[i] }
+    }
+    withUnsafeBytes(of: loBE) { buf in
+      for i in 0..<8 { result[8 + i] = buf[i] }
+    }
+    return result
   }
 
   public var hex: String {
-    bytes.map { String(format: "%02x", $0) }.joined()
+    String(format: "%016llx", hi) + String(format: "%016llx", lo)
   }
 
   public var short: String {
@@ -41,41 +59,46 @@ public struct TraceID: Hashable, Sendable, Comparable, CustomStringConvertible {
   public var description: String { hex }
 
   public static func < (lhs: TraceID, rhs: TraceID) -> Bool {
-    lhs.bytes.lexicographicallyPrecedes(rhs.bytes)
+    if lhs.hi != rhs.hi { return lhs.hi < rhs.hi }
+    return lhs.lo < rhs.lo
   }
 }
 
 public struct SpanID: Hashable, Sendable, Comparable, CustomStringConvertible {
-  public let bytes: [UInt8]
+  /// The single 64-bit span ID (big-endian byte order).
+  public let rawValue: UInt64
 
   public init?(data: Data) {
     guard data.count == 8 else { return nil }
-    bytes = Array(data)
+    var value: UInt64 = 0
+    _ = withUnsafeMutableBytes(of: &value) { data.copyBytes(to: $0, from: 0..<8) }
+    rawValue = UInt64(bigEndian: value)
   }
 
   public init?(hex: String) {
     let cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
     guard cleaned.count == 16 else { return nil }
-    var parsed: [UInt8] = []
-    parsed.reserveCapacity(8)
-    var index = cleaned.startIndex
-    while index < cleaned.endIndex {
-      let nextIndex = cleaned.index(index, offsetBy: 2)
-      let byteString = cleaned[index..<nextIndex]
-      guard let byte = UInt8(byteString, radix: 16) else { return nil }
-      parsed.append(byte)
-      index = nextIndex
-    }
-    bytes = parsed
+    guard let value = UInt64(cleaned, radix: 16) else { return nil }
+    rawValue = value
   }
 
   public init?(bytes: [UInt8]) {
     guard bytes.count == 8 else { return nil }
-    self.bytes = bytes
+    self.init(data: Data(bytes))
+  }
+
+  /// Backward-compatible computed property that reconstructs [UInt8] from rawValue.
+  public var bytes: [UInt8] {
+    var result = [UInt8](repeating: 0, count: 8)
+    let be = rawValue.bigEndian
+    withUnsafeBytes(of: be) { buf in
+      for i in 0..<8 { result[i] = buf[i] }
+    }
+    return result
   }
 
   public var hex: String {
-    bytes.map { String(format: "%02x", $0) }.joined()
+    String(format: "%016llx", rawValue)
   }
 
   public var short: String {
@@ -86,7 +109,7 @@ public struct SpanID: Hashable, Sendable, Comparable, CustomStringConvertible {
   public var description: String { hex }
 
   public static func < (lhs: SpanID, rhs: SpanID) -> Bool {
-    lhs.bytes.lexicographicallyPrecedes(rhs.bytes)
+    lhs.rawValue < rhs.rawValue
   }
 }
 
@@ -170,7 +193,20 @@ public struct Attributes: Hashable, Sendable, Sequence {
   }
 
   public subscript(key: String) -> AttributeValue? {
-    items.first(where: { $0.key == key })?.value
+    // Binary search since items is always sorted by key
+    var lo = items.startIndex
+    var hi = items.endIndex
+    while lo < hi {
+      let mid = lo + (hi - lo) / 2
+      if items[mid].key < key {
+        lo = mid + 1
+      } else if items[mid].key > key {
+        hi = mid
+      } else {
+        return items[mid].value
+      }
+    }
+    return nil
   }
 
   public subscript(string key: String) -> String? {
@@ -181,12 +217,16 @@ public struct Attributes: Hashable, Sendable, Sequence {
     items.reduce(into: [:]) { $0[$1.key] = $1.value }
   }
 
-  public func makeIterator() -> AnyIterator<(String, AttributeValue)> {
-    var iterator = items.makeIterator()
-    return AnyIterator {
-      guard let next = iterator.next() else { return nil }
-      return (next.key, next.value)
+  public struct AttributesIterator: IteratorProtocol {
+    var base: IndexingIterator<[Attribute]>
+    public mutating func next() -> (String, AttributeValue)? {
+      guard let attr = base.next() else { return nil }
+      return (attr.key, attr.value)
     }
+  }
+
+  public func makeIterator() -> AttributesIterator {
+    AttributesIterator(base: items.makeIterator())
   }
 
   private static func sorted(_ items: [Attribute]) -> [Attribute] {

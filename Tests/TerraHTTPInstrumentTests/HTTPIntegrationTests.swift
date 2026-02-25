@@ -2,14 +2,15 @@ import Foundation
 import InMemoryExporter
 import OpenTelemetryApi
 import OpenTelemetrySdk
-import Testing
+import XCTest
 @testable import TerraCore
 @testable import TerraHTTPInstrument
 
-@Suite("HTTPIntegrationTests", .serialized)
-struct HTTPIntegrationTests {
-  @Test("HTTP instrumentation captures request and response GenAI attributes")
-  func capturesAIRequestAndResponseAttributes() async throws {
+final class HTTPIntegrationTests: XCTestCase {
+  func testHTTPInstrumentationCapturesRequestAndResponseGenAIAttributes() async throws {
+    HTTPAIInstrumentation.resetForTesting()
+    defer { HTTPAIInstrumentation.resetForTesting() }
+
     let exporter = InMemoryExporter()
     let tracerProvider = TracerProviderSdk()
     tracerProvider.addSpanProcessor(SimpleSpanProcessor(spanExporter: exporter))
@@ -28,13 +29,23 @@ struct HTTPIntegrationTests {
     request.httpBody = Data(#"{"model":"request-model","max_tokens":42}"#.utf8)
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-    _ = try await session.data(for: request)
+    _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+      let task = session.dataTask(with: request) { _, _, error in
+        if let error {
+          continuation.resume(throwing: error)
+        } else {
+          continuation.resume(returning: ())
+        }
+      }
+      task.resume()
+    }
     tracerProvider.forceFlush()
 
     let spans = exporter.getFinishedSpanItems()
-    let span = try #require(spans.first(where: { $0.name.contains("chat") }))
-    #expect(span.attributes[Terra.Keys.GenAI.requestModel]?.description == "request-model")
-    #expect(span.attributes[Terra.Keys.GenAI.requestMaxTokens]?.description == "42")
+    let span = try XCTUnwrap(spans.first(where: { $0.name.contains("chat") }))
+    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestModel]?.description, "request-model")
+    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestMaxTokens]?.description, "42")
+    XCTAssertNil(span.attributes["url.full"])
   }
 }
 

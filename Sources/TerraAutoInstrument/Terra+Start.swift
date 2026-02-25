@@ -87,8 +87,10 @@ extension Terra {
     /// Reserve OpenClaw diagnostics mode so SDK config matches dashboard capabilities.
     public static let openClawDiagnostics = Instrumentations(rawValue: 1 << 4)
 
-    /// Enable all available auto-instrumentations.
-    public static let all: Instrumentations = [.coreML, .httpAIAPIs, .openClawGateway, .openClawDiagnostics]
+    /// Enable default auto-instrumentations.
+    ///
+    /// OpenClaw gateway/diagnostics paths remain opt-in via explicit options or OpenClaw mode.
+    public static let all: Instrumentations = [.coreML, .httpAIAPIs]
 
     /// Disable all auto-instrumentations (useful for custom setups).
     public static let none = Instrumentations([])

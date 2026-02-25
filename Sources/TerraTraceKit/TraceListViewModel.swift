@@ -1,6 +1,7 @@
 import Foundation
 
 /// View model for trace list filtering and selection.
+@MainActor
 public final class TraceListViewModel {
   /// All known traces.
   public private(set) var traces: [Trace]
@@ -15,17 +16,22 @@ public final class TraceListViewModel {
   /// Currently selected trace.
   public private(set) var selectedTrace: Trace?
 
+  /// Pre-sorted traces cache — re-sorted only when traces change.
+  private var sortedTraces: [Trace] = []
+
   /// Creates a view model with an initial set of traces.
   public init(traces: [Trace]) {
     self.traces = traces
     self.searchQuery = ""
     self.filteredTraces = []
+    self.sortedTraces = traces.sorted { $0.fileTimestamp > $1.fileTimestamp }
     applyFilter()
   }
 
   /// Replaces the trace list and re-applies filtering.
   public func updateTraces(_ traces: [Trace]) {
     self.traces = traces
+    self.sortedTraces = traces.sorted { $0.fileTimestamp > $1.fileTimestamp }
     applyFilter()
   }
 
@@ -36,13 +42,12 @@ public final class TraceListViewModel {
 
   private func applyFilter() {
     let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    let base = traces.sorted { $0.fileTimestamp > $1.fileTimestamp }
     guard !query.isEmpty else {
-      filteredTraces = base
+      filteredTraces = sortedTraces
       return
     }
 
-    filteredTraces = base.filter { trace in
+    filteredTraces = sortedTraces.filter { trace in
       trace.id.lowercased().contains(query)
         || trace.displayName.lowercased().contains(query)
         || trace.traceId.hexString.lowercased().contains(query)

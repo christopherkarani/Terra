@@ -1,8 +1,18 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "io.opentelemetry.terra", category: "AIResponseParser")
 
 struct AIResponseParser {
     static func parse(data: Data) -> ParsedResponse? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        let json: [String: Any]
+        do {
+            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return nil
+            }
+            json = parsed
+        } catch {
+            logger.debug("Failed to parse response JSON: \(error.localizedDescription)")
             return nil
         }
 

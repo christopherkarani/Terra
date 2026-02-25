@@ -8,7 +8,7 @@ extension Terra {
     public static let toolExecution = "gen_ai.tool"
     public static let safetyCheck = "terra.safety_check"
 
-    static func isTerraSpanName(_ name: String) -> Bool {
+    public static func isTerraSpanName(_ name: String) -> Bool {
       switch name {
       case inference, embedding, agentInvocation, toolExecution, safetyCheck:
         return true
@@ -72,13 +72,18 @@ extension Terra {
       public static let contentRedaction = "terra.privacy.content_redaction"
 
       public static let promptLength = "terra.prompt.length"
+      public static let promptHMACSHA256 = "terra.prompt.hmac_sha256"
+      /// Legacy compatibility attribute during migration to keyed digests.
       public static let promptSHA256 = "terra.prompt.sha256"
 
       public static let embeddingInputCount = "terra.embeddings.input.count"
 
       public static let safetyCheckName = "terra.safety.check.name"
       public static let safetySubjectLength = "terra.safety.subject.length"
+      public static let safetySubjectHMACSHA256 = "terra.safety.subject.hmac_sha256"
+      /// Legacy compatibility attribute during migration to keyed digests.
       public static let safetySubjectSHA256 = "terra.safety.subject.sha256"
+      public static let anonymizationKeyID = "terra.anonymization.key_id"
 
       /// Marks spans created by auto-instrumentation (vs. manual `withInferenceSpan`).
       public static let autoInstrumented = "terra.auto_instrumented"

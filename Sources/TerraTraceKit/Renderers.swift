@@ -37,7 +37,7 @@ public struct TreeRenderer: Sendable {
     guard !filtered.isEmpty else { return "" }
 
     let spansByTrace = Dictionary(grouping: filtered, by: { $0.traceID })
-    let traceIDs = spansByTrace.keys.sorted { idString($0) < idString($1) }
+    let traceIDs = spansByTrace.keys.sorted()
 
     var lines: [String] = []
     for traceID in traceIDs {
@@ -121,13 +121,8 @@ private func spanStreamSort(_ lhs: SpanRecord, _ rhs: SpanRecord) -> Bool {
   let rhsEnd = endTimeUnixNano(rhs)
   if lhsEnd != rhsEnd { return lhsEnd < rhsEnd }
 
-  let lhsTrace = idString(lhs.traceID)
-  let rhsTrace = idString(rhs.traceID)
-  if lhsTrace != rhsTrace { return lhsTrace < rhsTrace }
-
-  let lhsSpan = idString(lhs.spanID)
-  let rhsSpan = idString(rhs.spanID)
-  if lhsSpan != rhsSpan { return lhsSpan < rhsSpan }
+  if lhs.traceID != rhs.traceID { return lhs.traceID < rhs.traceID }
+  if lhs.spanID != rhs.spanID { return lhs.spanID < rhs.spanID }
 
   return lhs.name < rhs.name
 }
@@ -137,9 +132,7 @@ private func spanTreeSort(_ lhs: SpanRecord, _ rhs: SpanRecord) -> Bool {
   let rhsStart = startTimeUnixNano(rhs)
   if lhsStart != rhsStart { return lhsStart < rhsStart }
 
-  let lhsSpan = idString(lhs.spanID)
-  let rhsSpan = idString(rhs.spanID)
-  if lhsSpan != rhsSpan { return lhsSpan < rhsSpan }
+  if lhs.spanID != rhs.spanID { return lhs.spanID < rhs.spanID }
 
   return lhs.name < rhs.name
 }
@@ -154,12 +147,8 @@ private func renderAttributes(_ span: SpanRecord) -> [String] {
 }
 
 private func sortedAttributePairs(_ attributes: Attributes) -> [(String, String)] {
-  var pairs: [(String, String)] = []
-  for (key, value) in attributes {
-    pairs.append((key, String(describing: value)))
-  }
-
-  return pairs.sorted { $0.0 < $1.0 }
+  // Attributes is already sorted on init — no need to re-sort
+  attributes.items.map { ($0.key, String(describing: $0.value)) }
 }
 
 private func shortID<T>(_ id: T, length: Int = 8) -> String {
@@ -190,7 +179,7 @@ private func formatTimestamp(nanos: UInt64) -> String {
   guard nanos > 0 else { return "0" }
   let seconds = Double(nanos) / 1_000_000_000
   let date = Date(timeIntervalSince1970: seconds)
-  return makeTimestampFormatter().string(from: date)
+  return sharedTimestampFormatter.string(from: date)
 }
 
 private func formatDuration(nanos: UInt64) -> String {
@@ -198,9 +187,9 @@ private func formatDuration(nanos: UInt64) -> String {
   return String(format: "%.3fms", ms)
 }
 
-private func makeTimestampFormatter() -> ISO8601DateFormatter {
+private let sharedTimestampFormatter: ISO8601DateFormatter = {
   let formatter = ISO8601DateFormatter()
   formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
   formatter.timeZone = TimeZone(secondsFromGMT: 0)
   return formatter
-}
+}()

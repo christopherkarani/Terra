@@ -89,62 +89,64 @@ struct OTLPDecompressor {
   }
 
   private static func extractGzipDeflatePayload(from data: Data) throws -> Data {
-    let bytes = [UInt8](data)
-    guard bytes.count >= 18 else {
-      throw OTLPRequestDecoderError.malformedData(reason: "Gzip payload too small")
-    }
-
-    guard bytes[0] == 0x1f, bytes[1] == 0x8b else {
-      throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip header")
-    }
-
-    guard bytes[2] == 0x08 else {
-      throw OTLPRequestDecoderError.malformedData(reason: "Unsupported gzip compression method")
-    }
-
-    let flags = bytes[3]
-    var index = 10
-
-    if flags & 0x04 != 0 {
-      guard index + 2 <= bytes.count else {
-        throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip extra field")
+    try data.withUnsafeBytes { rawBuffer -> Data in
+      let bytes = rawBuffer.bindMemory(to: UInt8.self)
+      guard bytes.count >= 18 else {
+        throw OTLPRequestDecoderError.malformedData(reason: "Gzip payload too small")
       }
-      let xlen = Int(bytes[index]) | (Int(bytes[index + 1]) << 8)
-      index += 2
-      guard index + xlen <= bytes.count else {
-        throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip extra field length")
+
+      guard bytes[0] == 0x1f, bytes[1] == 0x8b else {
+        throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip header")
       }
-      index += xlen
-    }
 
-    if flags & 0x08 != 0 {
-      while index < bytes.count, bytes[index] != 0 { index += 1 }
-      guard index < bytes.count else {
-        throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip filename")
+      guard bytes[2] == 0x08 else {
+        throw OTLPRequestDecoderError.malformedData(reason: "Unsupported gzip compression method")
       }
-      index += 1
-    }
 
-    if flags & 0x10 != 0 {
-      while index < bytes.count, bytes[index] != 0 { index += 1 }
-      guard index < bytes.count else {
-        throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip comment")
+      let flags = bytes[3]
+      var index = 10
+
+      if flags & 0x04 != 0 {
+        guard index + 2 <= bytes.count else {
+          throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip extra field")
+        }
+        let xlen = Int(bytes[index]) | (Int(bytes[index + 1]) << 8)
+        index += 2
+        guard index + xlen <= bytes.count else {
+          throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip extra field length")
+        }
+        index += xlen
       }
-      index += 1
-    }
 
-    if flags & 0x02 != 0 {
-      guard index + 2 <= bytes.count else {
-        throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip header CRC")
+      if flags & 0x08 != 0 {
+        while index < bytes.count, bytes[index] != 0 { index += 1 }
+        guard index < bytes.count else {
+          throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip filename")
+        }
+        index += 1
       }
-      index += 2
-    }
 
-    let trailerLength = 8
-    guard index <= bytes.count - trailerLength else {
-      throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip trailer")
-    }
+      if flags & 0x10 != 0 {
+        while index < bytes.count, bytes[index] != 0 { index += 1 }
+        guard index < bytes.count else {
+          throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip comment")
+        }
+        index += 1
+      }
 
-    return data.subdata(in: index..<(bytes.count - trailerLength))
+      if flags & 0x02 != 0 {
+        guard index + 2 <= bytes.count else {
+          throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip header CRC")
+        }
+        index += 2
+      }
+
+      let trailerLength = 8
+      guard index <= bytes.count - trailerLength else {
+        throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip trailer")
+      }
+
+      return data.subdata(in: index..<(bytes.count - trailerLength))
+    }
   }
 }

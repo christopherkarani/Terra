@@ -3,6 +3,14 @@ import XCTest
 @testable import TerraCore
 
 final class TerraInferenceSpanTests: XCTestCase {
+  private enum TestFailure: Error, CustomStringConvertible {
+    case secret
+
+    var description: String {
+      "super-secret-error-message"
+    }
+  }
+
   private var support: TerraTestSupport!
 
   override func setUp() {
@@ -64,5 +72,53 @@ final class TerraInferenceSpanTests: XCTestCase {
 
     let span = try XCTUnwrap(support.finishedSpans().first)
     XCTAssertFalse(span.status.isError)
+  }
+
+  func testWithInferenceSpan_privacyNever_omitsExceptionMessage() async throws {
+    Terra.install(
+      .init(
+        privacy: .init(contentPolicy: .never, redaction: .lengthOnly),
+        tracerProvider: support.tracerProvider,
+        registerProvidersAsGlobal: false
+      )
+    )
+
+    let request = Terra.InferenceRequest(model: "local/llama-3.2-1b", prompt: "Hello", promptCapture: .optIn)
+
+    do {
+      try await Terra.withInferenceSpan(request) { _ in
+        throw TestFailure.secret
+      }
+      XCTFail("Expected error")
+    } catch {}
+
+    let span = try XCTUnwrap(support.finishedSpans().first)
+    let exception = try XCTUnwrap(span.events.first(where: { $0.name == "exception" }))
+    XCTAssertNil(exception.attributes["exception.message"])
+    XCTAssertEqual(exception.attributes["exception.type"]?.description, String(reflecting: TestFailure.self))
+  }
+
+  func testWithInferenceSpan_privacyAlways_recordsExceptionMessage() async throws {
+    Terra.install(
+      .init(
+        privacy: .init(contentPolicy: .always, redaction: .lengthOnly),
+        tracerProvider: support.tracerProvider,
+        registerProvidersAsGlobal: false
+      )
+    )
+
+    let request = Terra.InferenceRequest(model: "local/llama-3.2-1b", prompt: "Hello")
+
+    do {
+      try await Terra.withInferenceSpan(request) { _ in
+        throw TestFailure.secret
+      }
+      XCTFail("Expected error")
+    } catch {}
+
+    let span = try XCTUnwrap(support.finishedSpans().first)
+    let exception = try XCTUnwrap(span.events.first(where: { $0.name == "exception" }))
+    XCTAssertEqual(exception.attributes["exception.message"]?.description, TestFailure.secret.description)
+    XCTAssertEqual(exception.attributes["exception.type"]?.description, String(reflecting: TestFailure.self))
   }
 }

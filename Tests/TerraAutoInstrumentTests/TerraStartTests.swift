@@ -18,13 +18,13 @@ struct TerraStartTests {
     #expect(!none.contains(.openClawDiagnostics))
   }
 
-  @Test("Instrumentations.all contains core, HTTP, and OpenClaw defaults")
+  @Test("Instrumentations.all contains core and HTTP defaults")
   func instrumentationsAllContainsBoth() {
     let all = Terra.Instrumentations.all
     #expect(all.contains(.coreML))
     #expect(all.contains(.httpAIAPIs))
-    #expect(all.contains(.openClawGateway))
-    #expect(all.contains(.openClawDiagnostics))
+    #expect(!all.contains(.openClawGateway))
+    #expect(!all.contains(.openClawDiagnostics))
   }
 
   @Test("Instrumentations can be combined with union")
@@ -79,6 +79,12 @@ struct TerraStartTests {
   func defaultOpenClawModeIsDisabled() {
     let config = Terra.AutoInstrumentConfiguration()
     #expect(config.openClaw.mode == .disabled)
+  }
+
+  @Test("OpenClaw disabled mode defaults to no gateway hosts")
+  func defaultOpenClawGatewayHostsAreEmptyWhenDisabled() {
+    let config = Terra.AutoInstrumentConfiguration()
+    #expect(config.openClaw.gatewayHosts.isEmpty)
   }
 
   @Test("OpenClaw diagnosticsOnly enables diagnostics export and disables gateway instrumentation")

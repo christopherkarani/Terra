@@ -35,14 +35,18 @@ extension Terra {
 
     public init(
       mode: Mode = .disabled,
-      gatewayHosts: Set<String> = ["localhost", "127.0.0.1"],
+      gatewayHosts: Set<String>? = nil,
       gatewayBaseURL: URL? = nil,
       diagnosticsDirectoryURL: URL? = nil,
       gatewayAuth: GatewayAuth = .none,
       transparentModeEnabled: Bool = false
     ) {
       self.mode = mode
-      self.gatewayHosts = gatewayHosts
+      if let gatewayHosts {
+        self.gatewayHosts = gatewayHosts
+      } else {
+        self.gatewayHosts = Self.defaultGatewayHosts(for: mode)
+      }
       self.gatewayBaseURL = gatewayBaseURL
       self.diagnosticsDirectoryURL = diagnosticsDirectoryURL
       self.gatewayAuth = gatewayAuth
@@ -79,6 +83,15 @@ extension Terra {
         return "gateway_only"
       case .dualPath:
         return "dual_path"
+      }
+    }
+
+    private static func defaultGatewayHosts(for mode: Mode) -> Set<String> {
+      switch mode {
+      case .gatewayOnly, .dualPath:
+        return ["localhost", "127.0.0.1"]
+      case .disabled, .diagnosticsOnly:
+        return []
       }
     }
   }
