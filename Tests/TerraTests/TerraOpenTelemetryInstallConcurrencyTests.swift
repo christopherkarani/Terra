@@ -113,7 +113,7 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
       if case .success = $0 { return true }
       return false
     }.count
-    XCTAssertGreaterThanOrEqual(successCount, 1, "At least one concurrent same-config install should succeed")
+    XCTAssertEqual(successCount, 2, "Both concurrent same-config installs should succeed")
     // None should throw alreadyInstalled -- same config is allowed
     let alreadyInstalledCount = results.filter {
       guard case .failure(let error) = $0 else { return false }
@@ -122,6 +122,20 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
       return false
     }.count
     XCTAssertEqual(alreadyInstalledCount, 0, "Same-config concurrent install should not throw alreadyInstalled")
+  }
+
+  func testInstall_withNonFiniteSamplingRatio_doesNotThrow() {
+    let config = Terra.OpenTelemetryConfiguration(
+      enableMetrics: false,
+      enableLogs: false,
+      enableSignposts: false,
+      enableSessions: false,
+      otlpTracesEndpoint: URL(string: "http://localhost:4380/v1/traces")!,
+      traceSamplingRatio: .nan
+    )
+
+    XCTAssertNoThrow(try Terra.installOpenTelemetry(config))
+    XCTAssertNoThrow(try Terra.installOpenTelemetry(config))
   }
 
   func testConcurrentInstall_consistentConfiguration() async {

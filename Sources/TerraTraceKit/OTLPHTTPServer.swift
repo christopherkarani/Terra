@@ -43,13 +43,16 @@ public final class OTLPHTTPServer: @unchecked Sendable {
   private static let maxActiveConnections = 64
 
   private let queue = DispatchQueue(label: "terra.trace.otlp.httpserver")
+  private let queueSpecificKey = DispatchSpecificKey<Void>()
   private var listener: NWListener?
   private var activeConnections: [ObjectIdentifier: NWConnection] = [:]
   private var readTimeoutTimers: [ObjectIdentifier: DispatchSourceTimer] = [:]
   private var decodeTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
   public var port: UInt16 {
-    listener?.port?.rawValue ?? configuredPort
+    onQueueSync {
+      listener?.port?.rawValue ?? configuredPort
+    }
   }
 
   public init(
@@ -66,56 +69,68 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     self.traceStore = traceStore
     self.limits = limits
     self.onSpans = onSpans
+    self.queue.setSpecific(key: queueSpecificKey, value: ())
   }
 
   public func start() throws {
-    guard listener == nil else { return }
+    try onQueueSync {
+      guard listener == nil else { return }
 
-    let parameters = NWParameters.tcp
-    let listener: NWListener
-    if configuredPort == 0 {
-      listener = try NWListener(using: parameters)
-    } else if let port = NWEndpoint.Port(rawValue: configuredPort) {
-      if shouldBindToHost(host) {
-        parameters.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host(host), port: port)
+      let parameters = NWParameters.tcp
+      let listener: NWListener
+      if configuredPort == 0 {
         listener = try NWListener(using: parameters)
+      } else if let port = NWEndpoint.Port(rawValue: configuredPort) {
+        if shouldBindToHost(host) {
+          parameters.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host(host), port: port)
+          listener = try NWListener(using: parameters)
+        } else {
+          listener = try NWListener(using: parameters, on: port)
+        }
       } else {
-        listener = try NWListener(using: parameters, on: port)
+        throw NSError(domain: "OTLPHTTPServer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])
       }
-    } else {
-      throw NSError(domain: "OTLPHTTPServer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])
-    }
 
-    listener.stateUpdateHandler = { [weak self] (state: NWListener.State) in
-      if case .failed = state {
-        self?.stop()
+      listener.stateUpdateHandler = { [weak self] (state: NWListener.State) in
+        if case .failed = state {
+          self?.stop()
+        }
       }
-    }
 
-    listener.newConnectionHandler = { [weak self] connection in
-      self?.handle(connection)
-    }
+      listener.newConnectionHandler = { [weak self] connection in
+        self?.handle(connection)
+      }
 
-    self.listener = listener
-    listener.start(queue: queue)
+      self.listener = listener
+      listener.start(queue: queue)
+    }
   }
 
   public func stop() {
-    queue.async {
-      self.listener?.cancel()
-      self.listener = nil
-      for id in Array(self.activeConnections.keys) {
-        self.cleanupConnection(id: id)
+    onQueueSync {
+      listener?.cancel()
+      listener = nil
+      for id in Array(activeConnections.keys) {
+        cleanupConnection(id: id)
       }
     }
   }
 
   deinit {
-    listener?.cancel()
-    listener = nil
-    for id in Array(activeConnections.keys) {
-      cleanupConnection(id: id)
+    onQueueSync {
+      listener?.cancel()
+      listener = nil
+      for id in Array(activeConnections.keys) {
+        cleanupConnection(id: id)
+      }
     }
+  }
+
+  private func onQueueSync<T>(_ work: () throws -> T) rethrows -> T {
+    if DispatchQueue.getSpecific(key: queueSpecificKey) != nil {
+      return try work()
+    }
+    return try queue.sync(execute: work)
   }
 
   private func handle(_ connection: NWConnection) {

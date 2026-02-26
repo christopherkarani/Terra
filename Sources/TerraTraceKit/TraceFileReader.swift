@@ -25,21 +25,28 @@ public struct TraceFileReader {
     }
 
     do {
-      let attributes = try fileManager.attributesOfItem(atPath: url.path)
-      if let sizeValue = attributes[.size] as? NSNumber {
-        let size = sizeValue.intValue
-        if size > maxFileSizeBytes {
-          throw TraceFileError.fileTooLarge(url, actualBytes: size, maxBytes: maxFileSizeBytes)
-        }
+      let handle = try FileHandle(forReadingFrom: url)
+      defer {
+        try? handle.close()
       }
+
+      var output = Data()
+      output.reserveCapacity(min(maxFileSizeBytes, 64 * 1024))
+
+      while true {
+        let chunk = try handle.read(upToCount: 64 * 1024) ?? Data()
+        if chunk.isEmpty {
+          break
+        }
+        let projectedSize = output.count + chunk.count
+        if projectedSize > maxFileSizeBytes {
+          throw TraceFileError.fileTooLarge(url, actualBytes: projectedSize, maxBytes: maxFileSizeBytes)
+        }
+        output.append(chunk)
+      }
+      return output
     } catch let fileError as TraceFileError {
       throw fileError
-    } catch {
-      throw TraceFileError.readFailed(url)
-    }
-
-    do {
-      return try Data(contentsOf: url)
     } catch {
       throw TraceFileError.readFailed(url)
     }

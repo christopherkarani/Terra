@@ -69,3 +69,27 @@
 - Added trace file max-size guard in `TraceFileReader` with oversize failure test coverage.
 - Strengthened privacy defaults by making legacy SHA attributes opt-in (`emitLegacySHA256Attributes: false`), with updated redaction tests and README notes.
 - Validation: `swift test --filter TerraRedactionPolicyTests` and full `swift test` both pass.
+
+## Mission-Critical Audit Remediation (2026-02-26)
+
+- [x] Run focused code audit across core runtime, privacy, instrumentation, and trace ingestion paths.
+- [x] Identify concrete correctness/safety gaps with file-level fix plans.
+- [x] Add or update tests first for each identified bug path (TDD guardrails).
+- [x] Implement production-grade fixes with minimal scoped changes.
+- [x] Run `swift build` and full `swift test`.
+- [ ] Commit with detailed message.
+- [ ] Attempt push and open PR with audit + verification notes.
+
+## Review
+
+- Normalized OpenTelemetry install configuration before idempotency checks so non-finite sampling values (`NaN`, `±Inf`) no longer break same-config installs.
+- Hardened OTLP decompression against truncated payload hangs by detecting zero-progress decode loops and requiring terminal stream status.
+- Updated `TraceFileLocator` to honor numeric-prefix filenames via `TraceFileNameParser`, matching trace parser behavior.
+- Removed trace file read TOCTOU risk by switching `TraceFileReader` to bounded streaming reads with live max-size enforcement.
+- Tightened `OTLPHTTPServer` state access with queue-confined `start`/`stop`/`deinit`/`port` reads.
+- Strengthened anonymization key fallback generation with `SystemRandomNumberGenerator` bytes instead of UUID-derived data.
+- Wired `HTTPAIInstrumentation.install` default `openClawGatewayHosts` to `defaultOpenClawGatewayHosts`.
+- Added regression tests for composite trace filenames, truncated deflate payloads, `.drop` redaction behavior, strict same-config concurrent install success, and non-finite sampling ratio idempotency.
+- Validation:
+  - `swift build` passed.
+  - `swift test` passed (XCTest: 49 tests; Swift Testing: 87 tests).

@@ -26,7 +26,7 @@ public enum HTTPAIInstrumentation {
 
     public static func install(
         hosts: Set<String> = defaultAIHosts,
-        openClawGatewayHosts: Set<String> = [],
+        openClawGatewayHosts: Set<String> = defaultOpenClawGatewayHosts,
         openClawMode: String = "disabled"
     ) {
         lock.lock()

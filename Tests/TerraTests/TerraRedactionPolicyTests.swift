@@ -49,6 +49,23 @@ final class TerraRedactionPolicyTests: XCTestCase {
     XCTAssertFalse(span.attributes.values.contains { $0.description.contains(prompt) })
   }
 
+  func testDropRedaction_omitsPromptAttributes_withoutRawPrompt() async throws {
+    Terra.install(
+      .init(privacy: .init(contentPolicy: .always, redaction: .drop))
+    )
+
+    let prompt = "secret-prompt"
+    let request = Terra.InferenceRequest(model: "local/llama-3.2-1b", prompt: prompt)
+
+    await Terra.withInferenceSpan(request) { _ in }
+
+    let span = try XCTUnwrap(support.finishedSpans().first)
+    XCTAssertNil(span.attributes[Terra.Keys.Terra.promptLength])
+    XCTAssertNil(span.attributes[Terra.Keys.Terra.promptHMACSHA256])
+    XCTAssertNil(span.attributes[Terra.Keys.Terra.promptSHA256])
+    XCTAssertFalse(span.attributes.values.contains { $0.description.contains(prompt) })
+  }
+
   func testHMACRedaction_recordsHMACAndLength_withoutRawPrompt() async throws {
     Terra.install(
       .init(privacy: .init(contentPolicy: .always, redaction: .hashHMACSHA256))

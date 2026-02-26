@@ -206,8 +206,11 @@ private extension Runtime {
         return Data(bytes)
       }
     #endif
-    let seed = UUID().uuidString + UUID().uuidString
-    return Data(Data(seed.utf8).prefix(anonymizationKeyLengthBytes))
+    var generator = SystemRandomNumberGenerator()
+    let randomBytes = (0..<anonymizationKeyLengthBytes).map { _ in
+      UInt8.random(in: UInt8.min...UInt8.max, using: &generator)
+    }
+    return Data(randomBytes)
   }
 
   static func readAnonymizationKeyFromKeychain() -> Data? {
