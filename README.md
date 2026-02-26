@@ -11,6 +11,7 @@ Terra is a privacy-first observability layer for on-device GenAI. Built on OpenT
 [![CI](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%20|%20macOS%20|%20visionOS-red.svg)]()
+[![Website](https://img.shields.io/badge/Website-terra.dev-cyan.svg)](website/)
 
 ---
 
@@ -33,7 +34,7 @@ Terra is a privacy-first observability layer for on-device GenAI. Built on OpenT
 ```swift
 import Terra
 
-try Terra.start()
+try Terra.start(preset: .quickstart)
 ```
 
 That's it. Every CoreML prediction and HTTP request to known AI APIs now produces OpenTelemetry spans.
@@ -47,6 +48,25 @@ That's it. Every CoreML prediction and HTTP request to known AI APIs now produce
 try await Terra.withInferenceSpan(model: "llama-3.2") { scope in
     let result = try await model.generate(prompt)
     scope.setAttributes(["tokens": result.count])
+}
+```
+
+For expert users, you can pass the full request model and attach additional attributes:
+```swift
+let request = Terra.InferenceRequest(
+  model: "llama-3.2",
+  prompt: promptText,
+  promptCapture: .optIn,
+  maxOutputTokens: 256,
+  temperature: 0.2,
+)
+
+try await Terra.withInferenceSpan(request) { scope in
+  scope.setAttributes([
+    "gen_ai.provider.name": .string("openai-compatible"),
+    "terra.runtime": .string("custom_runtime")
+  ])
+  let result = try await model.generate()
 }
 ```
 
