@@ -77,8 +77,8 @@
 - [x] Add or update tests first for each identified bug path (TDD guardrails).
 - [x] Implement production-grade fixes with minimal scoped changes.
 - [x] Run `swift build` and full `swift test`.
-- [ ] Commit with detailed message.
-- [ ] Attempt push and open PR with audit + verification notes.
+- [x] Commit with detailed message.
+- [x] Attempt push and open PR with audit + verification notes.
 
 ## Review
 
@@ -93,3 +93,4 @@
 - Validation:
   - `swift build` passed.
   - `swift test` passed (XCTest: 49 tests; Swift Testing: 87 tests).
+- PR: https://github.com/christopherkarani/Terra/pull/12
