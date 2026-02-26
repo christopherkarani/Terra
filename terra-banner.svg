@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 250" width="100%" height="250">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A1C29" />
+      <stop offset="100%" stop-color="#0E1015" />
+    </linearGradient>
+    <linearGradient id="globeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="url(#bgGradient)" rx="16" />
+
+  <!-- Grid pattern for 'observability/data' feel -->
+  <g stroke="#ffffff" stroke-opacity="0.05" stroke-width="1">
+    <path d="M 0 50 L 800 50 M 0 100 L 800 100 M 0 150 L 800 150 M 0 200 L 800 200" />
+    <path d="M 100 0 L 100 250 M 200 0 L 200 250 M 300 0 L 300 250 M 400 0 L 400 250 M 500 0 L 500 250 M 600 0 L 600 250 M 700 0 L 700 250" />
+  </g>
+
+  <!-- Mascot (Terra Globe) -->
+  <g transform="translate(150, 125)">
+    <!-- Globe Base -->
+    <circle cx="0" cy="0" r="60" fill="url(#globeGradient)" filter="url(#glow)" />
+    
+    <!-- Continents (Stylized) -->
+    <path d="M -30 -20 Q -10 -40 10 -20 T 40 0 Q 30 30 10 40 T -30 20 Q -40 0 -30 -20 Z" fill="#ffffff" fill-opacity="0.2" />
+    
+    <!-- Eyes -->
+    <circle cx="-15" cy="-5" r="5" fill="#ffffff" />
+    <circle cx="15" cy="-5" r="5" fill="#ffffff" />
+    <!-- Pupils -->
+    <circle cx="-13" cy="-5" r="2" fill="#1A1C29" />
+    <circle cx="17" cy="-5" r="2" fill="#1A1C29" />
+    
+    <!-- Smile -->
+    <path d="M -10 10 Q 0 18 10 10" stroke="#ffffff" stroke-width="3" stroke-linecap="round" fill="none" />
+
+    <!-- Magnifying Glass -->
+    <g transform="translate(30, 15)">
+      <circle cx="10" cy="10" r="18" stroke="#FBBF24" stroke-width="4" fill="none" filter="url(#glow)" />
+      <path d="M 23 23 L 35 35" stroke="#FBBF24" stroke-width="5" stroke-linecap="round" />
+      <circle cx="8" cy="8" r="4" fill="#ffffff" fill-opacity="0.4" />
+    </g>
+  </g>
+
+  <!-- Text -->
+  <g transform="translate(300, 115)">
+    <text x="0" y="0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="64" font-weight="800" fill="#ffffff" letter-spacing="-1">Terra</text>
+    <text x="5" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="20" font-weight="500" fill="#9CA3AF" letter-spacing="0.5">Observability for On-Device GenAI</text>
+  </g>
+
+  <!-- Decorative data lines -->
+  <g transform="translate(650, 80)" stroke="#06B6D4" stroke-width="3" stroke-linecap="round" fill="none" filter="url(#glow)">
+    <path d="M 0 60 Q 20 20 40 50 T 80 10" />
+    <circle cx="80" cy="10" r="4" fill="#06B6D4" />
+  </g>
+</svg>
