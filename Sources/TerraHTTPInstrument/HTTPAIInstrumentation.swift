@@ -21,8 +21,21 @@ public enum HTTPAIInstrumentation {
         "127.0.0.1",
     ]
 
+    private struct InstalledConfiguration {
+        var hosts: Set<String>
+        var openClawGatewayHosts: Set<String>
+        var openClawMode: String
+
+        static let `default` = InstalledConfiguration(
+            hosts: HTTPAIInstrumentation.defaultAIHosts,
+            openClawGatewayHosts: [],
+            openClawMode: "disabled"
+        )
+    }
+
     private static let lock = NSLock()
     private static var instance: URLSessionInstrumentation?
+    private static var installedConfiguration: InstalledConfiguration = .default
 
     public static func install(
         hosts: Set<String> = defaultAIHosts,
@@ -30,60 +43,28 @@ public enum HTTPAIInstrumentation {
         openClawMode: String = "disabled"
     ) {
         lock.lock()
-        defer { lock.unlock() }
+        installedConfiguration = InstalledConfiguration(
+            hosts: hosts,
+            openClawGatewayHosts: openClawGatewayHosts,
+            openClawMode: openClawMode
+        )
+        let shouldCreateInstance = instance == nil
+        lock.unlock()
 
-        guard instance == nil else { return }
+        guard shouldCreateInstance else { return }
 
         let config = URLSessionInstrumentationConfiguration(
             shouldInstrument: { request in
-                guard let host = request.url?.host else { return false }
-                return isHostMatched(host, hosts: hosts)
-                    || isHostMatched(host, hosts: openClawGatewayHosts)
+                shouldInstrument(request)
             },
             nameSpan: { request in
-                guard let host = request.url?.host else { return nil }
-                if isHostMatched(host, hosts: openClawGatewayHosts) {
-                    return "chat openclaw.gateway"
-                }
-                for aiHost in hosts where isHostBoundaryMatch(host: host, target: aiHost) {
-                    return "chat \(host)"
-                }
-                return nil
+                spanName(for: request)
             },
             spanCustomization: { request, spanBuilder in
-                spanBuilder.setAttribute(key: Terra.Keys.Terra.autoInstrumented, value: true)
-                spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: "http_api")
-                spanBuilder.setAttribute(key: Terra.Keys.GenAI.operationName, value: "chat")
-
-                if let host = request.url?.host {
-                    let isOpenClawGateway = isHostMatched(host, hosts: openClawGatewayHosts)
-                    let provider = providerName(from: host, openClawGatewayHosts: openClawGatewayHosts)
-                    spanBuilder.setAttribute(key: Terra.Keys.GenAI.providerName, value: provider)
-                    if isOpenClawGateway {
-                        spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: "openclaw_gateway")
-                        spanBuilder.setAttribute(key: Terra.Keys.Terra.openClawGateway, value: true)
-                        spanBuilder.setAttribute(key: Terra.Keys.Terra.openClawMode, value: openClawMode)
-                    }
-                }
-
-                guard let body = request.httpBody,
-                      let parsed = AIRequestParser.parse(body: body) else { return }
-
-                if let model = parsed.model {
-                    spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestModel, value: model)
-                }
-                if let maxTokens = parsed.maxTokens {
-                    spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestMaxTokens, value: maxTokens)
-                }
-                if let temperature = parsed.temperature {
-                    spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestTemperature, value: temperature)
-                }
-                if let stream = parsed.stream {
-                    spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestStream, value: stream)
-                }
+                customizeSpan(request: request, spanBuilder: spanBuilder)
             },
             receivedResponse: { _, dataOrFile, span in
-                guard let data = dataOrFile as? Data,
+                guard let data = responseBodyData(from: dataOrFile, maxBytes: AIRequestParser.maxBodySizeBytes),
                       let parsed = AIResponseParser.parse(data: data) else { return }
 
                 if let model = parsed.model {
@@ -99,13 +80,153 @@ public enum HTTPAIInstrumentation {
             semanticConvention: .old
         )
 
-        instance = URLSessionInstrumentation(configuration: config)
+        lock.lock()
+        if instance == nil {
+            instance = URLSessionInstrumentation(configuration: config)
+        }
+        lock.unlock()
     }
 
     static func resetForTesting() {
         lock.lock()
         defer { lock.unlock() }
         instance = nil
+        installedConfiguration = .default
+    }
+
+    internal static func shouldInstrument(_ request: URLRequest) -> Bool {
+        guard let host = request.url?.host else { return false }
+        let config = currentConfiguration()
+        return isHostMatched(host, hosts: config.hosts)
+            || isHostMatched(host, hosts: config.openClawGatewayHosts)
+    }
+
+    private static func spanName(for request: URLRequest) -> String? {
+        guard let host = request.url?.host else { return nil }
+        let config = currentConfiguration()
+        guard isHostMatched(host, hosts: config.hosts)
+            || isHostMatched(host, hosts: config.openClawGatewayHosts) else {
+            return nil
+        }
+
+        let operation = operationName(for: request)
+        if isHostMatched(host, hosts: config.openClawGatewayHosts) {
+            return "\(operation) openclaw.gateway"
+        }
+        return "\(operation) \(host)"
+    }
+
+    private static func customizeSpan(request: URLRequest, spanBuilder: SpanBuilder) {
+        let config = currentConfiguration()
+
+        spanBuilder.setAttribute(key: Terra.Keys.Terra.autoInstrumented, value: true)
+        spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: "http_api")
+        spanBuilder.setAttribute(key: Terra.Keys.GenAI.operationName, value: operationName(for: request))
+
+        if let host = request.url?.host {
+            let isOpenClawGateway = isHostMatched(host, hosts: config.openClawGatewayHosts)
+            let provider = providerName(from: host, openClawGatewayHosts: config.openClawGatewayHosts)
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.providerName, value: provider)
+            if isOpenClawGateway {
+                spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: "openclaw_gateway")
+                spanBuilder.setAttribute(key: Terra.Keys.Terra.openClawGateway, value: true)
+                spanBuilder.setAttribute(key: Terra.Keys.Terra.openClawMode, value: config.openClawMode)
+            }
+        }
+
+        guard let body = requestBodyData(from: request, maxBytes: AIRequestParser.maxBodySizeBytes),
+              let parsed = AIRequestParser.parse(body: body) else { return }
+
+        if let model = parsed.model {
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestModel, value: model)
+        }
+        if let maxTokens = parsed.maxTokens {
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestMaxTokens, value: maxTokens)
+        }
+        if let temperature = parsed.temperature {
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestTemperature, value: temperature)
+        }
+        if let stream = parsed.stream {
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestStream, value: stream)
+        }
+    }
+
+    internal static func operationName(for request: URLRequest) -> String {
+        let path = request.url?.path.lowercased() ?? ""
+
+        if path.contains("/embeddings") {
+            return Terra.OperationName.embeddings.rawValue
+        }
+        if path.contains("/chat") || path.contains("/messages") || path.contains("/responses") || path.contains("/completions") {
+            return Terra.OperationName.chat.rawValue
+        }
+        return Terra.OperationName.inference.rawValue
+    }
+
+    private static func requestBodyData(from request: URLRequest, maxBytes: Int) -> Data? {
+        if let body = request.httpBody {
+            guard body.count <= maxBytes else { return nil }
+            return body
+        }
+
+        guard let stream = request.httpBodyStream else {
+            return nil
+        }
+        return readInputStream(stream, maxBytes: maxBytes)
+    }
+
+    private static func responseBodyData(from dataOrFile: Any?, maxBytes: Int) -> Data? {
+        if let data = dataOrFile as? Data {
+            guard data.count <= maxBytes else { return nil }
+            return data
+        }
+
+        if let fileURL = dataOrFile as? URL {
+            if let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size]) as? NSNumber,
+               fileSize.intValue > maxBytes {
+                return nil
+            }
+            guard let data = try? Data(contentsOf: fileURL), data.count <= maxBytes else {
+                return nil
+            }
+            return data
+        }
+
+        return nil
+    }
+
+    private static func readInputStream(_ stream: InputStream, maxBytes: Int) -> Data? {
+        if stream.streamStatus == .notOpen {
+            stream.open()
+        }
+        defer { stream.close() }
+
+        let chunkSize = 16 * 1024
+        var buffer = [UInt8](repeating: 0, count: chunkSize)
+        var result = Data()
+
+        while stream.hasBytesAvailable {
+            let bytesRead = stream.read(&buffer, maxLength: chunkSize)
+            if bytesRead < 0 {
+                return nil
+            }
+            if bytesRead == 0 {
+                break
+            }
+
+            if result.count + bytesRead > maxBytes {
+                return nil
+            }
+            result.append(buffer, count: bytesRead)
+        }
+
+        return result
+    }
+
+    private static func currentConfiguration() -> InstalledConfiguration {
+        lock.lock()
+        defer { lock.unlock() }
+        return installedConfiguration
     }
 
     private static func isHostMatched(_ host: String, hosts: Set<String>) -> Bool {

@@ -24,28 +24,44 @@ final class HTTPIntegrationTests: XCTestCase {
     config.protocolClasses = [MockURLProtocol.self]
     let session = URLSession(configuration: config)
 
-    var request = URLRequest(url: URL(string: "https://example.ai/v1/chat/completions")!)
-    request.httpMethod = "POST"
-    request.httpBody = Data(#"{"model":"request-model","max_tokens":42}"#.utf8)
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    var chatRequest = URLRequest(url: URL(string: "https://example.ai/v1/chat/completions")!)
+    chatRequest.httpMethod = "POST"
+    chatRequest.httpBody = Data(#"{"model":"request-model","max_tokens":42}"#.utf8)
+    chatRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    try await runDataTask(session: session, request: chatRequest)
 
-    _ = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      let task = session.dataTask(with: request) { _, _, error in
-        if let error {
-          continuation.resume(throwing: error)
-        } else {
-          continuation.resume(returning: ())
-        }
-      }
-      task.resume()
-    }
+    MockURLProtocol.responseBody = #"{"model":"embed-response","usage":{"prompt_tokens":2}}"#
+    var embeddingsRequest = URLRequest(url: URL(string: "https://example.ai/v1/embeddings")!)
+    embeddingsRequest.httpMethod = "POST"
+    embeddingsRequest.httpBody = Data(#"{"model":"text-embedding-3-small"}"#.utf8)
+    embeddingsRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    try await runDataTask(session: session, request: embeddingsRequest)
+
     tracerProvider.forceFlush()
 
     let spans = exporter.getFinishedSpanItems()
-    let span = try XCTUnwrap(spans.first(where: { $0.name.contains("chat") }))
-    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestModel]?.description, "request-model")
-    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestMaxTokens]?.description, "42")
-    XCTAssertNil(span.attributes["url.full"])
+    let chatSpan = try XCTUnwrap(spans.first(where: { $0.name.contains("chat") }))
+    XCTAssertEqual(chatSpan.attributes[Terra.Keys.GenAI.requestModel]?.description, "request-model")
+    XCTAssertEqual(chatSpan.attributes[Terra.Keys.GenAI.requestMaxTokens]?.description, "42")
+    XCTAssertEqual(chatSpan.attributes[Terra.Keys.GenAI.operationName]?.description, "chat")
+    XCTAssertNil(chatSpan.attributes["url.full"])
+
+    let embeddingsSpan = try XCTUnwrap(spans.first(where: { $0.name.contains("embeddings") }))
+    XCTAssertEqual(embeddingsSpan.attributes[Terra.Keys.GenAI.requestModel]?.description, "text-embedding-3-small")
+    XCTAssertEqual(embeddingsSpan.attributes[Terra.Keys.GenAI.operationName]?.description, "embeddings")
+  }
+}
+
+private func runDataTask(session: URLSession, request: URLRequest) async throws {
+  try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+    let task = session.dataTask(with: request) { _, _, error in
+      if let error {
+        continuation.resume(throwing: error)
+      } else {
+        continuation.resume(returning: ())
+      }
+    }
+    task.resume()
   }
 }
 

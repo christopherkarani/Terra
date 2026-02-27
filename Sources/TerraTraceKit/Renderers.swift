@@ -74,10 +74,38 @@ public struct TreeRenderer: Sendable {
     let orderedRoots = roots.sorted(by: spanTreeSort)
     var lines: [String] = []
     lines.reserveCapacity(orderedRoots.count)
+    var visited = Set<SpanID>()
 
     for (index, root) in orderedRoots.enumerated() {
       let isLast = index == orderedRoots.count - 1
-      lines.append(contentsOf: renderNode(root, prefix: "", isLast: isLast, childrenByParent: childrenByParent))
+      lines.append(
+        contentsOf: renderNode(
+          root,
+          prefix: "",
+          isLast: isLast,
+          childrenByParent: childrenByParent,
+          ancestors: [],
+          visited: &visited
+        )
+      )
+    }
+
+    let disconnectedRoots = spans
+      .filter { !visited.contains($0.spanID) }
+      .sorted(by: spanTreeSort)
+
+    for (index, root) in disconnectedRoots.enumerated() {
+      let isLast = index == disconnectedRoots.count - 1
+      lines.append(
+        contentsOf: renderNode(
+          root,
+          prefix: "",
+          isLast: isLast,
+          childrenByParent: childrenByParent,
+          ancestors: [],
+          visited: &visited
+        )
+      )
     }
 
     return lines
@@ -87,9 +115,17 @@ public struct TreeRenderer: Sendable {
     _ span: SpanRecord,
     prefix: String,
     isLast: Bool,
-    childrenByParent: [SpanID: [SpanRecord]]
+    childrenByParent: [SpanID: [SpanRecord]],
+    ancestors: [SpanID],
+    visited: inout Set<SpanID>
   ) -> [String] {
     let branch = isLast ? "\\-- " : "|-- "
+    if ancestors.contains(span.spanID) {
+      return [prefix + branch + treeLine(span) + " [cycle]"]
+    }
+    guard visited.insert(span.spanID).inserted else {
+      return []
+    }
     let line = prefix + branch + treeLine(span)
 
     var lines: [String] = [line]
@@ -99,7 +135,16 @@ public struct TreeRenderer: Sendable {
 
     for (index, child) in children.enumerated() {
       let childIsLast = index == children.count - 1
-      lines.append(contentsOf: renderNode(child, prefix: childPrefix, isLast: childIsLast, childrenByParent: childrenByParent))
+      lines.append(
+        contentsOf: renderNode(
+          child,
+          prefix: childPrefix,
+          isLast: childIsLast,
+          childrenByParent: childrenByParent,
+          ancestors: ancestors + [span.spanID],
+          visited: &visited
+        )
+      )
     }
 
     return lines

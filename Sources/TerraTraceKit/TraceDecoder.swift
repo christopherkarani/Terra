@@ -11,6 +11,9 @@ public struct TraceDecoder {
     if data.isEmpty || data.isOnlyWhitespace {
       return []
     }
+    guard data.lastNonWhitespaceByte == 0x2C else {
+      throw TraceDecodingError.invalidFormat
+    }
 
     var wrapped = Data("[".utf8)
     wrapped.append(data)
@@ -20,6 +23,8 @@ public struct TraceDecoder {
       let decoder = JSONDecoder()
       let decoded = try decoder.decode([[SpanData]?].self, from: wrapped)
       return decoded.compactMap { $0 }.flatMap { $0 }
+    } catch is DecodingError {
+      throw TraceDecodingError.invalidFormat
     } catch {
       throw TraceDecodingError.decodingFailed(context: "\(error)")
     }
@@ -27,6 +32,18 @@ public struct TraceDecoder {
 }
 
 private extension Data {
+  var lastNonWhitespaceByte: UInt8? {
+    for byte in self.reversed() {
+      switch byte {
+      case 0x20, 0x0A, 0x0D, 0x09:
+        continue
+      default:
+        return byte
+      }
+    }
+    return nil
+  }
+
   var isOnlyWhitespace: Bool {
     for byte in self {
       switch byte {

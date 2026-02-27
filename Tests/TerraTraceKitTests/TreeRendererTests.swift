@@ -47,6 +47,43 @@ final class TreeRendererTests: XCTestCase {
     let expectedWithParent = expectedTree(for: [root, child])
     XCTAssertEqual(outputWithParent, expectedWithParent)
   }
+
+  func testTreeRendererRendersCycleInsteadOfDroppingTrace() throws {
+    let traceID = try XCTUnwrap(TraceID(hex: "00000000000000000000000000000001"))
+    let spanAID = try XCTUnwrap(SpanID(hex: "0000000000000001"))
+    let spanBID = try XCTUnwrap(SpanID(hex: "0000000000000002"))
+
+    let spanA = SpanRecord(
+      traceID: traceID,
+      spanID: spanAID,
+      parentSpanID: spanBID,
+      name: "span-a",
+      kind: .internal,
+      status: .ok,
+      startTimeUnixNano: 1,
+      endTimeUnixNano: 2,
+      attributes: Attributes([]),
+      resource: Resource(attributes: Attributes([]))
+    )
+    let spanB = SpanRecord(
+      traceID: traceID,
+      spanID: spanBID,
+      parentSpanID: spanAID,
+      name: "span-b",
+      kind: .internal,
+      status: .ok,
+      startTimeUnixNano: 3,
+      endTimeUnixNano: 4,
+      attributes: Attributes([]),
+      resource: Resource(attributes: Attributes([]))
+    )
+
+    let snapshot = TraceSnapshot(allSpans: [spanA, spanB], traces: [traceID: [spanA, spanB]])
+    let output = TreeRenderer().render(snapshot: snapshot)
+
+    XCTAssertTrue(output.contains("trace \(traceID.short)"))
+    XCTAssertTrue(output.contains("[cycle]"), "Expected cycle marker in output: \(output)")
+  }
 }
 
 private extension TreeRendererTests {

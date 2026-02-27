@@ -61,12 +61,8 @@ final class Runtime {
       anonymizationKey = providedAnonymizationKey
       anonymizationKeyID = Runtime.deriveAnonymizationKeyID(from: providedAnonymizationKey)
     }
-    if let tracerProvider = installation.tracerProvider {
-      tracerProviderOverride = tracerProvider
-    }
-    if let loggerProvider = installation.loggerProvider {
-      loggerProviderOverride = loggerProvider
-    }
+    tracerProviderOverride = installation.tracerProvider
+    loggerProviderOverride = installation.loggerProvider
 
     if installation.registerProvidersAsGlobal {
       if let tracerProvider = installation.tracerProvider {
@@ -80,9 +76,7 @@ final class Runtime {
       }
     }
 
-    if let meterProvider = installation.meterProvider {
-      metrics.configure(meterProvider: meterProvider)
-    }
+    metrics.configure(meterProvider: installation.meterProvider)
   }
 
   var privacy: Terra.Privacy {

@@ -455,6 +455,9 @@ public final class OTLPHTTPServer: @unchecked Sendable {
         return .failure(.badRequest("Malformed header name"))
       }
       let key = name.lowercased()
+      if key == "content-length", headers[key] != nil {
+        return .failure(.badRequest("Multiple Content-Length headers are not allowed"))
+      }
       if let existing = headers[key] {
         headers[key] = existing + ", " + value
       } else {
@@ -474,9 +477,13 @@ public final class OTLPHTTPServer: @unchecked Sendable {
       return .failure(.lengthRequired)
     }
 
-    let trimmedLength = contentLengthValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    let lengthToken = trimmedLength.split(separator: ",", maxSplits: 1).first.map { String($0) } ?? trimmedLength
-    guard let contentLength = Int(lengthToken.trimmingCharacters(in: .whitespacesAndNewlines)), contentLength >= 0 else {
+    let lengthTokens = contentLengthValue
+      .split(separator: ",")
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    guard lengthTokens.count == 1,
+          let first = lengthTokens.first,
+          let contentLength = Int(first),
+          contentLength >= 0 else {
       return .failure(.badRequest("Invalid Content-Length"))
     }
 

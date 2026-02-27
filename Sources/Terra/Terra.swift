@@ -293,19 +293,9 @@ public enum Terra {
     }
 
     public func recordChunk() {
-      let now = ContinuousClock.now
-      var shouldEmitFirstTokenEvent = false
       lock.lock()
       chunkCount += 1
-      if firstTokenAt == nil {
-        firstTokenAt = now
-        shouldEmitFirstTokenEvent = true
-      }
       lock.unlock()
-
-      if shouldEmitFirstTokenEvent {
-        scope.addEvent(Keys.Terra.streamFirstTokenEvent)
-      }
     }
 
     func finish() {

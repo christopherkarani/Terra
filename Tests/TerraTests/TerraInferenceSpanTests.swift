@@ -121,4 +121,17 @@ final class TerraInferenceSpanTests: XCTestCase {
     XCTAssertEqual(exception.attributes["exception.message"]?.description, TestFailure.secret.description)
     XCTAssertEqual(exception.attributes["exception.type"]?.description, String(reflecting: TestFailure.self))
   }
+
+  func testInstallWithoutTracerProviderClearsOverride() async throws {
+    let fallbackSupport = TerraTestSupport()
+
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+    await Terra.withInferenceSpan(.init(model: "model-1")) { _ in }
+
+    Terra.install(.init(tracerProvider: nil, registerProvidersAsGlobal: false))
+    await Terra.withInferenceSpan(.init(model: "model-2")) { _ in }
+
+    XCTAssertEqual(support.finishedSpans().count, 1, "Override provider should only receive the first span")
+    XCTAssertEqual(fallbackSupport.finishedSpans().count, 1, "Global provider should receive spans after override is cleared")
+  }
 }

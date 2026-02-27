@@ -134,36 +134,31 @@ extension Terra {
       throw InstallOpenTelemetryError.alreadyInstalled
     }
 
-    installedOpenTelemetryConfiguration = configuration
-
-    do {
-      if let persistence = configuration.persistence {
-        try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
-      }
-
-      let tracerProviderSdk = try installTracing(configuration: configuration)
-
-      if configuration.enableSignposts {
-        installSignposts(tracerProviderSdk: tracerProviderSdk)
-      }
-
-      if configuration.enableLogs {
-        _ = try installLogs(configuration: configuration)
-      }
-
-      if configuration.enableSessions {
-        tracerProviderSdk.addSpanProcessor(TerraSessionSpanProcessor())
-        SessionEventInstrumentation.install()
-      }
-
-      if configuration.enableMetrics {
-        let meterProvider = try installMetrics(configuration: configuration)
-        Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
-      }
-    } catch {
-      installedOpenTelemetryConfiguration = nil
-      throw error
+    if let persistence = configuration.persistence {
+      try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
     }
+
+    let tracerProviderSdk = try installTracing(configuration: configuration)
+
+    if configuration.enableSignposts {
+      installSignposts(tracerProviderSdk: tracerProviderSdk)
+    }
+
+    if configuration.enableLogs {
+      _ = try installLogs(configuration: configuration)
+    }
+
+    if configuration.enableSessions {
+      tracerProviderSdk.addSpanProcessor(TerraSessionSpanProcessor())
+      SessionEventInstrumentation.install()
+    }
+
+    if configuration.enableMetrics {
+      let meterProvider = try installMetrics(configuration: configuration)
+      Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
+    }
+
+    installedOpenTelemetryConfiguration = configuration
   }
 
   // MARK: - Tracing

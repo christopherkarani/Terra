@@ -147,6 +147,75 @@ final class OTLPHTTPServerTests: XCTestCase {
     let snapshot = await store.snapshot(filter: nil)
     XCTAssertTrue(snapshot.allSpans.isEmpty)
   }
+
+  func testOTLPHTTPServer_rejectsDuplicateContentLengthHeaders() async throws {
+    let store = TraceStore(maxSpans: 50)
+    let server = OTLPHTTPServer(host: "127.0.0.1", port: 0, traceStore: store)
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = try await waitForBoundPort(server, timeout: 2.0)
+    XCTAssertGreaterThan(actualPort, 0)
+    guard actualPort > 0 else {
+      XCTFail("Server did not bind to an ephemeral port within timeout")
+      return
+    }
+
+    var request = "POST /v1/traces HTTP/1.1\r\n"
+    request += "Host: 127.0.0.1:\(actualPort)\r\n"
+    request += "Content-Type: application/x-protobuf\r\n"
+    request += "Content-Length: 0\r\n"
+    request += "Content-Length: 0\r\n"
+    request += "Connection: close\r\n"
+    request += "\r\n"
+
+    let response = try await sendRawRequest(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      request: Data(request.utf8)
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 400, "Response body: \(parseBody(from: response))")
+  }
+
+  func testOTLPHTTPServer_rejectsCommaSeparatedContentLength() async throws {
+    let store = TraceStore(maxSpans: 50)
+    let server = OTLPHTTPServer(host: "127.0.0.1", port: 0, traceStore: store)
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = try await waitForBoundPort(server, timeout: 2.0)
+    XCTAssertGreaterThan(actualPort, 0)
+    guard actualPort > 0 else {
+      XCTFail("Server did not bind to an ephemeral port within timeout")
+      return
+    }
+
+    var request = "POST /v1/traces HTTP/1.1\r\n"
+    request += "Host: 127.0.0.1:\(actualPort)\r\n"
+    request += "Content-Type: application/x-protobuf\r\n"
+    request += "Content-Length: 0, 0\r\n"
+    request += "Connection: close\r\n"
+    request += "\r\n"
+
+    let response = try await sendRawRequest(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      request: Data(request.utf8)
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 400, "Response body: \(parseBody(from: response))")
+  }
 }
 
 private func waitForBoundPort(

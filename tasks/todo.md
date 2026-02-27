@@ -69,3 +69,36 @@
 - Added trace file max-size guard in `TraceFileReader` with oversize failure test coverage.
 - Strengthened privacy defaults by making legacy SHA attributes opt-in (`emitLegacySHA256Attributes: false`), with updated redaction tests and README notes.
 - Validation: `swift test --filter TerraRedactionPolicyTests` and full `swift test` both pass.
+
+## Mission-Critical Audit Remediation (2026-02-27)
+
+- [x] Re-baseline repository health and run focused scans for crash/correctness risks.
+- [x] Identify concrete bugs/gaps/dead code with file-level evidence.
+- [x] Implement fixes with minimal, production-safe diffs.
+- [x] Add/adjust regression tests using TDD flow for each remediation.
+- [ ] Run full `swift test` and `swift build`. (Blocked: host disk is full; SwiftPM fails with `error: other(28)` and `No space left on device` before compilation/tests.)
+- [ ] Commit, push branch, and open PR with detailed rationale.
+- [x] Add run review notes (findings fixed, residual risks, and verification output).
+
+### Review (2026-02-27)
+
+- Runtime reconfiguration correctness: `Runtime.install` now clears stale tracer/logger overrides and always reconfigures metrics when providers are omitted.
+- Streaming metrics correctness: `recordChunk()` no longer emits `terra.first_token` or sets first-token timestamps without token emission.
+- OpenTelemetry install state: `installedOpenTelemetryConfiguration` now sets only after successful setup path completion.
+- HTTP instrumentation correctness:
+  - install config updates now apply after the first install via mutable shared config read by instrumentation callbacks.
+  - operation name/span name now infer endpoint (`chat`, `embeddings`, fallback `inference`) instead of hardcoded chat.
+  - request body parsing now supports `httpBodyStream`; response parsing now supports `Data` and downloaded `URL` payloads with size caps.
+- OTLP HTTP parser hardening: duplicate `Content-Length` headers and comma-separated `Content-Length` values are rejected with `400`.
+- Tree renderer robustness: cycle/disconnected graphs are rendered instead of dropped; cycle edges are marked with `[cycle]`.
+- Trace decoder error semantics: invalid persisted format (missing trailing comma / malformed JSON) now throws `TraceDecodingError.invalidFormat`.
+- Added regression tests:
+  - `TerraStreamingSpanTests`: chunk-only streams do not emit first-token metrics/events.
+  - `TerraInferenceSpanTests`: reinstall without tracer provider clears override and falls back to global provider.
+  - `HTTPAIInstrumentationTests`: operation inference and live install-config host updates.
+  - `HTTPIntegrationTests`: chat + embeddings operation/attribute assertions.
+  - `OTLPHTTPServerTests`: duplicate/comma-separated content-length rejection.
+  - `TreeRendererTests`: cycle rendering coverage.
+  - `TraceDecoderTests`: invalid-format error coverage.
+- Verification blocker:
+  - `swift test`/`swift build` could not run because filesystem free space is ~209MiB and SwiftPM dependency checkout fails (`error: other(28)`, `No space left on device`).

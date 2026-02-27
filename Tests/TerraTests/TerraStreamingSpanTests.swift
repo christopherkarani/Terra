@@ -31,4 +31,19 @@ final class TerraStreamingSpanTests: XCTestCase {
     XCTAssertNotNil(span.attributes[Terra.Keys.Terra.streamTokensPerSecond])
     XCTAssertTrue(span.events.contains { $0.name == Terra.Keys.Terra.streamFirstTokenEvent })
   }
+
+  func testWithStreamingInferenceSpan_chunkOnlyDoesNotEmitFirstTokenMetrics() async throws {
+    let request = Terra.InferenceRequest(model: "local/model", stream: true)
+
+    await Terra.withStreamingInferenceSpan(request) { stream in
+      stream.recordChunk()
+      stream.recordChunk()
+    }
+
+    let span = try XCTUnwrap(support.finishedSpans().first)
+    XCTAssertEqual(span.attributes[Terra.Keys.Terra.streamChunkCount]?.description, "2")
+    XCTAssertNil(span.attributes[Terra.Keys.Terra.streamTimeToFirstTokenMs])
+    XCTAssertNil(span.attributes[Terra.Keys.Terra.streamTokensPerSecond])
+    XCTAssertFalse(span.events.contains { $0.name == Terra.Keys.Terra.streamFirstTokenEvent })
+  }
 }
