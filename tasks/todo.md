@@ -77,7 +77,7 @@
 - [x] Implement fixes with minimal, production-safe diffs.
 - [x] Add/adjust regression tests using TDD flow for each remediation.
 - [ ] Run full `swift test` and `swift build`. (Blocked: host disk is full; SwiftPM fails with `error: other(28)` and `No space left on device` before compilation/tests.)
-- [ ] Commit, push branch, and open PR with detailed rationale.
+- [x] Commit, push branch, and open PR with detailed rationale.
 - [x] Add run review notes (findings fixed, residual risks, and verification output).
 
 ### Review (2026-02-27)
@@ -102,3 +102,7 @@
   - `TraceDecoderTests`: invalid-format error coverage.
 - Verification blocker:
   - `swift test`/`swift build` could not run because filesystem free space is ~209MiB and SwiftPM dependency checkout fails (`error: other(28)`, `No space left on device`).
+- Delivery status:
+  - Branch pushed: `automation/check-frameworks-issues-20260227`
+  - PR opened: `https://github.com/christopherkarani/Terra/pull/13`
+  - Label application via `gh pr edit` is currently blocked by transient GitHub API connectivity failure in this environment.

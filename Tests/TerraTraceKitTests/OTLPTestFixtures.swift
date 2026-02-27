@@ -245,6 +245,7 @@ enum OTLPTestCompression {
     return result
   }
 
+
   private static func perform(
     operation: compression_stream_operation,
     algorithm: compression_algorithm,

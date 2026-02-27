@@ -50,6 +50,20 @@ final class OTLPRequestDecoderTests: XCTestCase {
 
     assertDecodedSpans(spans)
   }
+
+  func testDecodeGzipPayloadRejectsInvalidTrailer() throws {
+    let body = try OTLPTestFixtures.serializedRequest()
+    var compressed = try OTLPTestCompression.gzip(body)
+    compressed[compressed.index(before: compressed.endIndex)] ^= 0xFF
+    let decoder = OTLPRequestDecoder(
+      maxBodyBytes: compressed.count + 64,
+      maxDecompressedBytes: body.count + 64
+    )
+
+    XCTAssertThrowsError(
+      try decoder.decode(body: compressed, headers: ["Content-Encoding": "gzip"])
+    )
+  }
   #endif
 
   func testDecodeRejectsOversizedDecompressedPayload() throws {

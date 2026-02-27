@@ -1,5 +1,8 @@
 import Compression
 import Foundation
+#if canImport(zlib)
+import zlib
+#endif
 
 enum OTLPContentEncoding: String, Sendable {
   case gzip
@@ -22,8 +25,25 @@ struct OTLPDecompressor {
     case .deflate:
       return try decompressZlib(data, maxOutputBytes: maxOutputBytes)
     case .gzip:
-      let deflatePayload = try extractGzipDeflatePayload(from: data)
-      return try decompressZlib(deflatePayload, maxOutputBytes: maxOutputBytes)
+      let member = try extractGzipMember(from: data)
+      #if canImport(zlib)
+      let decompressed: Data
+      do {
+        decompressed = try decompressRawDeflate(member.deflatePayload, maxOutputBytes: maxOutputBytes)
+      } catch OTLPRequestDecoderError.decompressionFailed(reason: _) {
+        // Backward-compatible fallback for legacy gzip writers that wrapped DEFLATE with zlib headers.
+        decompressed = try decompressZlib(member.deflatePayload, maxOutputBytes: maxOutputBytes)
+      }
+      #else
+      let decompressed = try decompressZlib(member.deflatePayload, maxOutputBytes: maxOutputBytes)
+      #endif
+      guard CRC32.checksum(decompressed) == member.crc32 else {
+        throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip trailer checksum")
+      }
+      guard UInt32(truncatingIfNeeded: decompressed.count) == member.isize else {
+        throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip trailer size")
+      }
+      return decompressed
     }
   }
 
@@ -88,8 +108,69 @@ struct OTLPDecompressor {
     }
   }
 
-  private static func extractGzipDeflatePayload(from data: Data) throws -> Data {
-    try data.withUnsafeBytes { rawBuffer -> Data in
+  #if canImport(zlib)
+  private static func decompressRawDeflate(_ data: Data, maxOutputBytes: Int) throws -> Data {
+    if data.isEmpty { return Data() }
+
+    var stream = z_stream()
+    let initStatus = inflateInit2_(
+      &stream,
+      -MAX_WBITS,
+      ZLIB_VERSION,
+      Int32(MemoryLayout<z_stream>.size)
+    )
+    guard initStatus == Z_OK else {
+      throw OTLPRequestDecoderError.decompressionFailed(reason: "Unable to initialize raw deflate stream")
+    }
+    defer {
+      inflateEnd(&stream)
+    }
+
+    var output = Data()
+    output.reserveCapacity(min(maxOutputBytes, 64 * 1024))
+
+    return try data.withUnsafeBytes { rawBuffer -> Data in
+      guard let srcBase = rawBuffer.bindMemory(to: Bytef.self).baseAddress else {
+        return Data()
+      }
+
+      stream.next_in = UnsafeMutablePointer<Bytef>(mutating: srcBase)
+      stream.avail_in = uInt(rawBuffer.count)
+
+      let chunkSize = 64 * 1024
+      var chunk = [UInt8](repeating: 0, count: chunkSize)
+      var streamStatus: Int32 = Z_OK
+
+      repeat {
+        let produced = chunk.withUnsafeMutableBytes { rawOutBuffer -> Int in
+          stream.next_out = rawOutBuffer.bindMemory(to: Bytef.self).baseAddress
+          stream.avail_out = uInt(rawOutBuffer.count)
+          streamStatus = inflate(&stream, Z_NO_FLUSH)
+          return rawOutBuffer.count - Int(stream.avail_out)
+        }
+        if produced > 0 {
+          if output.count + produced > maxOutputBytes {
+            throw OTLPRequestDecoderError.decompressedSizeLimitExceeded(max: maxOutputBytes)
+          }
+          output.append(chunk, count: produced)
+        }
+
+        if streamStatus == Z_STREAM_END {
+          break
+        }
+        if streamStatus != Z_OK {
+          let code = streamStatus
+          throw OTLPRequestDecoderError.decompressionFailed(reason: "Raw deflate decompression error (\(code))")
+        }
+      } while true
+
+      return output
+    }
+  }
+  #endif
+
+  private static func extractGzipMember(from data: Data) throws -> GzipMember {
+    try data.withUnsafeBytes { rawBuffer -> GzipMember in
       let bytes = rawBuffer.bindMemory(to: UInt8.self)
       guard bytes.count >= 18 else {
         throw OTLPRequestDecoderError.malformedData(reason: "Gzip payload too small")
@@ -146,7 +227,54 @@ struct OTLPDecompressor {
         throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip trailer")
       }
 
-      return data.subdata(in: index..<(bytes.count - trailerLength))
+      let trailerStart = bytes.count - trailerLength
+      let crc32 =
+        UInt32(bytes[trailerStart])
+        | (UInt32(bytes[trailerStart + 1]) << 8)
+        | (UInt32(bytes[trailerStart + 2]) << 16)
+        | (UInt32(bytes[trailerStart + 3]) << 24)
+      let isize =
+        UInt32(bytes[trailerStart + 4])
+        | (UInt32(bytes[trailerStart + 5]) << 8)
+        | (UInt32(bytes[trailerStart + 6]) << 16)
+        | (UInt32(bytes[trailerStart + 7]) << 24)
+
+      return GzipMember(
+        deflatePayload: data.subdata(in: index..<trailerStart),
+        crc32: crc32,
+        isize: isize
+      )
     }
   }
+}
+
+private struct GzipMember {
+  let deflatePayload: Data
+  let crc32: UInt32
+  let isize: UInt32
+}
+
+private enum CRC32 {
+  static func checksum(_ data: Data) -> UInt32 {
+    var crc: UInt32 = 0xffff_ffff
+    for byte in data {
+      let index = Int((crc ^ UInt32(byte)) & 0xff)
+      crc = (crc >> 8) ^ table[index]
+    }
+    return crc ^ 0xffff_ffff
+  }
+
+  private static let table: [UInt32] = {
+    (0..<256).map { value in
+      var crc = UInt32(value)
+      for _ in 0..<8 {
+        if crc & 1 == 1 {
+          crc = (crc >> 1) ^ 0xedb8_8320
+        } else {
+          crc = crc >> 1
+        }
+      }
+      return crc
+    }
+  }()
 }
