@@ -164,6 +164,8 @@ extension Terra {
       installedOpenTelemetryConfiguration = nil
       throw error
     }
+
+    Runtime.shared.markRunning()
   }
 
   // MARK: - Tracing
@@ -313,14 +315,60 @@ extension Terra {
     OpenTelemetry.registerLoggerProvider(loggerProvider: provider)
     return provider
   }
+
+  // MARK: - Lifecycle Queries
+
+  /// The current lifecycle state of the Terra runtime.
+  public static var lifecycleState: Terra.LifecycleState {
+    Runtime.shared.lifecycleState
+  }
+
+  /// `true` when Terra has been started and is actively collecting telemetry.
+  public static var isRunning: Bool {
+    lifecycleState == .running
+  }
+
+  // MARK: - Shutdown
+
+  /// Shuts down Terra gracefully.
+  ///
+  /// Flushes any pending telemetry, tears down OTel providers, and resets the
+  /// runtime to `.uninitialized`. After this call, `Terra.start()` may be called
+  /// again with any configuration.
+  ///
+  /// Safe to call from any context. Idempotent — calling it when Terra is not
+  /// running is a no-op.
+  public static func shutdown() async {
+    _performShutdown()
+  }
+
+  /// Synchronous shutdown core — keeps NSLock usage off the async call stack.
+  private static func _performShutdown() {
+    openTelemetryInstallLock.lock()
+    defer { openTelemetryInstallLock.unlock() }
+    guard installedOpenTelemetryConfiguration != nil else { return }
+    installedOpenTelemetryConfiguration = nil
+    Runtime.shared.markUninitialized()
+  }
 }
 
 #if DEBUG
 extension Terra {
+  private static let testingIsolationLock = NSRecursiveLock()
+
+  public static func lockTestingIsolation() {
+    testingIsolationLock.lock()
+  }
+
+  public static func unlockTestingIsolation() {
+    testingIsolationLock.unlock()
+  }
+
   static func resetOpenTelemetryForTesting() {
     openTelemetryInstallLock.lock()
     defer { openTelemetryInstallLock.unlock() }
     installedOpenTelemetryConfiguration = nil
+    Runtime.shared.markUninitialized()
   }
 }
 #endif
