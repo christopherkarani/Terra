@@ -24,7 +24,8 @@ final class HTTPIntegrationTests: XCTestCase {
     config.protocolClasses = [MockURLProtocol.self]
     let session = URLSession(configuration: config)
 
-    var request = URLRequest(url: URL(string: "https://example.ai/v1/chat/completions")!)
+    let requestURL = try XCTUnwrap(URL(string: "https://example.ai/v1/chat/completions"))
+    var request = URLRequest(url: requestURL)
     request.httpMethod = "POST"
     request.httpBody = Data(#"{"model":"request-model","max_tokens":42}"#.utf8)
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -61,12 +62,19 @@ private final class MockURLProtocol: URLProtocol {
   }
 
   override func startLoading() {
-    let response = HTTPURLResponse(
-      url: request.url!,
+    guard let requestURL = request.url else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+      return
+    }
+    guard let response = HTTPURLResponse(
+      url: requestURL,
       statusCode: 200,
       httpVersion: "HTTP/1.1",
       headerFields: ["Content-Type": "application/json"]
-    )!
+    ) else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+      return
+    }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: Data(Self.responseBody.utf8))
     client?.urlProtocolDidFinishLoading(self)

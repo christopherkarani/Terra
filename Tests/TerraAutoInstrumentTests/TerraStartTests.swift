@@ -174,4 +174,23 @@ struct TerraStartTests {
     try Terra.start(config)
     try Terra.start(config)
   }
+
+  @Test("Terra.start() ignores proxy flag when proxy configuration is missing")
+  func terraStartProxyWithoutConfigurationDoesNotCrash() throws {
+    Terra.resetOpenTelemetryForTesting()
+    defer { Terra.resetOpenTelemetryForTesting() }
+
+    let config = Terra.AutoInstrumentConfiguration(
+      openTelemetry: .init(
+        enableTraces: false,
+        enableMetrics: false,
+        enableLogs: false,
+        enableSignposts: false,
+        enableSessions: false
+      ),
+      instrumentations: [.proxy]
+    )
+
+    try Terra.start(config)
+  }
 }

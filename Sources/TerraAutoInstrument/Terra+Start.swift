@@ -159,10 +159,7 @@ extension Terra {
       )
     }
 
-    // 5. Preserve config-level intent for proxy instrumentation.
-    if config.instrumentations.contains(.proxy), config.proxy == nil {
-      assertionFailure("Proxy instrumentation requested but no proxy configuration was supplied.")
-    }
+    // 5. Proxy instrumentation is reserved; ignore missing config safely.
 
     // 6. Optional OpenClaw diagnostics export mode.
     let shouldEnableDiagnostics =

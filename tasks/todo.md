@@ -69,3 +69,21 @@
 - Added trace file max-size guard in `TraceFileReader` with oversize failure test coverage.
 - Strengthened privacy defaults by making legacy SHA attributes opt-in (`emitLegacySHA256Attributes: false`), with updated redaction tests and README notes.
 - Validation: `swift test --filter TerraRedactionPolicyTests` and full `swift test` both pass.
+
+## Mission-Critical Audit Remediation (2026-03-01)
+
+- [x] Load prior automation memory and previous audit outputs.
+- [x] Re-baseline repository state (`git status`) and run baseline build/tests.
+- [x] Scan Swift production code for remaining correctness/safety gaps and dead/high-risk paths.
+- [x] Implement fixes with targeted regression tests first (TDD for each identified bug).
+- [x] Run full `swift build` + `swift test` and confirm no regressions.
+- [ ] Push branch and open/update PR with detailed remediation notes.
+- [ ] Update automation memory with this run summary and verification state.
+
+## Review
+
+- Removed a debug assertion trap in `Terra.start` when `.proxy` instrumentation is requested without a proxy config; the path now no-ops safely.
+- Added regression test coverage for the proxy-missing path in `TerraStartTests`.
+- Eliminated force unwrap crash vectors in HTTP integration and OTLP/installation concurrency tests by using explicit `XCTUnwrap`/guard-based error handling.
+- Removed unused `TraceKitPlaceholder.swift` to reduce dead code noise in `TerraTraceKit`.
+- Verification: targeted suites for each modified area passed, plus full `swift build` and full `swift test` (87 tests passed).

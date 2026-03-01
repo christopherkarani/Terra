@@ -47,11 +47,11 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
     )
   }
 
-  func testConcurrentInstall_allowsSingleSuccess() async {
+  func testConcurrentInstall_allowsSingleSuccess() async throws {
     let endpoints = [
-      URL(string: "http://localhost:4318/v1/traces")!,
-      URL(string: "http://localhost:4319/v1/traces")!,
-      URL(string: "http://localhost:4320/v1/traces")!,
+      try XCTUnwrap(URL(string: "http://localhost:4318/v1/traces")),
+      try XCTUnwrap(URL(string: "http://localhost:4319/v1/traces")),
+      try XCTUnwrap(URL(string: "http://localhost:4320/v1/traces")),
     ]
 
     let barrier = AsyncBarrier(participants: endpoints.count)
@@ -88,8 +88,8 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
     XCTAssertEqual(alreadyInstalledCount, endpoints.count - 1)
   }
 
-  func testConcurrentInstall_sameConfig_bothSucceed() async {
-    let endpoint = URL(string: "http://localhost:4350/v1/traces")!
+  func testConcurrentInstall_sameConfig_bothSucceed() async throws {
+    let endpoint = try XCTUnwrap(URL(string: "http://localhost:4350/v1/traces"))
     let config = makeConfig(endpoint: endpoint)
 
     let barrier = AsyncBarrier(participants: 2)
@@ -124,10 +124,10 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
     XCTAssertEqual(alreadyInstalledCount, 0, "Same-config concurrent install should not throw alreadyInstalled")
   }
 
-  func testConcurrentInstall_consistentConfiguration() async {
+  func testConcurrentInstall_consistentConfiguration() async throws {
     let endpoints = [
-      URL(string: "http://localhost:4331/v1/traces")!,
-      URL(string: "http://localhost:4332/v1/traces")!,
+      try XCTUnwrap(URL(string: "http://localhost:4331/v1/traces")),
+      try XCTUnwrap(URL(string: "http://localhost:4332/v1/traces")),
     ]
 
     let barrier = AsyncBarrier(participants: endpoints.count)
@@ -171,7 +171,10 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
     let winningConfig = makeConfig(endpoint: winningEndpoint)
     XCTAssertNoThrow(try Terra.installOpenTelemetry(winningConfig))
 
-    let losingEndpoint = endpoints.first { $0 != winningEndpoint }!
+    guard let losingEndpoint = endpoints.first(where: { $0 != winningEndpoint }) else {
+      XCTFail("Expected a losing endpoint distinct from winner.")
+      return
+    }
     let losingConfig = makeConfig(endpoint: losingEndpoint)
     XCTAssertThrowsError(try Terra.installOpenTelemetry(losingConfig)) { error in
       guard let installError = error as? Terra.InstallOpenTelemetryError else {

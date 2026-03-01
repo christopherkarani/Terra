@@ -219,9 +219,14 @@ private func sendRawRequest(
       }
     }
 
+    guard let nwPort = NWEndpoint.Port(rawValue: port) else {
+      resumeOnce(.failure(OTLPHTTPServerTestError.invalidPort(port)))
+      return
+    }
+
     let connection = NWConnection(
       host: NWEndpoint.Host(host),
-      port: NWEndpoint.Port(rawValue: port)!,
+      port: nwPort,
       using: .tcp
     )
 
@@ -246,6 +251,10 @@ private func sendRawRequest(
 
     connection.start(queue: .global())
   }
+}
+
+private enum OTLPHTTPServerTestError: Error {
+  case invalidPort(UInt16)
 }
 
 private func receiveResponse(
