@@ -87,3 +87,5 @@
 - Eliminated force unwrap crash vectors in HTTP integration and OTLP/installation concurrency tests by using explicit `XCTUnwrap`/guard-based error handling.
 - Removed unused `TraceKitPlaceholder.swift` to reduce dead code noise in `TerraTraceKit`.
 - Verification: targeted suites for each modified area passed, plus full `swift build` and full `swift test` (87 tests passed).
+- Branch pushed: `automation/check-frameworks-issues-20260301`.
+- Blocker: `gh pr create` failed with `error connecting to api.github.com`; PR + labels pending retry when connectivity recovers.
