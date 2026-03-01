@@ -12,6 +12,16 @@ import OpenTelemetryApi
 #endif
 
 extension Terra {
+  /// The lifecycle state of the Terra runtime.
+  public enum LifecycleState: Sendable, Equatable {
+    /// Terra has not been started, or has been shut down. `Terra.start()` may be called.
+    case uninitialized
+    /// Terra is running. Telemetry is being collected and exported.
+    case running
+  }
+}
+
+extension Terra {
   public struct Installation {
     public var privacy: Privacy
     public var meterProvider: (any MeterProvider)?
@@ -46,6 +56,31 @@ final class Runtime {
   private var anonymizationKeyID: String
 
   let metrics = TerraMetrics()
+
+  // MARK: - Lifecycle
+
+  private var lifecycleStateValue: Terra.LifecycleState = .uninitialized
+
+  var lifecycleState: Terra.LifecycleState {
+    lock.lock()
+    defer { lock.unlock() }
+    return lifecycleStateValue
+  }
+
+  func markRunning() {
+    lock.lock()
+    defer { lock.unlock() }
+    lifecycleStateValue = .running
+  }
+
+  func markUninitialized() {
+    lock.lock()
+    defer { lock.unlock() }
+    lifecycleStateValue = .uninitialized
+    privacyValue = .default
+    tracerProviderOverride = nil
+    loggerProviderOverride = nil
+  }
 
   private init() {
     let key = Runtime.loadOrCreateAnonymizationKey()
