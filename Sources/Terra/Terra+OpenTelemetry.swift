@@ -113,6 +113,9 @@ extension Terra {
 
   private static let openTelemetryInstallLock = NSLock()
   private static var installedOpenTelemetryConfiguration: OpenTelemetryConfiguration?
+  private static var installedTracerProvider: TracerProviderSdk?
+  private static var installedMeterProvider: MeterProviderSdk?
+  private static var installedLogProcessor: (any LogRecordProcessor)?
 
   /// Convenience for end-to-end OpenTelemetry wiring:
   /// - Traces exported via OTLP/HTTP (optionally persisted on-device).
@@ -142,13 +145,15 @@ extension Terra {
       }
 
       let tracerProviderSdk = try installTracing(configuration: configuration)
+      installedTracerProvider = tracerProviderSdk
 
       if configuration.enableSignposts {
         installSignposts(tracerProviderSdk: tracerProviderSdk)
       }
 
       if configuration.enableLogs {
-        _ = try installLogs(configuration: configuration)
+        let (_, logProcessor) = try installLogs(configuration: configuration)
+        installedLogProcessor = logProcessor
       }
 
       if configuration.enableSessions {
@@ -158,10 +163,14 @@ extension Terra {
 
       if configuration.enableMetrics {
         let meterProvider = try installMetrics(configuration: configuration)
+        installedMeterProvider = meterProvider
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
     } catch {
       installedOpenTelemetryConfiguration = nil
+      installedTracerProvider = nil
+      installedMeterProvider = nil
+      installedLogProcessor = nil
       throw error
     }
 
@@ -289,7 +298,7 @@ extension Terra {
 
   // MARK: - Logs
 
-  private static func installLogs(configuration: OpenTelemetryConfiguration) throws -> LoggerProviderSdk {
+  private static func installLogs(configuration: OpenTelemetryConfiguration) throws -> (LoggerProviderSdk, any LogRecordProcessor) {
     func makeExporter() throws -> any LogRecordExporter {
       let baseExporter = OtlpHttpLogExporter(endpoint: configuration.otlpLogsEndpoint)
       guard let persistence = configuration.persistence else {
@@ -313,7 +322,7 @@ extension Terra {
       .build()
 
     OpenTelemetry.registerLoggerProvider(loggerProvider: provider)
-    return provider
+    return (provider, processor)
   }
 
   // MARK: - Lifecycle Queries
@@ -347,9 +356,30 @@ extension Terra {
   /// Synchronous shutdown core — keeps NSLock usage off the async call stack.
   private static func _performShutdown() {
     openTelemetryInstallLock.lock()
-    defer { openTelemetryInstallLock.unlock() }
-    guard installedOpenTelemetryConfiguration != nil else { return }
+    guard installedOpenTelemetryConfiguration != nil else {
+      openTelemetryInstallLock.unlock()
+      return
+    }
+    // Atomically claim ownership of all provider refs before releasing the lock.
+    // No other caller can enter after this point — installedOpenTelemetryConfiguration is nil.
     installedOpenTelemetryConfiguration = nil
+    let tracerProvider = installedTracerProvider
+    let meterProvider = installedMeterProvider
+    let logProcessor = installedLogProcessor
+    installedTracerProvider = nil
+    installedMeterProvider = nil
+    installedLogProcessor = nil
+    openTelemetryInstallLock.unlock()
+
+    // Flush and shut down outside the lock — these are potentially blocking I/O.
+    // We already own the refs exclusively; the lock is not needed here.
+    tracerProvider?.forceFlush()
+    tracerProvider?.shutdown()
+    _ = meterProvider?.forceFlush()
+    _ = meterProvider?.shutdown()
+    _ = logProcessor?.forceFlush()
+    _ = logProcessor?.shutdown()
+
     Runtime.shared.markUninitialized()
   }
 }
@@ -370,6 +400,9 @@ extension Terra {
     openTelemetryInstallLock.lock()
     defer { openTelemetryInstallLock.unlock() }
     installedOpenTelemetryConfiguration = nil
+    installedTracerProvider = nil
+    installedMeterProvider = nil
+    installedLogProcessor = nil
     Runtime.shared.markUninitialized()
   }
 }
