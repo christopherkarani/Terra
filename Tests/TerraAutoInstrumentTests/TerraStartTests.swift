@@ -4,7 +4,17 @@ import Terra
 import OpenTelemetrySdk
 
 @Suite("Terra.start / AutoInstrument Tests", .serialized)
-struct TerraStartTests {
+final class TerraStartTests {
+  init() {
+    Terra.lockTestingIsolation()
+    Terra.resetOpenTelemetryForTesting()
+  }
+
+  deinit {
+    Terra.resetOpenTelemetryForTesting()
+    Terra.unlockTestingIsolation()
+  }
+
   // MARK: - Terra.Instrumentations OptionSet Tests
 
   @Test("Instrumentations.none has rawValue 0")
@@ -99,6 +109,51 @@ struct TerraStartTests {
     let config = Terra.AutoInstrumentConfiguration()
     #expect(!config.profiling.enableMemoryProfiler)
     #expect(!config.profiling.enableMetalProfiler)
+  }
+
+  // MARK: - New Front-Facing API Ergonomics Tests
+
+  @Test("Terra.bootstrap applies configuration overrides and returns effective config")
+  func terraBootstrapAppliesOverridesAndReturnsConfig() throws {
+    Terra.resetOpenTelemetryForTesting()
+    defer { Terra.resetOpenTelemetryForTesting() }
+
+    let config = try Terra.bootstrap(.quickstart) { config in
+      config.openTelemetry = .init(
+        enableTraces: false,
+        enableMetrics: false,
+        enableLogs: false,
+        enableSignposts: false,
+        enableSessions: false
+      )
+      config.instrumentations = .none
+      config.privacy.contentPolicy = .optIn
+    }
+
+    #expect(config.instrumentations == .none)
+    #expect(config.privacy.contentPolicy == .optIn)
+    #expect(!config.openTelemetry.enableTraces)
+    #expect(!config.openTelemetry.enableMetrics)
+  }
+
+  @Test("Terra.start preset overload is idempotent with identical effective config")
+  func terraStartPresetOverloadIsIdempotent() throws {
+    Terra.resetOpenTelemetryForTesting()
+    defer { Terra.resetOpenTelemetryForTesting() }
+
+    let configure: (inout Terra.AutoInstrumentConfiguration) -> Void = { config in
+      config.openTelemetry = .init(
+        enableTraces: false,
+        enableMetrics: false,
+        enableLogs: false,
+        enableSignposts: false,
+        enableSessions: false
+      )
+      config.instrumentations = .none
+    }
+
+    try Terra.start(.quickstart, configure: configure)
+    try Terra.start(.quickstart, configure: configure)
   }
 
   // MARK: - Terra.start() Smoke Tests
