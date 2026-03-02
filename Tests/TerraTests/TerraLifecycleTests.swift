@@ -4,8 +4,7 @@ import XCTest
 final class TerraLifecycleTests: XCTestCase {
 
   override func setUp() async throws {
-    // Reset OTel install state before each test.
-    // After Task 6, this will also reset Runtime lifecycle state.
+    // Reset both the OTel install state and the Runtime lifecycle state before each test.
     Terra.resetOpenTelemetryForTesting()
   }
 

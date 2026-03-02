@@ -330,14 +330,16 @@ extension Terra {
 
   // MARK: - Shutdown
 
-  /// Shuts down Terra gracefully.
+  /// Shuts down Terra gracefully, resetting the runtime to `.uninitialized`.
   ///
-  /// Flushes any pending telemetry, tears down OTel providers, and resets the
-  /// runtime to `.uninitialized`. After this call, `Terra.start()` may be called
-  /// again with any configuration.
+  /// After this call, `Terra.installOpenTelemetry()` / `Terra.start()` may be
+  /// called again with any configuration.
   ///
   /// Safe to call from any context. Idempotent — calling it when Terra is not
   /// running is a no-op.
+  ///
+  /// - Note: Provider flush and teardown will be wired in a future commit
+  ///   (Phase 3, Task 5). Currently resets configuration and lifecycle state only.
   public static func shutdown() async {
     _performShutdown()
   }
