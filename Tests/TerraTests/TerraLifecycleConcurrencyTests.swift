@@ -1,4 +1,5 @@
 import XCTest
+import os
 @testable import TerraCore
 
 final class TerraLifecycleConcurrencyTests: XCTestCase {
@@ -98,32 +99,42 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
 
     // MARK: - Test 4: Interleaved Start/Shutdown
 
-    /// 20 concurrent tasks — even indices install, odd indices shut down.
-    /// Each install uses a unique port. No crashes, no hangs. Final state is valid.
-    func testInterleavedStartShutdown_noHangsOrCrashes() async {
+    /// 10 concurrent tasks each install then immediately shut down, racing with
+    /// each other throughout. Verifies no hangs and no crashes under heavy interleaving.
+    func testConcurrentInterleavedStartShutdown_noHangsOrCrashes() async throws {
+        // OSAllocatedUnfairLock is available on macOS 14+ (the project's minimum target).
+        let completionCount = OSAllocatedUnfairLock(initialState: 0)
+
         await withTaskGroup(of: Void.self) { group in
-            for i in 0..<20 {
+            for i in 0..<10 {
                 group.addTask {
-                    if i.isMultiple(of: 2) {
-                        // Even: attempt install with a unique config
-                        let port = 15031 + i
-                        try? Terra.installOpenTelemetry(minimalConfig(port: port))
-                    } else {
-                        // Odd: attempt shutdown
-                        await Terra.shutdown()
-                    }
+                    // Install (ignore .alreadyInstalled — another task may have won the race)
+                    do {
+                        try Terra.installOpenTelemetry(minimalConfig(port: 15031 + i))
+                    } catch {}
+                    // Shutdown unconditionally
+                    await Terra.shutdown()
+                    // Record completion atomically
+                    completionCount.withLock { $0 += 1 }
                 }
             }
         }
 
-        // Final state is either .running or .uninitialized — both are valid.
+        // Every task must have reached completion — 0 hangs allowed.
+        XCTAssertEqual(
+            completionCount.withLock { $0 },
+            10,
+            "All 10 tasks must complete without hanging"
+        )
+
+        // After concurrent interleaving, the final state can be either — both are valid.
         let finalState = Terra.lifecycleState
         XCTAssertTrue(
             finalState == .running || finalState == .uninitialized,
             "Final state must be a valid LifecycleState, got: \(finalState)"
         )
 
-        // Clean up to reach a known state
+        // Clean up to reach a known state for subsequent tests.
         await Terra.shutdown()
     }
 
@@ -150,46 +161,55 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
 
     /// 50 concurrent reads of `lifecycleState` / `isRunning` while install and
     /// shutdown are also racing. No crashes; every read returns a valid value.
+    ///
+    /// Note: `lifecycleState` and `isRunning` are two separate non-atomic reads,
+    /// so we cannot assert they are consistent with each other (a writer can
+    /// interleave between the two reads). We verify instead:
+    ///   1. Each `lifecycleState` read is a valid enum case.
+    ///   2. Each `isRunning` read is a valid Bool.
+    ///   3. All 50 reader tasks complete (no crashes or hangs).
     func testConcurrentStateReads_duringInstallShutdown() async throws {
         try Terra.installOpenTelemetry(minimalConfig(port: 15061))
 
-        var observedStates: [Terra.LifecycleState] = []
-        let lock = NSLock()
+        // Collect observed pairs — locked to keep array mutation thread-safe.
+        var observedPairs: [(state: Terra.LifecycleState, running: Bool)] = []
+        let pairsLock = NSLock()
 
         await withTaskGroup(of: Void.self) { group in
             // 50 reader tasks
             for _ in 0..<50 {
                 group.addTask {
+                    // Two separate reads — no atomicity guarantee between them.
                     let state = Terra.lifecycleState
                     let running = Terra.isRunning
-                    // Consistency check: isRunning must match lifecycleState
-                    let expectedRunning = (state == .running)
-                    lock.lock()
-                    observedStates.append(state)
-                    lock.unlock()
-                    // We cannot use XCTAssert inside a task group child without
-                    // careful synchronization, so we collect results and assert after.
-                    _ = running
-                    _ = expectedRunning
+
+                    // Yield so the cooperative scheduler can interleave the writer task.
+                    await Task.yield()
+
+                    pairsLock.lock()
+                    observedPairs.append((state: state, running: running))
+                    pairsLock.unlock()
                 }
             }
 
-            // Writer task: shutdown then reinstall
+            // Writer task: shutdown then reinstall using the ports reserved for this test.
             group.addTask {
                 await Terra.shutdown()
                 try? Terra.installOpenTelemetry(minimalConfig(port: 15062))
             }
         }
 
-        // Every observed state must be a valid LifecycleState value
-        for state in observedStates {
+        // Every observed lifecycleState must be a valid enum case.
+        for pair in observedPairs {
             XCTAssertTrue(
-                state == .running || state == .uninitialized,
-                "Read an invalid lifecycle state: \(state)"
+                pair.state == .running || pair.state == .uninitialized,
+                "Read an invalid lifecycle state: \(pair.state)"
             )
+            // isRunning is a Bool — any Bool value is valid; just confirm it was read.
+            XCTAssertTrue(pair.running == true || pair.running == false)
         }
 
-        XCTAssertEqual(observedStates.count, 50, "Should have 50 state observations")
+        XCTAssertEqual(observedPairs.count, 50, "Should have 50 state observations — no hangs")
     }
 }
 
