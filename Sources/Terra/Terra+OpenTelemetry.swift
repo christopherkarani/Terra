@@ -116,6 +116,7 @@ extension Terra {
   private static var installedTracerProvider: TracerProviderSdk?
   private static var installedMeterProvider: MeterProviderSdk?
   private static var installedLogProcessor: (any LogRecordProcessor)?
+  private static var ownsInstalledTracerProvider: Bool = false
 
   /// Convenience for end-to-end OpenTelemetry wiring:
   /// - Traces exported via OTLP/HTTP (optionally persisted on-device).
@@ -144,8 +145,9 @@ extension Terra {
         try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
       }
 
-      let tracerProviderSdk = try installTracing(configuration: configuration)
+      let (tracerProviderSdk, ownsTracer) = try installTracing(configuration: configuration)
       installedTracerProvider = tracerProviderSdk
+      ownsInstalledTracerProvider = ownsTracer
 
       if configuration.enableSignposts {
         installSignposts(tracerProviderSdk: tracerProviderSdk)
@@ -190,7 +192,7 @@ extension Terra {
     return Resource(attributes: attributes)
   }
 
-  private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> TracerProviderSdk {
+  private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> (TracerProviderSdk, Bool) {
     func makeExporter() throws -> any SpanExporter {
       let baseExporter = OtlpHttpTraceExporter(endpoint: configuration.otlpTracesEndpoint)
       guard let persistence = configuration.persistence else {
@@ -231,7 +233,7 @@ extension Terra {
         if let spanProcessor {
           existing.addSpanProcessor(spanProcessor)
         }
-        return existing
+        return (existing, false)
       }
       fallthrough
     case .registerNew:
@@ -246,7 +248,7 @@ extension Terra {
       }
       let provider = builder.build()
       OpenTelemetry.registerTracerProvider(tracerProvider: provider)
-      return provider
+      return (provider, true)
     }
   }
 
@@ -341,14 +343,14 @@ extension Terra {
 
   /// Shuts down Terra gracefully, resetting the runtime to `.uninitialized`.
   ///
-  /// After this call, `Terra.installOpenTelemetry()` / `Terra.start()` may be
-  /// called again with any configuration.
+  /// Flushes buffered telemetry to configured exporter(s) and releases provider
+  /// resources before returning. After this call, `Terra.installOpenTelemetry()`
+  /// / `Terra.start()` may be called again with any configuration.
   ///
   /// Safe to call from any context. Idempotent — calling it when Terra is not
   /// running is a no-op.
   ///
-  /// - Note: Provider flush and teardown will be wired in a future commit
-  ///   (Phase 3, Task 5). Currently resets configuration and lifecycle state only.
+  /// - Note: Flush and shutdown calls are currently synchronous.
   public static func shutdown() async {
     _performShutdown()
   }
@@ -369,12 +371,14 @@ extension Terra {
     installedTracerProvider = nil
     installedMeterProvider = nil
     installedLogProcessor = nil
+    let tracerOwned = ownsInstalledTracerProvider
+    ownsInstalledTracerProvider = false
     openTelemetryInstallLock.unlock()
 
     // Flush and shut down outside the lock — these are potentially blocking I/O.
     // We already own the refs exclusively; the lock is not needed here.
-    tracerProvider?.forceFlush()
-    tracerProvider?.shutdown()
+    tracerProvider?.forceFlush()           // safe regardless of ownership
+    if tracerOwned { tracerProvider?.shutdown() }
     _ = meterProvider?.forceFlush()
     _ = meterProvider?.shutdown()
     _ = logProcessor?.forceFlush()
@@ -403,6 +407,7 @@ extension Terra {
     installedTracerProvider = nil
     installedMeterProvider = nil
     installedLogProcessor = nil
+    ownsInstalledTracerProvider = false
     Runtime.shared.markUninitialized()
   }
 }
