@@ -34,10 +34,69 @@ Terra is a privacy-first observability layer for on-device GenAI. Built on OpenT
 ```swift
 import Terra
 
-try Terra.start(preset: .quickstart)
+try Terra.start()
 ```
 
 That's it. Every CoreML prediction and HTTP request to known AI APIs now produces OpenTelemetry spans.
+
+#### Configuration
+
+Use `Terra.Configuration(preset:)` for production or diagnostics setups:
+
+```swift
+// Production: adds on-device persistence
+try Terra.start(.init(preset: .production))
+
+// Diagnostics: enables profilers, logs, and OpenClaw diagnostics
+try Terra.start(.init(preset: .diagnostics))
+
+// Custom configuration
+var config = Terra.Configuration()
+config.enableLogs = true
+config.profiling.enableMemoryProfiler = true
+config.excludedCoreMLModels = ["SkipThisModel"]
+try Terra.start(config)
+```
+
+---
+
+#### 3-line hello world
+```swift
+try Terra.start()
+let result = try await Terra.inference(model: "gpt-4") { try await llm.generate("Hello") }
+```
+
+---
+
+### Lifecycle Management
+
+Terra tracks its runtime state through `Terra.lifecycleState`:
+
+| State | Meaning |
+|-------|---------|
+| `.uninitialized` | Terra has not been started, or has been shut down. |
+| `.running` | Terra is active and collecting telemetry. |
+
+```swift
+// Start
+try Terra.start()
+assert(Terra.isRunning)
+
+// Use Terra normally...
+
+// Shut down gracefully (flushes pending telemetry)
+await Terra.shutdown()
+assert(!Terra.isRunning)
+
+// Restart with a new configuration
+try Terra.start(.init(preset: .production))
+```
+
+**Idempotency rules:**
+- Installing the same configuration twice is a no-op.
+- Installing a different configuration while running throws `InstallOpenTelemetryError.alreadyInstalled`.
+- `shutdown()` is always safe to call — it's a no-op when not running.
+- After `shutdown()`, Terra can be restarted with any configuration.
 
 ---
 
@@ -45,28 +104,31 @@ That's it. Every CoreML prediction and HTTP request to known AI APIs now produce
 
 #### Manual Spans
 ```swift
-try await Terra.withInferenceSpan(model: "llama-3.2") { scope in
-    let result = try await model.generate(prompt)
-    scope.setAttributes(["tokens": result.count])
+let result = try await Terra
+  .inference(model: "llama-3.2", prompt: prompt)
+  .provider("openai-compatible")
+  .tokens(output: 42)
+  .execute {
+    try await model.generate(prompt)
 }
 ```
 
 For expert users, you can pass the full request model and attach additional attributes:
 ```swift
-let request = Terra.InferenceRequest(
-  model: "llama-3.2",
-  prompt: promptText,
-  promptCapture: .optIn,
-  maxOutputTokens: 256,
-  temperature: 0.2,
-)
+let request = Terra.InferenceRequest
+  .chat(model: "llama-3.2", prompt: promptText)
+  .maxOutputTokens(256)
+  .temperature(0.2)
 
-try await Terra.withInferenceSpan(request) { scope in
-  scope.setAttributes([
-    "gen_ai.provider.name": .string("openai-compatible"),
-    "terra.runtime": .string("custom_runtime")
-  ])
-  let result = try await model.generate()
+let result = try await Terra
+  .inference(request)
+  .includeContent()
+  .provider("openai-compatible")
+  .runtime("custom_runtime")
+  .responseModel("llama-3.2")
+  .attribute(.init("terra.pipeline.stage"), "post_rerank")
+  .execute {
+    try await model.generate()
 }
 ```
 
