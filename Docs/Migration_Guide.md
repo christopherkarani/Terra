@@ -23,10 +23,10 @@ This guide moves existing Terra integrations onto the v3 canonical API:
 | --- | --- |
 | `.run { ... }` | `.execute { ... }` |
 | `.capture(.optIn)` | `.includeContent()` |
-| `Terra.enable(...)` | `Terra.start(...)` |
-| `Terra.configure(...)` | `Terra.start(...)` with `Terra.Configuration` |
-| `AutoInstrumentConfiguration` | `Terra.Configuration` |
-| `StartProfile` | `Terra.Configuration.Preset` |
+| `Terra.enable(...)` (removed) | `Terra.start(...)` |
+| `Terra.configure(...)` (removed) | `Terra.start(...)` with `Terra.Configuration` |
+| `AutoInstrumentConfiguration` (removed) | `Terra.Configuration` |
+| `StartProfile` (removed) | `Terra.Configuration.Preset` |
 
 ## Setup Migration
 
@@ -134,8 +134,8 @@ let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: prompt) {
 | --- | --- | --- |
 | v1 span wrappers | Deprecated compatibility path | Next major after deprecation window |
 | v2 `.run` / `.capture` shims | Deprecated with forwarding | Next major after deprecation window |
-| `AutoInstrumentConfiguration` / `StartProfile` | Deprecated aliases/bridges | Next major after migration window |
-| `Terra.enable` / `Terra.configure` / legacy `bootstrap` | Deprecated forwarding APIs | Next major after migration window |
+| `AutoInstrumentConfiguration` / `StartProfile` | Removed from public API | Removed |
+| `Terra.enable` / `Terra.configure` / legacy `bootstrap` | Removed from public API | Removed |
 
 ## Recommended Migration Order
 

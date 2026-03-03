@@ -3,11 +3,11 @@ import Foundation
 extension Terra {
   // MARK: - Typed scope markers
 
-  public enum InferenceSpan: Sendable {}
-  public enum EmbeddingSpan: Sendable {}
-  public enum AgentInvocationSpan: Sendable {}
-  public enum ToolExecutionSpan: Sendable {}
-  public enum SafetyCheckSpan: Sendable {}
+  enum InferenceSpan: Sendable {}
+  enum EmbeddingSpan: Sendable {}
+  enum AgentInvocationSpan: Sendable {}
+  enum ToolExecutionSpan: Sendable {}
+  enum SafetyCheckSpan: Sendable {}
 
   // MARK: - Requests
 

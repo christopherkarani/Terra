@@ -241,7 +241,7 @@ public enum Terra {
     }
   }
 
-  public final class StreamingInferenceScope: @unchecked Sendable {
+  final class StreamingInferenceScope: @unchecked Sendable {
     private let scope: Scope<InferenceSpan>
     private let startedAt: ContinuousClock.Instant
     private let lock = NSLock()
@@ -254,13 +254,13 @@ public enum Terra {
       self.startedAt = startedAt
     }
 
-    public var span: any Span { scope.span }
+    var span: any Span { scope.span }
 
-    public func addEvent(_ name: String, attributes: [String: AttributeValue] = [:]) {
+    func addEvent(_ name: String, attributes: [String: AttributeValue] = [:]) {
       scope.addEvent(name, attributes: attributes)
     }
 
-    public func setAttributes(_ attributes: [String: AttributeValue]) {
+    func setAttributes(_ attributes: [String: AttributeValue]) {
       scope.setAttributes(attributes)
     }
 
@@ -268,7 +268,7 @@ public enum Terra {
       scope.recordError(error)
     }
 
-    public func recordToken(_ count: Int = 1) {
+    func recordToken(_ count: Int = 1) {
       guard count > 0 else { return }
       let now = ContinuousClock.now
       var shouldEmitFirstTokenEvent = false
@@ -285,7 +285,7 @@ public enum Terra {
       }
     }
 
-    public func recordOutputTokenCount(_ totalCount: Int) {
+    func recordOutputTokenCount(_ totalCount: Int) {
       guard totalCount >= 0 else { return }
       let now = ContinuousClock.now
       var shouldEmitFirstTokenEvent = false
@@ -302,7 +302,7 @@ public enum Terra {
       }
     }
 
-    public func recordChunk() {
+    func recordChunk() {
       let now = ContinuousClock.now
       var shouldEmitFirstTokenEvent = false
       lock.lock()

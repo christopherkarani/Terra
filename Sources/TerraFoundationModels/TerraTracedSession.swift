@@ -526,7 +526,7 @@ public final class TerraTracedSession: @unchecked Sendable {
 #else
 
 // Stub so the module always compiles
-public enum TerraFoundationModelsPlaceholder {
+enum TerraFoundationModelsPlaceholder {
   // FoundationModels framework not available on this platform/SDK
 }
 

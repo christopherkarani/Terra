@@ -1,5 +1,5 @@
 import Testing
-import Terra
+@testable import Terra
 @testable import TerraCore
 
 @Test("Configuration has sensible defaults")
@@ -59,8 +59,6 @@ func diagnosticsPreset() {
   #expect(config.resourceAttributes["terra.profile"] == "diagnostics")
 }
 
-// MARK: - Preset Parity Tests
-
 @Test("Diagnostics preset enables both profilers")
 func diagnosticsPresetEnablesProfilers() {
   let config = Terra.Configuration(preset: .diagnostics)
@@ -106,133 +104,46 @@ func productionPresetKeepsOpenClawDisabled() {
   #expect(config.openClaw.mode == .disabled)
 }
 
-@Test("V3Configuration typealias resolves to Configuration")
-func v3TypealiasWorks() {
-  let _: Terra.V3Configuration = Terra.Configuration()
-}
+// MARK: - Conversion Tests
 
-// MARK: - Conversion Round-Trip Tests
-
-@Test("Custom profiling value survives asAutoInstrumentConfiguration conversion")
+@Test("Custom profiling value survives start configuration conversion")
 func profilingSurvivesConversion() {
   var config = Terra.Configuration()
   config.profiling = .init(enableMemoryProfiler: true, enableMetalProfiler: true)
-  let auto = config.asAutoInstrumentConfiguration()
-  #expect(auto.profiling.enableMemoryProfiler == true)
-  #expect(auto.profiling.enableMetalProfiler == true)
+  let resolved = config.asAutoInstrumentConfiguration()
+  #expect(resolved.profiling.enableMemoryProfiler == true)
+  #expect(resolved.profiling.enableMetalProfiler == true)
 }
 
-@Test("Custom openClaw value survives asAutoInstrumentConfiguration conversion")
+@Test("Custom openClaw value survives start configuration conversion")
 func openClawSurvivesConversion() {
   var config = Terra.Configuration()
   config.openClaw = .init(mode: .diagnosticsOnly)
-  let auto = config.asAutoInstrumentConfiguration()
-  #expect(auto.openClaw.mode == .diagnosticsOnly)
+  let resolved = config.asAutoInstrumentConfiguration()
+  #expect(resolved.openClaw.mode == .diagnosticsOnly)
 }
 
-@Test("Custom excludedCoreMLModels survives asAutoInstrumentConfiguration conversion")
+@Test("Custom excludedCoreMLModels survives start configuration conversion")
 func excludedCoreMLModelsSurvivesConversion() {
   var config = Terra.Configuration()
   config.excludedCoreMLModels = ["MyModel", "OtherModel"]
-  let auto = config.asAutoInstrumentConfiguration()
-  #expect(auto.excludedCoreMLModels == ["MyModel", "OtherModel"])
+  let resolved = config.asAutoInstrumentConfiguration()
+  #expect(resolved.excludedCoreMLModels == ["MyModel", "OtherModel"])
 }
 
-@Test("enableLogs = true maps to openTelemetry.enableLogs = true in conversion")
+@Test("enableLogs = true maps to OpenTelemetry enableLogs = true")
 func enableLogsMapsCorrectly() {
   var config = Terra.Configuration()
   config.enableLogs = true
-  let auto = config.asAutoInstrumentConfiguration()
-  #expect(auto.openTelemetry.enableLogs == true)
+  let resolved = config.asAutoInstrumentConfiguration()
+  #expect(resolved.openTelemetry.enableLogs == true)
 }
 
-@Test("enableLogs = false maps to openTelemetry.enableLogs = false in conversion")
+@Test("enableLogs = false maps to OpenTelemetry enableLogs = false")
 func enableLogsFalseMapsCorrectly() {
   let config = Terra.Configuration()
-  let auto = config.asAutoInstrumentConfiguration()
-  #expect(auto.openTelemetry.enableLogs == false)
-}
-
-// MARK: - Preset Equivalence Tests
-
-@Suite("Preset equivalence: Configuration(preset:) vs StartProfile")
-struct PresetEquivalenceTests {
-  @Test("Quickstart preset equivalence",
-        arguments: [("quickstart", Terra.Configuration.Preset.quickstart, Terra.StartProfile.quickstart)])
-  func quickstartEquivalence(label: String, preset: Terra.Configuration.Preset, profile: Terra.StartProfile) {
-    let fromConfig = Terra.Configuration(preset: preset).asAutoInstrumentConfiguration()
-    let fromProfile = profile.configuration
-
-    // Privacy
-    #expect(fromConfig.privacy.contentPolicy == fromProfile.privacy.contentPolicy)
-    #expect(fromConfig.privacy.redaction == fromProfile.privacy.redaction)
-    #expect(fromConfig.privacy.anonymizationKey == fromProfile.privacy.anonymizationKey)
-
-    // OpenTelemetry
-    #expect(fromConfig.openTelemetry.enableTraces == fromProfile.openTelemetry.enableTraces)
-    #expect(fromConfig.openTelemetry.enableMetrics == fromProfile.openTelemetry.enableMetrics)
-    #expect(fromConfig.openTelemetry.enableLogs == fromProfile.openTelemetry.enableLogs)
-    #expect(fromConfig.openTelemetry.enableSignposts == fromProfile.openTelemetry.enableSignposts)
-    #expect(fromConfig.openTelemetry.enableSessions == fromProfile.openTelemetry.enableSessions)
-    #expect(fromConfig.openTelemetry.metricsExportInterval == fromProfile.openTelemetry.metricsExportInterval)
-    #expect(fromConfig.openTelemetry.persistence == fromProfile.openTelemetry.persistence)
-
-    // Instrumentations
-    #expect(fromConfig.instrumentations == fromProfile.instrumentations)
-
-    // OpenClaw
-    #expect(fromConfig.openClaw.mode == fromProfile.openClaw.mode)
-
-    // Profiling
-    #expect(fromConfig.profiling.enableMemoryProfiler == fromProfile.profiling.enableMemoryProfiler)
-    #expect(fromConfig.profiling.enableMetalProfiler == fromProfile.profiling.enableMetalProfiler)
-
-    // Excluded models
-    #expect(fromConfig.excludedCoreMLModels == fromProfile.excludedCoreMLModels)
-  }
-
-  @Test("Production preset equivalence")
-  func productionEquivalence() {
-    let fromConfig = Terra.Configuration(preset: .production).asAutoInstrumentConfiguration()
-    let fromProfile = Terra.StartProfile.production.configuration
-
-    #expect(fromConfig.privacy.contentPolicy == fromProfile.privacy.contentPolicy)
-    #expect(fromConfig.privacy.redaction == fromProfile.privacy.redaction)
-    #expect(fromConfig.openTelemetry.enableTraces == fromProfile.openTelemetry.enableTraces)
-    #expect(fromConfig.openTelemetry.enableMetrics == fromProfile.openTelemetry.enableMetrics)
-    #expect(fromConfig.openTelemetry.enableLogs == fromProfile.openTelemetry.enableLogs)
-    #expect(fromConfig.openTelemetry.enableSignposts == fromProfile.openTelemetry.enableSignposts)
-    #expect(fromConfig.openTelemetry.enableSessions == fromProfile.openTelemetry.enableSessions)
-    #expect(fromConfig.openTelemetry.metricsExportInterval == fromProfile.openTelemetry.metricsExportInterval)
-    #expect(fromConfig.openTelemetry.persistence == fromProfile.openTelemetry.persistence)
-    #expect(fromConfig.instrumentations == fromProfile.instrumentations)
-    #expect(fromConfig.openClaw.mode == fromProfile.openClaw.mode)
-    #expect(fromConfig.profiling.enableMemoryProfiler == fromProfile.profiling.enableMemoryProfiler)
-    #expect(fromConfig.profiling.enableMetalProfiler == fromProfile.profiling.enableMetalProfiler)
-    #expect(fromConfig.excludedCoreMLModels == fromProfile.excludedCoreMLModels)
-  }
-
-  @Test("Diagnostics preset equivalence")
-  func diagnosticsEquivalence() {
-    let fromConfig = Terra.Configuration(preset: .diagnostics).asAutoInstrumentConfiguration()
-    let fromProfile = Terra.StartProfile.diagnostics.configuration
-
-    #expect(fromConfig.privacy.contentPolicy == fromProfile.privacy.contentPolicy)
-    #expect(fromConfig.privacy.redaction == fromProfile.privacy.redaction)
-    #expect(fromConfig.openTelemetry.enableTraces == fromProfile.openTelemetry.enableTraces)
-    #expect(fromConfig.openTelemetry.enableMetrics == fromProfile.openTelemetry.enableMetrics)
-    #expect(fromConfig.openTelemetry.enableLogs == fromProfile.openTelemetry.enableLogs)
-    #expect(fromConfig.openTelemetry.enableSignposts == fromProfile.openTelemetry.enableSignposts)
-    #expect(fromConfig.openTelemetry.enableSessions == fromProfile.openTelemetry.enableSessions)
-    #expect(fromConfig.openTelemetry.metricsExportInterval == fromProfile.openTelemetry.metricsExportInterval)
-    #expect(fromConfig.openTelemetry.persistence == fromProfile.openTelemetry.persistence)
-    #expect(fromConfig.openTelemetry.resourceAttributes == fromProfile.openTelemetry.resourceAttributes)
-    #expect(fromConfig.instrumentations == fromProfile.instrumentations)
-    #expect(fromConfig.openClaw.mode == fromProfile.openClaw.mode)
-    #expect(fromConfig.profiling.enableMemoryProfiler == fromProfile.profiling.enableMemoryProfiler)
-    #expect(fromConfig.profiling.enableMetalProfiler == fromProfile.profiling.enableMetalProfiler)
-    #expect(fromConfig.excludedCoreMLModels == fromProfile.excludedCoreMLModels)
-  }
+  let resolved = config.asAutoInstrumentConfiguration()
+  #expect(resolved.openTelemetry.enableLogs == false)
 }
 
 @Suite("Configuration canonical start", .serialized)

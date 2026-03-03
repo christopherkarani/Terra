@@ -25,13 +25,16 @@ public enum TerraCoreML {
   }
 }
 
-public extension Terra.Scope {
-  func setCoreMLAttributes(computeUnits: MLComputeUnits) {
-    setAttributes(TerraCoreML.attributes(computeUnits: computeUnits))
+public extension Terra.InferenceTrace {
+  @discardableResult
+  func coreML(computeUnits: MLComputeUnits) -> Self {
+    attribute(.init(TerraCoreML.Keys.runtime), "coreml")
+      .attribute(.init(TerraCoreML.Keys.computeUnits), computeUnits.terraLabel)
   }
 
-  func setCoreMLAttributes(configuration: MLModelConfiguration) {
-    setAttributes(TerraCoreML.attributes(configuration: configuration))
+  @discardableResult
+  func coreML(configuration: MLModelConfiguration) -> Self {
+    coreML(computeUnits: configuration.computeUnits)
   }
 }
 
@@ -58,4 +61,3 @@ extension MLComputeUnits {
 /// conditional imports, but no Core ML-specific helpers are available.
 public enum TerraCoreML {}
 #endif
-

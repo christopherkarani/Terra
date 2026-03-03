@@ -60,7 +60,7 @@ extension Terra {
       }
     }
 
-    public func asAutoInstrumentConfiguration() -> AutoInstrumentConfiguration {
+    func asAutoInstrumentConfiguration() -> _ResolvedStartConfiguration {
       var openTelemetryAttributes: [String: AttributeValue] = [:]
       for (key, value) in resourceAttributes {
         openTelemetryAttributes[key] = .string(value)
@@ -98,70 +98,11 @@ extension Terra {
         ),
         instrumentations: instrumentations,
         openClaw: openClaw,
+        proxy: nil,
+        aiAPIHosts: HTTPAIInstrumentation.defaultAIHosts,
         excludedCoreMLModels: excludedCoreMLModels,
         profiling: profiling
       )
-    }
-  }
-
-  @available(*, deprecated, renamed: "Configuration")
-  public typealias V3Configuration = Configuration
-
-  @available(*, deprecated, message: "Use Terra.start(_:configure:) or Terra.start(_:) with Terra.Configuration.")
-  public static func enable(_ profile: StartProfile = .quickstart) async throws {
-    try start(profile)
-  }
-
-  @available(*, deprecated, message: "Use Terra.start(_:configure:) or Terra.start(_:) with Terra.Configuration.")
-  public static func configure(_ configuration: AutoInstrumentConfiguration) async throws {
-    try start(configuration)
-  }
-
-  /// Configuration for `Terra.start()` auto-instrumentation.
-  @available(*, deprecated, message: "Use Terra.Configuration instead.")
-  public struct AutoInstrumentConfiguration: Sendable {
-    /// Privacy settings for all auto-instrumented spans.
-    public var privacy: Privacy
-
-    /// OpenTelemetry configuration (endpoints, persistence, etc.).
-    public var openTelemetry: OpenTelemetryConfiguration
-
-    /// Which auto-instrumentations to enable.
-    public var instrumentations: Instrumentations
-
-    /// OpenClaw-specific configuration for diagnostics and gateway paths.
-    public var openClaw: OpenClawConfiguration
-
-    /// Optional proxy configuration used when `.proxy` instrumentation is enabled.
-    public var proxy: ProxyConfiguration?
-
-    /// Known AI API hosts for HTTP instrumentation.
-    public var aiAPIHosts: Set<String>
-
-    /// Model names to exclude from CoreML auto-instrumentation.
-    public var excludedCoreMLModels: Set<String>
-
-    /// Low-level profiling toggles (memory/GPU).
-    public var profiling: Profiling
-
-    public init(
-      privacy: Privacy = .default,
-      openTelemetry: OpenTelemetryConfiguration = .init(),
-      instrumentations: Instrumentations = .all,
-      openClaw: OpenClawConfiguration = .disabled,
-      proxy: ProxyConfiguration? = nil,
-      aiAPIHosts: Set<String> = HTTPAIInstrumentation.defaultAIHosts,
-      excludedCoreMLModels: Set<String> = [],
-      profiling: Profiling = .init()
-    ) {
-      self.privacy = privacy
-      self.openTelemetry = openTelemetry
-      self.instrumentations = instrumentations
-      self.openClaw = openClaw
-      self.proxy = proxy
-      self.aiAPIHosts = aiAPIHosts
-      self.excludedCoreMLModels = excludedCoreMLModels
-      self.profiling = profiling
     }
   }
 
@@ -208,23 +149,29 @@ extension Terra {
     public static let none = Instrumentations([])
   }
 
-  /// One-line auto-instrumentation setup.
+  /// Start Terra telemetry with a configuration value.
   ///
-  /// Configures OpenTelemetry, installs Terra, and enables auto-instrumentation
-  /// for CoreML predictions and HTTP AI API calls.
+  /// This is the canonical entry point. Pass a `Configuration` to customize
+  /// behavior, or call with no arguments for quickstart defaults.
   ///
   /// ```swift
-  /// import Terra
+  /// // Quickstart (zero config)
   /// try Terra.start()
+  ///
+  /// // Production with persistence
+  /// try Terra.start(.init(preset: .production))
+  ///
+  /// // Custom
+  /// var config = Terra.Configuration()
+  /// config.enableLogs = true
+  /// config.profiling.enableMemoryProfiler = true
+  /// try Terra.start(config)
   /// ```
-  ///
-  /// After calling `start()`, every CoreML prediction and HTTP request to known
-  /// AI API endpoints will automatically produce OpenTelemetry spans with
-  /// GenAI semantic convention attributes.
-  ///
-  /// Foundation Models and MLX wrappers are used independently via their
-  /// respective modules (`TerraFoundationModels`, `TerraMLX`).
-  public static func start(_ config: AutoInstrumentConfiguration) throws {
+  public static func start(_ config: Configuration = .init()) throws {
+    try start(config.asAutoInstrumentConfiguration())
+  }
+
+  static func start(_ config: _ResolvedStartConfiguration) throws {
     // 1. Set up OpenTelemetry providers (traces, metrics, signposts, sessions)
     var openTelemetryConfig = config.openTelemetry
     if openTelemetryConfig.serviceName == nil {
@@ -284,123 +231,17 @@ extension Terra {
       OpenClawDiagnosticsExporter.installIfNeeded(configuration: config.openClaw)
     }
   }
+}
 
-  @available(*, deprecated, message: "Use Terra.Configuration(preset:) instead.")
-  public enum StartProfile: Sendable {
-    case quickstart
-    case production
-    case diagnostics
-
-    public var configuration: AutoInstrumentConfiguration {
-      switch self {
-      case .quickstart:
-        return .init(
-          privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256),
-          openTelemetry: .init(
-            enableTraces: true,
-            enableMetrics: true,
-            enableLogs: false,
-            enableSessions: true,
-            metricsExportInterval: 60
-          ),
-          instrumentations: [.coreML, .httpAIAPIs],
-          openClaw: .disabled,
-          profiling: .init()
-        )
-
-      case .production:
-        return .init(
-          privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256),
-          openTelemetry: .init(
-            enableTraces: true,
-            enableMetrics: true,
-            enableLogs: false,
-            persistence: .init(
-              storageURL: Terra.defaultPersistenceStorageURL(),
-              performancePreset: .default
-            )
-          ),
-          instrumentations: [.coreML, .httpAIAPIs],
-          openClaw: .disabled,
-          profiling: .init()
-        )
-
-      case .diagnostics:
-        return .init(
-          privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256),
-          openTelemetry: .init(
-            enableTraces: true,
-            enableMetrics: true,
-            enableLogs: true,
-            enableSignposts: true,
-            enableSessions: true,
-            otlpTracesEndpoint: URL(string: "http://127.0.0.1:4318/v1/traces")!,
-            otlpMetricsEndpoint: URL(string: "http://127.0.0.1:4318/v1/metrics")!,
-            otlpLogsEndpoint: URL(string: "http://127.0.0.1:4318/v1/logs")!,
-            metricsExportInterval: 15,
-            persistence: .init(
-              storageURL: Terra.defaultPersistenceStorageURL(),
-              performancePreset: .default
-            ),
-            resourceAttributes: ["terra.profile": .string("diagnostics")]
-          ),
-          instrumentations: [.coreML, .httpAIAPIs, .openClawDiagnostics],
-          openClaw: .init(mode: .diagnosticsOnly),
-          profiling: .init(enableMemoryProfiler: true, enableMetalProfiler: true)
-        )
-      }
-    }
-  }
-
-  @available(*, deprecated, message: "Mutate Terra.Configuration directly, then call Terra.start(config).")
-  public static func start(
-    _ preset: StartProfile,
-    configure: (inout AutoInstrumentConfiguration) throws -> Void = { _ in }
-  ) throws {
-    var config = preset.configuration
-    try configure(&config)
-    try start(config)
-  }
-
-  @available(*, deprecated, message: "Use Terra.start(_:configure:) instead.")
-  @discardableResult
-  public static func bootstrap(
-    _ preset: StartProfile = .quickstart,
-    configure: (inout AutoInstrumentConfiguration) throws -> Void = { _ in }
-  ) throws -> AutoInstrumentConfiguration {
-    var config = preset.configuration
-    try configure(&config)
-    try start(config)
-    return config
-  }
-
-  @available(*, deprecated, message: "Use Terra.start(_:configure:) instead (unlabeled first parameter).")
-  public static func start(
-    preset: StartProfile,
-    configure: (inout AutoInstrumentConfiguration) throws -> Void = { _ in }
-  ) throws {
-    try start(preset, configure: configure)
-  }
-
-  /// Start Terra telemetry with a configuration value.
-  ///
-  /// This is the canonical entry point. Pass a `Configuration` to customize
-  /// behavior, or call with no arguments for quickstart defaults.
-  ///
-  /// ```swift
-  /// // Quickstart (zero config)
-  /// try Terra.start()
-  ///
-  /// // Production with persistence
-  /// try Terra.start(.init(preset: .production))
-  ///
-  /// // Custom
-  /// var config = Terra.Configuration()
-  /// config.enableLogs = true
-  /// config.profiling.enableMemoryProfiler = true
-  /// try Terra.start(config)
-  /// ```
-  public static func start(_ config: Configuration = .init()) throws {
-    try start(config.asAutoInstrumentConfiguration())
+extension Terra {
+  struct _ResolvedStartConfiguration: Sendable {
+    var privacy: Privacy
+    var openTelemetry: OpenTelemetryConfiguration
+    var instrumentations: Instrumentations
+    var openClaw: OpenClawConfiguration
+    var proxy: ProxyConfiguration?
+    var aiAPIHosts: Set<String>
+    var excludedCoreMLModels: Set<String>
+    var profiling: Profiling
   }
 }

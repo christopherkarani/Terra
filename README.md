@@ -120,6 +120,8 @@ let result = try await Terra
 - Full integrations: [`Docs/Integrations.md`](Docs/Integrations.md)
 - Migration guide: [`Docs/Migration_Guide.md`](Docs/Migration_Guide.md)
 - API cookbook: [`Docs/API_Cookbook.md`](Docs/API_Cookbook.md)
+- Front-facing API reference: [`Docs/Front_Facing_API.md`](Docs/Front_Facing_API.md)
+- Front-facing API examples: [`Docs/Front_Facing_API_Examples.md`](Docs/Front_Facing_API_Examples.md)
 
 ## Installation (SwiftPM)
 
