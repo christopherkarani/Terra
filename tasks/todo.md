@@ -269,19 +269,19 @@
 - [x] Phase 6.2 verify HMAC-SHA256 default coverage and keyed determinism tests.
 - [x] Phase 6.3 add privacy audit tests across all content-emitting call paths.
 - [x] Phase 6.4 verify OpenClaw disabled mode produces empty gateway hosts at start resolution.
-- [ ] Phase 7.1 add Foundation Models tool-call capture via transcript diff + tests.
-- [ ] Phase 7.2 add guardrail safety-check child spans + tests.
-- [ ] Phase 7.3 add generation options capture on Foundation Models inference spans + tests.
-- [ ] Phase 7.4 align MLX/Llama/FoundationModels wrapper metadata semantics + tests.
-- [ ] Phase 8.1 rewrite README for canonical v3 API onboarding.
-- [ ] Phase 8.2 add `Docs/Migration_Guide.md` (v1->v2->v3).
-- [ ] Phase 8.3 add `Docs/API_Cookbook.md` with 8 copy-paste recipes.
-- [ ] Phase 8.4 complete v3 unreleased `CHANGELOG.md` section.
-- [ ] Phase 9.1 run full RC test/build matrix and strict concurrency check.
-- [ ] Phase 9.2 deprecation sweep: annotations + forwarding + compatibility tests.
-- [ ] Phase 9.3 run consistency grep checks (`.run`, `sha256Hex`, examples usage).
-- [ ] Phase 9.4 add and complete `Docs/RC_CHECKLIST.md`.
-- [ ] Phase 9.5 final RC qualification commit.
+- [x] Phase 7.1 add Foundation Models tool-call capture via transcript diff + tests.
+- [x] Phase 7.2 add guardrail safety-check child spans + tests.
+- [x] Phase 7.3 add generation options capture on Foundation Models inference spans + tests.
+- [x] Phase 7.4 align MLX/Llama/FoundationModels wrapper metadata semantics + tests.
+- [x] Phase 8.1 rewrite README for canonical v3 API onboarding.
+- [x] Phase 8.2 add `Docs/Migration_Guide.md` (v1->v2->v3).
+- [x] Phase 8.3 add `Docs/API_Cookbook.md` with 8 copy-paste recipes.
+- [x] Phase 8.4 complete v3 unreleased `CHANGELOG.md` section.
+- [x] Phase 9.1 run full RC test/build matrix and strict concurrency check.
+- [x] Phase 9.2 deprecation sweep: annotations + forwarding + compatibility tests.
+- [x] Phase 9.3 run consistency grep checks (`.run`, `sha256Hex`, examples usage).
+- [x] Phase 9.4 add and complete `Docs/RC_CHECKLIST.md`.
+- [x] Phase 9.5 final RC qualification commit.
 
 - [ ] **Phase 4: Fluent + Closure API Finalization**
 - [ ] Ensure closure-first overloads are first-class in docs and examples; builders remain advanced mode.
@@ -312,11 +312,11 @@
 - [ ] Add API cookbook snippets for common agent workflows (inference+tools+safety+streaming).
 - [ ] Exit criteria: new user can instrument in <= 5 minutes using only README.
 
-- [ ] **Phase 9: Release Qualification**
-- [ ] Run full matrix: `swift build`, `swift test`, targeted stress/retry runs, strict concurrency build, lint/doc checks.
-- [ ] Add release candidate checklist (semver decision, deprecation notes, changelog, examples validated).
-- [ ] Gate release on zero known P1/P2 API issues.
-- [ ] Exit criteria: RC sign-off checklist complete.
+- [x] **Phase 9: Release Qualification**
+- [x] Run full matrix: `swift build`, `swift test`, targeted stress/retry runs, strict concurrency build, lint/doc checks.
+- [x] Add release candidate checklist (semver decision, deprecation notes, changelog, examples validated).
+- [x] Gate release on zero known P1/P2 API issues.
+- [x] Exit criteria: RC sign-off checklist complete.
 
 ## Definition of Done (100% Ready)
 
@@ -325,3 +325,14 @@
 - [ ] Full test suite + stress/concurrency verification green and repeatable.
 - [ ] Privacy defaults and diagnostics behavior are validated and documented.
 - [ ] Migration docs and examples are fully aligned with the canonical API.
+
+## Phase 9 Review (2026-03-03)
+
+- Root cause of full-suite failures was order-dependent global state leakage: tests in `TerraMLXTests`, `TerraTracedMacroTests`, and `TerraHTTPInstrumentTests` modified global Terra/OpenTelemetry providers without the shared testing isolation protocol.
+- Fix applied: each affected harness/test now uses `Terra.lockTestingIsolation()`, `Terra.resetOpenTelemetryForTesting()`, and deterministic provider restore/unlock teardown.
+- Additional hardening: `TerraFoundationModels` span harness now resets Terra runtime before install and during teardown while the suite-level lock is held.
+- Verification evidence:
+  - full suite: `swift test` passed (`173` Swift Testing tests + `68` XCTest tests, `0` failures).
+  - filtered suites: `TerraTests`, `TerraAutoInstrumentTests`, `TerraTracedMacroTests`, `TerraMLXTests`, `TerraTraceKitTests`, `TerraHTTPInstrumentTests` all passed.
+  - strict concurrency: `STRICT_ERRORS=0`.
+  - command logs: `/tmp/terra-matrix-20260303-171823`.
