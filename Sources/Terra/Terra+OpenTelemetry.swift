@@ -396,14 +396,16 @@ extension Terra {
 
 #if DEBUG
 extension Terra {
-  private static let testingIsolationLock = NSRecursiveLock()
+  // Tests can lock in one thread and unlock after an async hop on another.
+  // DispatchSemaphore avoids thread-affinity lock ownership issues in that path.
+  private static let testingIsolationLock = DispatchSemaphore(value: 1)
 
   public static func lockTestingIsolation() {
-    testingIsolationLock.lock()
+    testingIsolationLock.wait()
   }
 
   public static func unlockTestingIsolation() {
-    testingIsolationLock.unlock()
+    testingIsolationLock.signal()
   }
 
   static func resetOpenTelemetryForTesting() {

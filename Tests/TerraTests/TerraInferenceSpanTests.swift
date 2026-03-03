@@ -21,6 +21,7 @@ final class TerraInferenceSpanTests: XCTestCase {
 
   override func tearDown() {
     support.reset()
+    support = nil
     super.tearDown()
   }
 

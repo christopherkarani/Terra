@@ -12,6 +12,7 @@ final class TerraStreamingSpanTests: XCTestCase {
 
   override func tearDown() {
     support.reset()
+    support = nil
     super.tearDown()
   }
 

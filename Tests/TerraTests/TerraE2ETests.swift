@@ -13,6 +13,7 @@ final class TerraE2ETests: XCTestCase {
 
   override func tearDown() {
     support.reset()
+    support = nil
     super.tearDown()
   }
 
