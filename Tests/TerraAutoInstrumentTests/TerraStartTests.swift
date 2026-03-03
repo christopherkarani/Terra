@@ -97,6 +97,14 @@ final class TerraStartTests {
     #expect(config.openClaw.gatewayHosts.isEmpty)
   }
 
+  @Test("Configuration default preserves disabled OpenClaw hosts through conversion")
+  func configurationDefaultKeepsOpenClawHostsEmpty() {
+    let config = Terra.Configuration()
+    let resolved = config.asAutoInstrumentConfiguration()
+    #expect(resolved.openClaw.mode == .disabled)
+    #expect(resolved.openClaw.gatewayHosts.isEmpty)
+  }
+
   @Test("OpenClaw diagnosticsOnly enables diagnostics export and disables gateway instrumentation")
   func openClawDiagnosticsOnlyModeBehavior() {
     let openClaw = Terra.OpenClawConfiguration(mode: .diagnosticsOnly)

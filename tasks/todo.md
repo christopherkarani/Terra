@@ -265,10 +265,10 @@
 - [x] Phase 5.1 enforce explicit-first macro argument resolution with code comment + tests.
 - [x] Phase 5.2 add comprehensive macro expansion matrix (20+ cases).
 - [x] Phase 5.3 add import-minimal macro compile smoke test.
-- [ ] Phase 6.1 gate exception message capture by privacy policy in all error recording paths.
-- [ ] Phase 6.2 verify HMAC-SHA256 default coverage and keyed determinism tests.
-- [ ] Phase 6.3 add privacy audit tests across all content-emitting call paths.
-- [ ] Phase 6.4 verify OpenClaw disabled mode produces empty gateway hosts at start resolution.
+- [x] Phase 6.1 gate exception message capture by privacy policy in all error recording paths.
+- [x] Phase 6.2 verify HMAC-SHA256 default coverage and keyed determinism tests.
+- [x] Phase 6.3 add privacy audit tests across all content-emitting call paths.
+- [x] Phase 6.4 verify OpenClaw disabled mode produces empty gateway hosts at start resolution.
 - [ ] Phase 7.1 add Foundation Models tool-call capture via transcript diff + tests.
 - [ ] Phase 7.2 add guardrail safety-check child spans + tests.
 - [ ] Phase 7.3 add generation options capture on Foundation Models inference spans + tests.
