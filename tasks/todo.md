@@ -198,6 +198,19 @@
 ## Terra API 100% Readiness Plan (Proposed)
 
 - [ ] **Phase 1: Canonical Public Surface Freeze**
+
+## Review Fixes (2026-03-03)
+
+- [x] Confirm scope for agent streaming count + shutdown anonymization reset.
+- [x] Update `runStreaming` to record agent model/inference count.
+- [x] Reset anonymization key/id on shutdown to restore defaults.
+- [x] Add review notes with validation status.
+
+## Review
+
+- Updated `runStreaming` to record agent models/inference counts for streaming spans.
+- Restored anonymization key/id to default on shutdown via `markUninitialized()`.
+- Validation: not run (not requested).
 - [ ] Declare one startup entrypoint as canonical (recommended: `Terra.start(...)` + single preset/config style).
 - [ ] Finalize naming policy (remove versioned naming from public API where possible, e.g. `V3Configuration` -> stable `Configuration`).
 - [ ] Define public API stability contract and deprecation window (dates + versions).
@@ -246,12 +259,12 @@
 ## Terra API 100% Readiness Execution (Phases 4-9) - 2026-03-03
 
 - [x] Phase 4.0 preflight: fix `Terra.start()` overload ambiguity blocking test compilation.
-- [ ] Phase 4.1 verify no internal `.run {}` usage outside deprecated compatibility shims/tests.
-- [ ] Phase 4.2 verify no internal `.capture(...)` usage outside deprecated compatibility shims/tests.
-- [ ] Phase 4.3 add API parity tests across closure-first vs builder-execute for all 6 span types.
-- [ ] Phase 5.1 enforce explicit-first macro argument resolution with code comment + tests.
-- [ ] Phase 5.2 add comprehensive macro expansion matrix (20+ cases).
-- [ ] Phase 5.3 add import-minimal macro compile smoke test.
+- [x] Phase 4.1 verify no internal `.run {}` usage outside deprecated compatibility shims/tests.
+- [x] Phase 4.2 verify no internal `.capture(...)` usage outside deprecated compatibility shims/tests.
+- [x] Phase 4.3 add API parity tests across closure-first vs builder-execute for all 6 span types.
+- [x] Phase 5.1 enforce explicit-first macro argument resolution with code comment + tests.
+- [x] Phase 5.2 add comprehensive macro expansion matrix (20+ cases).
+- [x] Phase 5.3 add import-minimal macro compile smoke test.
 - [ ] Phase 6.1 gate exception message capture by privacy policy in all error recording paths.
 - [ ] Phase 6.2 verify HMAC-SHA256 default coverage and keyed determinism tests.
 - [ ] Phase 6.3 add privacy audit tests across all content-emitting call paths.
