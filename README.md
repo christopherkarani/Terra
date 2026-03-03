@@ -2,172 +2,145 @@
   <img src="terra-banner.svg" alt="Terra Banner" width="100%" />
 </p>
 
-# Terra 🌍
+# Terra
 
-**Stop flying blind with your local AI.**
+Terra is the OpenTelemetry-native observability SDK for on-device GenAI on Apple platforms.
+Instrument inference, streaming, agents, tools, embeddings, and safety checks with privacy-safe defaults.
 
-Terra is a privacy-first observability layer for on-device GenAI. Built on OpenTelemetry, it gives you production-grade tracing for model inference, embeddings, and agents—with zero-code setup.
-
-[![CI](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/Platforms-iOS%20|%20macOS%20|%20visionOS-red.svg)]()
-[![Website](https://img.shields.io/badge/Website-terra.dev-cyan.svg)](website/)
-
----
-
-### Why Terra?
-- **🔌 Zero-Code Auto-Instrumentation**: Capture CoreML and HTTP AI calls (OpenAI, Anthropic, etc.) with a single line of code.
-- **🔒 Privacy First**: Content policy is `.never` by default. No raw prompts leave the device without explicit opt-in.
-- **⚡️ Built for Performance**: Lightweight Signpost integration, on-device persistence, and OTLP/HTTP export.
-- **🧩 Multi-Runtime**: Native support for **CoreML**, **MLX**, **Llama.cpp**, and **Apple Foundation Models**.
-
----
-
-### Quickstart
-
-#### 1. Add via SwiftPM
-```swift
-.package(url: "https://github.com/christopherkarani/Terra.git", from: "0.1.0")
-```
-
-#### 2. Start Auto-Instrumentation
 ```swift
 import Terra
 
 try Terra.start()
+let result = try await Terra.inference(model: "gpt-4o-mini", prompt: "Say hello") { "Hello" }
 ```
 
-That's it. Every CoreML prediction and HTTP request to known AI APIs now produces OpenTelemetry spans.
+[![CI](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/Platforms-iOS%20|%20macOS%20|%20visionOS-red.svg)]()
 
-#### Configuration
-
-Use `Terra.Configuration(preset:)` for production or diagnostics setups:
+## Quick Start
 
 ```swift
-// Production: adds on-device persistence
-try Terra.start(.init(preset: .production))
+import Terra
 
-// Diagnostics: enables profilers, logs, and OpenClaw diagnostics
-try Terra.start(.init(preset: .diagnostics))
-
-// Custom configuration
-var config = Terra.Configuration()
-config.enableLogs = true
-config.profiling.enableMemoryProfiler = true
-config.excludedCoreMLModels = ["SkipThisModel"]
-try Terra.start(config)
-```
-
----
-
-#### 3-line hello world
-```swift
 try Terra.start()
-let result = try await Terra.inference(model: "gpt-4") { try await llm.generate("Hello") }
-```
 
----
-
-### Lifecycle Management
-
-Terra tracks its runtime state through `Terra.lifecycleState`:
-
-| State | Meaning |
-|-------|---------|
-| `.uninitialized` | Terra has not been started, or has been shut down. |
-| `.running` | Terra is active and collecting telemetry. |
-
-```swift
-// Start
-try Terra.start()
-assert(Terra.isRunning)
-
-// Use Terra normally...
-
-// Shut down gracefully (flushes pending telemetry)
-await Terra.shutdown()
-assert(!Terra.isRunning)
-
-// Restart with a new configuration
-try Terra.start(.init(preset: .production))
-```
-
-**Idempotency rules:**
-- Installing the same configuration twice is a no-op.
-- Installing a different configuration while running throws `InstallOpenTelemetryError.alreadyInstalled`.
-- `shutdown()` is always safe to call — it's a no-op when not running.
-- After `shutdown()`, Terra can be restarted with any configuration.
-
----
-
-### Deep Instrumentation
-
-#### Manual Spans
-```swift
-let result = try await Terra
-  .inference(model: "llama-3.2", prompt: prompt)
-  .provider("openai-compatible")
-  .tokens(output: 42)
-  .execute {
-    try await model.generate(prompt)
+let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: userPrompt) {
+  try await llm.generate(userPrompt)
 }
 ```
 
-For expert users, you can pass the full request model and attach additional attributes:
-```swift
-let request = Terra.InferenceRequest
-  .chat(model: "llama-3.2", prompt: promptText)
-  .maxOutputTokens(256)
-  .temperature(0.2)
+## Setup Presets
 
-let result = try await Terra
-  .inference(request)
-  .includeContent()
-  .provider("openai-compatible")
-  .runtime("custom_runtime")
-  .responseModel("llama-3.2")
-  .attribute(.init("terra.pipeline.stage"), "post_rerank")
-  .execute {
-    try await model.generate()
-}
-```
+| Preset | Use when | Start call |
+| --- | --- | --- |
+| `quickstart` | Local dev defaults | `try Terra.start()` |
+| `production` | Persist traces and export in apps | `try Terra.start(.init(preset: .production))` |
+| `diagnostics` | Deep troubleshooting with extra telemetry | `try Terra.start(.init(preset: .diagnostics))` |
 
-#### Swift Macros
+## Span Types
+
+| Span type | Factory | Example |
+| --- | --- | --- |
+| Inference | `Terra.inference(model:prompt:)` | `try await Terra.inference(model: "gpt-4o-mini") { "ok" }` |
+| Streaming | `Terra.stream(model:prompt:)` | `try await Terra.stream(model: "gpt-4o-mini") { trace in trace.chunk(tokens: 8); return "ok" }` |
+| Agent | `Terra.agent(name:id:)` | `try await Terra.agent(name: "planner") { "done" }` |
+| Tool | `Terra.tool(name:callID:type:)` | `try await Terra.tool(name: "search", callID: UUID().uuidString) { "result" }` |
+| Embedding | `Terra.embedding(model:inputCount:)` | `try await Terra.embedding(model: "text-embedding-3-small", inputCount: 3) { vectors }` |
+| Safety check | `Terra.safetyCheck(name:subject:)` | `try await Terra.safetyCheck(name: "toxicity", subject: text) { true }` |
+
+## Privacy Policies
+
+| Policy | Behavior | Use when |
+| --- | --- | --- |
+| `.redacted` (default) | Captures telemetry metadata with HMAC-SHA256 redaction for content fields | Standard production default |
+| `.lengthOnly` | Captures only content lengths (no raw content) | You need shape/size signals only |
+| `.capturing` | Allows content capture when opted in per call | Controlled debugging environments |
+| `.silent` | Drops content-related telemetry | Strictest privacy mode |
+
+## Macros (`@Traced`)
+
 ```swift
 import TerraTracedMacro
 
-@Traced(model: "whisper-large")
-func transcribe(audio: Data) async throws -> String { 
-    // Body is automatically wrapped in an inference span
-}
+@Traced(model: "gpt-4o-mini")
+func infer(prompt: String) async throws -> String { try await llm.generate(prompt) }
+
+@Traced(model: "gpt-4o-mini", streaming: true)
+func stream(prompt: String) async throws -> String { try await llm.generate(prompt) }
+
+@Traced(agent: "planner")
+func agentStep() async throws -> String { "ok" }
+
+@Traced(tool: "search")
+func runTool(query: String) async throws -> String { "ok" }
+
+@Traced(embedding: "text-embedding-3-small")
+func embed(text: String) async throws -> [Float] { [0.1, 0.2] }
+
+@Traced(safety: "toxicity")
+func safety(subject: String) async throws -> Bool { true }
 ```
 
-#### Specialty Runtimes
+## Foundation Models
+
 ```swift
-// MLX
-try await TerraMLX.traced(model: "mlx-community/Llama-3.2-1B") {
-    try await model.generate(prompt)
-}
+#if canImport(FoundationModels)
+import FoundationModels
+import TerraFoundationModels
 
-// Llama.cpp
-try await TerraLlama.traced(model: "llama-3.2-1b") { streamScope in
-    // custom streaming logic
+@available(macOS 26.0, iOS 26.0, *)
+func runFoundationModels(prompt: String) async throws -> String {
+  // Drop-in traced wrapper around LanguageModelSession
+  let session = Terra.TracedSession(model: .default)
+  return try await session.respond(to: prompt)
 }
+#endif
 ```
 
----
+## Builder API (Escape Hatch)
 
-### Modules
+Use builders when metadata is dynamic at runtime:
 
-| Module | Purpose |
-| :--- | :--- |
-| `Terra` | **Entry point**. Auto-instruments CoreML + HTTP. |
-| `TerraCore` | Core API & OpenTelemetry runtime. |
-| `TerraMLX` | Tracing for Swift MLX. |
-| `TerraLlama` | Tracing for Llama.cpp / Llama-based models. |
-| `TerraTraceKit` | Reusable trace decoding & modeling for custom UIs. |
+```swift
+let result = try await Terra
+  .inference(model: modelName, prompt: prompt)
+  .provider(providerName)
+  .runtime(runtimeName)
+  .attribute(.init("app.user_tier"), userTier)
+  .includeContent()
+  .execute { trace in
+    trace.tokens(input: 128, output: 64)
+    return try await llm.generate(prompt)
+  }
+```
 
----
+## Advanced
 
-**Requirements**: iOS 13+, macOS 14+, tvOS 13+, watchOS 6+, visionOS 1+.
-**License**: Apache-2.0
+- Full integrations: [`Docs/Integrations.md`](Docs/Integrations.md)
+- Migration guide: [`Docs/Migration_Guide.md`](Docs/Migration_Guide.md)
+- API cookbook: [`Docs/API_Cookbook.md`](Docs/API_Cookbook.md)
+
+## Installation (SwiftPM)
+
+```swift
+.package(url: "https://github.com/christopherkarani/Terra.git", from: "0.1.0")
+```
+
+Common products:
+
+- `Terra`
+- `TerraTracedMacro`
+- `TerraFoundationModels`
+- `TerraMLX`
+- `TerraLlama`
+
+## Requirements
+
+- iOS 13+
+- macOS 14+
+- visionOS 1+
+- tvOS 13+
+- watchOS 6+
+
+License: Apache-2.0
