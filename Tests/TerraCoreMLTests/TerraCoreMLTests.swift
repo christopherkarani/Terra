@@ -3,6 +3,7 @@ import CoreML
 import OpenTelemetryApi
 import Testing
 @testable import TerraCoreML
+@testable import TerraCore
 
 // MARK: - Keys Constants
 
@@ -78,5 +79,16 @@ func sanitizeModelNameBoundsLength() {
   let longName = String(repeating: "a", count: 300)
   let sanitized = CoreMLInstrumentation.sanitizeModelName("  \(longName)  ")
   #expect(sanitized?.count == 256)
+}
+
+@Test("CoreML attributes never include prompt or response content keys")
+func coreMLAttributesExcludeContent() {
+  let attrs = TerraCoreML.attributes(computeUnits: .all)
+  #expect(attrs[Terra.Keys.Terra.promptLength] == nil)
+  #expect(attrs[Terra.Keys.Terra.promptHMACSHA256] == nil)
+  #expect(attrs[Terra.Keys.Terra.promptSHA256] == nil)
+  #expect(attrs[Terra.Keys.Terra.safetySubjectLength] == nil)
+  #expect(attrs[Terra.Keys.Terra.safetySubjectHMACSHA256] == nil)
+  #expect(attrs[Terra.Keys.Terra.safetySubjectSHA256] == nil)
 }
 #endif
