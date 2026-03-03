@@ -16,7 +16,7 @@ final class TerraSpanTypesTests: XCTestCase {
   }
 
   func testWithAgentInvocationSpan_setsExpectedAttributes() async throws {
-    let agent = Terra.Agent(name: "planner", id: "agent-1")
+    let agent = Terra.AgentRequest(name: "planner", id: "agent-1")
     await Terra.withAgentInvocationSpan(agent: agent) { _ in }
 
     let span = try XCTUnwrap(support.finishedSpans().first)
@@ -27,8 +27,7 @@ final class TerraSpanTypesTests: XCTestCase {
 
   func testWithToolExecutionSpan_setsExpectedAttributes() async throws {
     await Terra.withToolExecutionSpan(
-      tool: .init(name: "search", type: "http"),
-      call: .init(id: "call-123")
+      tool: .init(name: "search", callID: "call-123", type: "http")
     ) { _ in }
 
     let span = try XCTUnwrap(support.finishedSpans().first)

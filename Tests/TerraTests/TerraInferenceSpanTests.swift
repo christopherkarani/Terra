@@ -29,8 +29,7 @@ final class TerraInferenceSpanTests: XCTestCase {
       model: "local/llama-3.2-1b",
       prompt: "Hello",
       maxOutputTokens: 16,
-      temperature: 0.7,
-      stream: false
+      temperature: 0.7
     )
 
     await Terra.withInferenceSpan(request) { _ in
@@ -55,7 +54,25 @@ final class TerraInferenceSpanTests: XCTestCase {
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestModel]?.description, "local/llama-3.2-1b")
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestMaxTokens]?.description, "16")
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestTemperature]?.description, "0.7")
-    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestStream]?.description, "false")
+    XCTAssertNil(span.attributes[Terra.Keys.GenAI.requestStream])
+  }
+
+  func testWithInferenceSpan_typedTelemetryHelpers_setExpectedAttributes() async throws {
+    let request = Terra.InferenceRequest(model: "local/llama-3.2-1b", prompt: "Hello")
+
+    await Terra.withInferenceSpan(request) { scope in
+      scope.setRuntime("mlx")
+      scope.setProvider("openai-compatible")
+      scope.setResponseModel("llama-3.2-1b-instruct")
+      scope.setTokenUsage(input: 128, output: 42)
+    }
+
+    let span = try XCTUnwrap(support.finishedSpans().first)
+    XCTAssertEqual(span.attributes[Terra.Keys.Terra.runtime]?.description, "mlx")
+    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.providerName]?.description, "openai-compatible")
+    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.responseModel]?.description, "llama-3.2-1b-instruct")
+    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.usageInputTokens]?.description, "128")
+    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.usageOutputTokens]?.description, "42")
   }
 
   func testWithInferenceSpan_cancellationDoesNotMarkSpanAsError() async throws {

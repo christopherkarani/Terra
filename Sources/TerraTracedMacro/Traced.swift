@@ -1,7 +1,9 @@
-/// Wraps the function body in a `Terra.withInferenceSpan` call.
+/// Wraps the function body in a traced Terra operation using `.execute { ... }`.
 ///
-/// The macro auto-detects parameters named `prompt`/`input`/`query`/`text` (for prompt capture)
-/// and `maxTokens`/`maxOutputTokens`/`max_tokens` (for max output tokens).
+/// The macro auto-detects common parameter names:
+/// - prompt aliases: `prompt`/`input`/`query`/`text`/`message`/`subject`
+/// - max token aliases: `maxTokens`/`maxOutputTokens`/`max_tokens`
+/// - optional metadata: `temperature`/`provider`/`stream`
 ///
 /// Usage:
 /// ```swift
@@ -12,3 +14,18 @@
 /// ```
 @attached(body)
 public macro Traced(model: String) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+
+@attached(body)
+public macro Traced(model: String, streaming: Bool) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+
+@attached(body)
+public macro Traced(agent: String, id: String? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+
+@attached(body)
+public macro Traced(tool: String, type: String? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+
+@attached(body)
+public macro Traced(embedding: String) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+
+@attached(body)
+public macro Traced(safety: String) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")

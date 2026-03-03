@@ -1,7 +1,6 @@
 #if canImport(FoundationModels)
 import FoundationModels
 import TerraCore
-import OpenTelemetryApi
 
 @available(macOS 26.0, iOS 26.0, *)
 public final class TerraTracedSession: @unchecked Sendable {
@@ -23,16 +22,14 @@ public final class TerraTracedSession: @unchecked Sendable {
 
   /// Respond to a prompt with auto-tracing.
   public func respond(to prompt: String, promptCapture: Terra.CaptureIntent = .default) async throws -> String {
-    let request = Terra.InferenceRequest(
-      model: modelIdentifier,
-      prompt: prompt,
-      promptCapture: promptCapture
-    )
-    return try await Terra.withInferenceSpan(request) { scope in
-      scope.setAttributes([
-        Terra.Keys.Terra.runtime: .string("foundation_models"),
-        Terra.Keys.Terra.autoInstrumented: .bool(true)
-      ])
+    var call = Terra
+      .inference(model: modelIdentifier, prompt: prompt)
+      .runtime("foundation_models")
+      .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)
+    if promptCapture == .optIn {
+      call = call.includeContent()
+    }
+    return try await call.execute {
       let response = try await session.respond(to: prompt)
       return response.content
     }
@@ -44,17 +41,15 @@ public final class TerraTracedSession: @unchecked Sendable {
     generating type: T.Type,
     promptCapture: Terra.CaptureIntent = .default
   ) async throws -> T {
-    let request = Terra.InferenceRequest(
-      model: modelIdentifier,
-      prompt: prompt,
-      promptCapture: promptCapture
-    )
-    return try await Terra.withInferenceSpan(request) { scope in
-      scope.setAttributes([
-        Terra.Keys.Terra.runtime: .string("foundation_models"),
-        Terra.Keys.Terra.autoInstrumented: .bool(true),
-        "terra.foundation_models.response_type": .string(String(describing: T.self))
-      ])
+    var call = Terra
+      .inference(model: modelIdentifier, prompt: prompt)
+      .runtime("foundation_models")
+      .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)
+      .attribute(.init("terra.foundation_models.response_type"), String(describing: T.self))
+    if promptCapture == .optIn {
+      call = call.includeContent()
+    }
+    return try await call.execute {
       return try await session.respond(to: prompt, generating: type).content
     }
   }
@@ -65,29 +60,28 @@ public final class TerraTracedSession: @unchecked Sendable {
     let session = self.session
 
     return AsyncThrowingStream { continuation in
-      let task = Task { [weak self] in
-        let request = Terra.InferenceRequest(
+      let task = Task {
+        let request = Terra.StreamingRequest(
           model: modelIdentifier,
           prompt: prompt,
           promptCapture: promptCapture,
-          stream: true
         )
         do {
-          try await Terra.withStreamingInferenceSpan(request) { streamScope in
-            streamScope.setAttributes([
-              Terra.Keys.Terra.runtime: .string("foundation_models"),
-              Terra.Keys.Terra.autoInstrumented: .bool(true)
-            ])
+          try await Terra
+            .stream(request)
+            .runtime("foundation_models")
+            .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)
+            .execute { streamScope in
             let stream = session.streamResponse(to: prompt)
             for try await partial in stream {
               try Task.checkCancellation()
-              streamScope.recordChunk()
-              if let explicitCount = self?.explicitOutputTokenCount(from: partial) {
-                streamScope.recordOutputTokenCount(explicitCount)
+              streamScope.chunk(tokens: 0)
+              if let explicitCount = self.explicitOutputTokenCount(from: partial) {
+                streamScope.outputTokens(explicitCount)
               }
               continuation.yield(partial.content)
             }
-          }
+            }
           continuation.finish()
         } catch {
           continuation.finish(throwing: error)

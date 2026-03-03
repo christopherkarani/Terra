@@ -11,33 +11,23 @@ import Terra
 @main
 struct TerraSample {
   static func main() async throws {
-    // One-call OpenTelemetry wiring (OTLP/HTTP + on-device persistence + Signposts).
-    try Terra.installOpenTelemetry(
-      .init(
-        enableLogs: false,
-        metricsExportInterval: 1,
-        persistence: .init(storageURL: Terra.defaultPersistenceStorageURL(), performancePreset: .default)
-      )
-    )
+    try Terra.start()
 
-    // Privacy-safe defaults (no prompt/output/tool-args capture).
-    Terra.install(.init(privacy: .default))
+    try await Terra
+      .agent(name: "DemoAgent")
+      .execute { trace in
+        trace.event("agent.start")
 
-    let agent = Terra.Agent(name: "DemoAgent")
+        try await Terra.inference(model: "local/demo", prompt: "Hello") {
+          try await Task.sleep(nanoseconds: 50_000_000)
+        }
 
-    try await Terra.withAgentInvocationSpan(agent: agent) { scope in
-      scope.addEvent("agent.start")
+        try await Terra.tool(name: "search", callID: "call-1") {
+          try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
-      try await Terra.withInferenceSpan(.init(model: "local/demo", prompt: "Hello")) { _ in
-        try await Task.sleep(nanoseconds: 50_000_000)
+        trace.event("agent.end")
       }
-
-      try await Terra.withToolExecutionSpan(tool: .init(name: "search"), call: .init(id: "call-1")) { _ in
-        try await Task.sleep(nanoseconds: 20_000_000)
-      }
-
-      scope.addEvent("agent.end")
-    }
 
     // Give periodic metrics export a moment to run in this sample.
     try await Task.sleep(nanoseconds: 2_000_000_000)

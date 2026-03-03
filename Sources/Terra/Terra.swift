@@ -16,8 +16,9 @@ public enum Terra {
   // MARK: - Public API (Phase 2)
 
   @discardableResult
-  public static func withInferenceSpan<R>(
+  static func withInferenceSpan<R>(
     _ request: InferenceRequest,
+    stream: Bool? = nil,
     _ body: @Sendable (Scope<InferenceSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
@@ -34,7 +35,7 @@ public enum Terra {
     if let temperature = request.temperature {
       attributes[Keys.GenAI.requestTemperature] = .double(temperature)
     }
-    if let stream = request.stream {
+    if let stream {
       attributes[Keys.GenAI.requestStream] = .bool(stream)
     }
 
@@ -66,26 +67,32 @@ public enum Terra {
   }
 
   @discardableResult
-  public static func withStreamingInferenceSpan<R>(
-    _ request: InferenceRequest,
+  static func withStreamingInferenceSpan<R>(
+    _ request: StreamingRequest,
     _ body: @Sendable (StreamingInferenceScope) async throws -> R
   ) async rethrows -> R {
-    var streamingRequest = request
-    if streamingRequest.stream == nil {
-      streamingRequest.stream = true
-    }
+    let streamingRequest = InferenceRequest(
+      model: request.model,
+      prompt: request.prompt,
+      promptCapture: request.promptCapture,
+      maxOutputTokens: request.maxOutputTokens,
+      temperature: request.temperature
+    )
 
     let startedAt = ContinuousClock.now
-    return try await withInferenceSpan(streamingRequest) { scope in
+    return try await withInferenceSpan(streamingRequest, stream: true) { scope in
       let streamingScope = StreamingInferenceScope(scope: scope, startedAt: startedAt)
+      if let expectedOutputTokens = request.expectedOutputTokens, expectedOutputTokens > 0 {
+        streamingScope.setAttributes([Keys.Terra.streamOutputTokens: .int(expectedOutputTokens)])
+      }
       defer { streamingScope.finish() }
       return try await body(streamingScope)
     }
   }
 
   @discardableResult
-  public static func withAgentInvocationSpan<R>(
-    agent: Agent,
+  static func withAgentInvocationSpan<R>(
+    agent: AgentRequest,
     _ body: @Sendable (Scope<AgentInvocationSpan>) async throws -> R
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
@@ -106,15 +113,14 @@ public enum Terra {
   }
 
   @discardableResult
-  public static func withToolExecutionSpan<R>(
-    tool: Tool,
-    call: ToolCall,
+  static func withToolExecutionSpan<R>(
+    tool: ToolRequest,
     _ body: @Sendable (Scope<ToolExecutionSpan>) async throws -> R
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.executeTool.rawValue),
       Keys.GenAI.toolName: .string(tool.name),
-      Keys.GenAI.toolCallID: .string(call.id),
+      Keys.GenAI.toolCallID: .string(tool.callID),
     ]
     if let type = tool.type {
       attributes[Keys.GenAI.toolType] = .string(type)
@@ -130,7 +136,7 @@ public enum Terra {
   }
 
   @discardableResult
-  public static func withEmbeddingSpan<R>(
+  static func withEmbeddingSpan<R>(
     _ request: EmbeddingRequest,
     _ body: @Sendable (Scope<EmbeddingSpan>) async throws -> R
   ) async rethrows -> R {
@@ -152,8 +158,8 @@ public enum Terra {
   }
 
   @discardableResult
-  public static func withSafetyCheckSpan<R>(
-    _ check: SafetyCheck,
+  static func withSafetyCheckSpan<R>(
+    _ check: SafetyCheckRequest,
     _ body: @Sendable (Scope<SafetyCheckSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
@@ -258,6 +264,10 @@ public enum Terra {
       scope.setAttributes(attributes)
     }
 
+    func recordError(_ error: any Error) {
+      scope.recordError(error)
+    }
+
     public func recordToken(_ count: Int = 1) {
       guard count > 0 else { return }
       let now = ContinuousClock.now
@@ -297,6 +307,21 @@ public enum Terra {
       var shouldEmitFirstTokenEvent = false
       lock.lock()
       chunkCount += 1
+      if firstTokenAt == nil {
+        firstTokenAt = now
+        shouldEmitFirstTokenEvent = true
+      }
+      lock.unlock()
+
+      if shouldEmitFirstTokenEvent {
+        scope.addEvent(Keys.Terra.streamFirstTokenEvent)
+      }
+    }
+
+    func recordFirstToken() {
+      let now = ContinuousClock.now
+      var shouldEmitFirstTokenEvent = false
+      lock.lock()
       if firstTokenAt == nil {
         firstTokenAt = now
         shouldEmitFirstTokenEvent = true

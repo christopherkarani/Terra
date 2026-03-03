@@ -21,8 +21,7 @@ final class TerraConcurrencyPropagationTests: XCTestCase {
 
     await Terra.withInferenceSpan(request) { _ in
       async let child: Void = Terra.withToolExecutionSpan(
-        tool: .init(name: "search"),
-        call: .init(id: "call-1")
+        tool: .init(name: "search", callID: "call-1")
       ) { _ in
         // no-op
       }
@@ -51,8 +50,7 @@ final class TerraConcurrencyPropagationTests: XCTestCase {
     await Terra.withInferenceSpan(request) { _ in
       let task = Task.detached {
         await Terra.withToolExecutionSpan(
-          tool: .init(name: "search"),
-          call: .init(id: "call-1")
+          tool: .init(name: "search", callID: "call-1")
         ) { _ in }
       }
       await task.value
@@ -77,7 +75,7 @@ final class TerraConcurrencyPropagationTests: XCTestCase {
     let request = Terra.InferenceRequest(model: "local/llama-3.2-1b", prompt: "hi")
 
     await Terra.withInferenceSpan(request) { _ in }
-    await Terra.withToolExecutionSpan(tool: .init(name: "search"), call: .init(id: "call-1")) { _ in }
+    await Terra.withToolExecutionSpan(tool: .init(name: "search", callID: "call-1")) { _ in }
 
     let spans = support.finishedSpans()
     XCTAssertEqual(spans.count, 2)

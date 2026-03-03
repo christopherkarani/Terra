@@ -24,13 +24,14 @@ import Terra
 // One line. Every CoreML prediction and HTTP AI API call is now traced.
 try Terra.start()
 
-// Configure with options:
-// try Terra.start(.init(
-//   privacy: .init(contentPolicy: .never),
-//   instrumentations: [.coreML, .httpAIAPIs],
-//   aiAPIHosts: HTTPAIInstrumentation.defaultAIHosts,
-//   excludedCoreMLModels: ["background_removal_model"]
-// ))
+// Configure with presets:
+// try Terra.start(.init(preset: .production))
+//
+// Or customize:
+// var config = Terra.Configuration()
+// config.enableLogs = true
+// config.profiling.enableMemoryProfiler = true
+// try Terra.start(config)
 
 // ──────────────────────────────────────────────
 // Tier 2: @Traced Annotation (import TerraTracedMacro)
@@ -41,7 +42,7 @@ try Terra.start()
 //   try await mlxContainer.generate(prompt: prompt, maxTokens: maxTokens)
 // }
 // The macro auto-detects `prompt` and `maxTokens` parameters and wraps
-// the function body in Terra.withInferenceSpan(...).
+// the function body in Terra.inference(...).execute { ... }.
 
 // ──────────────────────────────────────────────
 // Tier 3: TerraMLX Closure (import TerraMLX)

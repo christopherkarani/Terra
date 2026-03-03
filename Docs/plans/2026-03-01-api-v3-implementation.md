@@ -4,11 +4,36 @@
 
 **Goal:** Rewrite Terra's public API surface for agent-first developer experience: closure-first spans, simplified privacy, expanded macros, Foundation Models drop-in session.
 
-**Architecture:** Bottom-up implementation. Start with privacy and constants (no dependencies), then trace protocol, then closure-first factories, then builder escape hatch, then macros, then Foundation Models. Each phase is independently testable and commitable.
+**Architecture:** Migration-safe bottom-up implementation. Start with build guardrails and compatibility policy, then privacy/config foundations, trace protocol extraction, closure-first overloads, builder terminal migration, macros, and Foundation Models. Keep package builds green at every phase boundary.
 
 **Tech Stack:** Swift 5.9+, SwiftSyntax 600+, OpenTelemetry Swift Core 2.3+, swift-testing
 
 **Reference:** `docs/plans/2026-03-01-api-v3-design.md` for full API specification.
+
+---
+
+## Phase 0: Migration Safety Guardrails
+
+### Task 0.1: Make New `TerraTests` Macros Compile
+
+**Files:**
+- Modify: `Package.swift`
+
+Add `.product(name: "Testing", package: "swift-testing")` to the `TerraTests` target dependencies before adding any new `import Testing` tests in that target.
+
+**Commit:**
+```bash
+git add Package.swift
+git commit -m "build: add swift-testing dependency to TerraTests target"
+```
+
+### Task 0.2: Compatibility Window Policy
+
+Before API renames, define rollout rules in this plan and follow them in code:
+1. Add new API first.
+2. Keep old API as deprecated forwarders.
+3. Migrate internal call sites (all targets + tests + examples + macros).
+4. Remove deprecated API only in a later major release.
 
 ---
 
@@ -19,6 +44,8 @@
 **Files:**
 - Create: `Sources/Terra/Terra+PrivacyV3.swift`
 - Test: `Tests/TerraTests/TerraPrivacyV3Tests.swift`
+
+**Important sequencing note:** this task must not reference `Terra.Configuration`; configuration is introduced in Task 1.2.
 
 **Step 1: Write the failing test**
 
@@ -31,12 +58,6 @@ import Testing
 func privacyEnumCases() {
     let policies: [Terra.PrivacyPolicy] = [.redacted, .lengthOnly, .capturing, .silent]
     #expect(policies.count == 4)
-}
-
-@Test("Privacy.redacted is the default")
-func redactedIsDefault() {
-    let config = Terra.Configuration()
-    #expect(config.privacy == .redacted)
 }
 
 @Test("Privacy.shouldCapture returns correct values")
@@ -65,32 +86,23 @@ Expected: FAIL — `PrivacyPolicy` type not found
 // Sources/Terra/Terra+PrivacyV3.swift
 extension Terra {
     public enum PrivacyPolicy: String, Sendable, Hashable {
-        /// Default. Content hashed with HMAC-SHA256. Privacy-first.
         case redacted
-        /// Only capture string lengths. No content or hashes.
         case lengthOnly
-        /// Full content capture. Use for development/debugging.
         case capturing
-        /// Drop all content. Spans have structure only.
         case silent
 
-        /// Whether this policy captures content by default.
-        public var shouldCapture: Bool {
-            self == .capturing
-        }
+        public var shouldCapture: Bool { self == .capturing }
 
-        /// Whether content should be captured, considering per-call override.
         public func shouldCapture(includeContent: Bool) -> Bool {
             if self == .silent { return false }
             return includeContent || self == .capturing
         }
 
-        /// The redaction strategy implied by this policy.
         var redactionStrategy: RedactionStrategy {
             switch self {
             case .redacted: return .hashHMACSHA256
             case .lengthOnly: return .lengthOnly
-            case .capturing: return .hashHMACSHA256 // Still hash, but also capture raw
+            case .capturing: return .hashHMACSHA256
             case .silent: return .drop
             }
         }
@@ -112,23 +124,24 @@ git commit -m "feat: add PrivacyPolicy enum for v3 simplified privacy"
 
 ---
 
-### Task 1.2: Flattened Configuration Struct
+### Task 1.2: Flattened Configuration Struct (Terra Target, No Cross-Module Collision)
 
 **Files:**
-- Create: `Sources/Terra/Terra+ConfigurationV3.swift`
-- Test: `Tests/TerraTests/TerraConfigurationV3Tests.swift`
+- Modify: `Sources/TerraAutoInstrument/Terra+Start.swift`
+- Test: `Tests/TerraAutoInstrumentTests/TerraConfigurationV3Tests.swift`
+
+**Rationale:** `Instrumentations` and `start(...)` live in the `Terra` target, so v3 setup configuration must be introduced there first. Do not add another `Terra.Configuration` in `TerraCore`.
 
 **Step 1: Write the failing test**
 
 ```swift
-// Tests/TerraTests/TerraConfigurationV3Tests.swift
+// Tests/TerraAutoInstrumentTests/TerraConfigurationV3Tests.swift
 import Testing
-import Foundation
-@testable import TerraCore
+import Terra
 
-@Test("Configuration has sensible defaults")
+@Test("V3Configuration has sensible defaults")
 func configurationDefaults() {
-    let config = Terra.Configuration()
+    let config = Terra.V3Configuration()
     #expect(config.privacy == .redacted)
     #expect(config.serviceName == nil)
     #expect(config.samplingRatio == nil)
@@ -139,57 +152,33 @@ func configurationDefaults() {
 
 @Test("Preset.quickstart creates correct configuration")
 func quickstartPreset() {
-    let config = Terra.Configuration(preset: .quickstart)
+    let config = Terra.V3Configuration(preset: .quickstart)
     #expect(config.privacy == .redacted)
     #expect(config.persistence == nil)
 }
 
 @Test("Preset.production enables persistence")
 func productionPreset() {
-    let config = Terra.Configuration(preset: .production)
-    #expect(config.persistence != nil)
-}
-
-@Test("Configuration supports builder-style overrides")
-func configurationOverrides() {
-    var config = Terra.Configuration(preset: .production)
-    config.privacy = .capturing
-    #expect(config.privacy == .capturing)
+    let config = Terra.V3Configuration(preset: .production)
     #expect(config.persistence != nil)
 }
 ```
 
 **Step 2: Run test to verify it fails**
 
-Run: `swift test --filter TerraTests.TerraConfigurationV3Tests`
-Expected: FAIL — `Terra.Configuration` type not found
+Run: `swift test --filter TerraAutoInstrumentTests.TerraConfigurationV3Tests`
+Expected: FAIL — `Terra.V3Configuration` type not found
 
 **Step 3: Write minimal implementation**
 
 ```swift
-// Sources/Terra/Terra+ConfigurationV3.swift
-import Foundation
-
+// Sources/TerraAutoInstrument/Terra+Start.swift
 extension Terra {
-    public enum Preset: Sendable {
-        /// Local development. Traces to localhost:4318. No persistence.
-        case quickstart
-        /// Production. On-device persistence. Privacy-first defaults.
-        case production
-        /// Full diagnostics: logs, memory/GPU profiling, OpenClaw.
-        case diagnostics
-    }
-
-    public struct Configuration: Sendable {
-        // Essential
-        public var privacy: PrivacyPolicy = .redacted
-        public var endpoint: URL = URL(string: "http://127.0.0.1:4318")!
+    public struct V3Configuration: Sendable {
+        public var privacy: Terra.PrivacyPolicy = .redacted
+        public var endpoint: URL = .init(string: "http://127.0.0.1:4318")!
         public var serviceName: String? = nil
-
-        // Instruments
         public var instrumentations: Instrumentations = .all
-
-        // Advanced
         public var serviceVersion: String? = nil
         public var anonymizationKey: Data? = nil
         public var samplingRatio: Double? = nil
@@ -199,33 +188,21 @@ extension Terra {
         public var enableSessions: Bool = true
         public var resourceAttributes: [String: String] = [:]
 
-        public init() {}
-
-        public init(preset: Preset) {
-            switch preset {
-            case .quickstart:
-                break // defaults are quickstart
-            case .production:
-                self.persistence = PersistenceConfiguration()
-            case .diagnostics:
-                self.persistence = PersistenceConfiguration()
-                // diagnostics enables additional profiling
-            }
-        }
+        public init(preset: Preset = .quickstart) { /* map presets */ }
     }
 }
 ```
 
 **Step 4: Run tests**
 
-Run: `swift test --filter TerraTests.TerraConfigurationV3Tests`
+Run: `swift test --filter TerraAutoInstrumentTests.TerraConfigurationV3Tests`
 Expected: PASS
 
 **Step 5: Commit**
 
 ```bash
-git add Sources/Terra/Terra+ConfigurationV3.swift Tests/TerraTests/TerraConfigurationV3Tests.swift
-git commit -m "feat: add flat Configuration struct with Preset enum"
+git add Sources/TerraAutoInstrument/Terra+Start.swift Tests/TerraAutoInstrumentTests/TerraConfigurationV3Tests.swift
+git commit -m "feat: add v3 setup configuration in Terra target"
 ```
 
 ---
@@ -236,247 +213,43 @@ git commit -m "feat: add flat Configuration struct with Preset enum"
 
 **Files:**
 - Create: `Sources/Terra/Terra+TraceProtocol.swift`
+- Modify: `Sources/Terra/Terra+FluentAPI.swift`
 - Test: `Tests/TerraTests/TerraTraceProtocolTests.swift`
+
+**Implementation rules (must-follow):**
+1. Do not redeclare `InferenceTrace`, `StreamingTrace`, `AgentTrace`, `ToolTrace`, `EmbeddingTrace`, or `SafetyCheckTrace`.
+2. Move existing trace type declarations out of `Terra+FluentAPI.swift` into `Terra+TraceProtocol.swift`, then make them conform to `Trace`.
+3. Keep behavior identical while extracting (no semantic changes in this task).
 
 **Step 1: Write the failing test**
 
-```swift
-// Tests/TerraTests/TerraTraceProtocolTests.swift
-import Testing
-import OpenTelemetryApi
-@testable import TerraCore
-
-@Test("InferenceTrace conforms to Trace protocol")
-func inferenceTraceConformsToTrace() {
-    let support = TerraTestSupport()
-    let tracer = support.tracerProvider.get(instrumentationName: "test")
-    let span = tracer.spanBuilder(spanName: "test").startSpan()
-
-    let trace = Terra.InferenceTrace(span: span)
-    // Should be able to call protocol methods
-    trace.event("test_event")
-    trace.attribute("key", "value")
-    span.end()
-
-    let spans = support.finishedSpans()
-    #expect(spans.count == 1)
-    #expect(spans[0].events.contains { $0.name == "test_event" })
-}
-
-@Test("InferenceTrace supports typed tokens method")
-func inferenceTraceTokens() {
-    let support = TerraTestSupport()
-    let tracer = support.tracerProvider.get(instrumentationName: "test")
-    let span = tracer.spanBuilder(spanName: "test").startSpan()
-
-    let trace = Terra.InferenceTrace(span: span)
-    trace.tokens(input: 50, output: 100)
-    span.end()
-
-    let spans = support.finishedSpans()
-    let attrs = spans[0].attributes
-    #expect(attrs["gen_ai.usage.input_tokens"]?.description == "50")
-    #expect(attrs["gen_ai.usage.output_tokens"]?.description == "100")
-}
-
-@Test("StreamingTrace supports chunk method")
-func streamingTraceChunk() {
-    let support = TerraTestSupport()
-    let tracer = support.tracerProvider.get(instrumentationName: "test")
-    let span = tracer.spanBuilder(spanName: "test").startSpan()
-
-    let trace = Terra.StreamingTrace(span: span)
-    trace.chunk(tokens: 5)
-    trace.chunk(tokens: 3)
-    span.end()
-
-    let spans = support.finishedSpans()
-    #expect(spans[0].attributes["terra.stream.output_tokens"]?.description == "8")
-    #expect(spans[0].attributes["terra.stream.chunk_count"]?.description == "2")
-}
-```
+Add tests that validate conformance and existing behavior (events/attributes/tokens/chunk accounting), but instantiate traces through existing runtime paths rather than inventing new constructors.
 
 **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter TerraTests.TerraTraceProtocolTests`
-Expected: FAIL — `Trace` protocol not found
+Expected: FAIL — `Trace` protocol conformance not yet wired
 
-**Step 3: Write minimal implementation**
+**Step 3: Implement**
 
 ```swift
 // Sources/Terra/Terra+TraceProtocol.swift
 import OpenTelemetryApi
 
 extension Terra {
-
-    // MARK: - Trace Protocol
-
     public protocol Trace: Sendable {
-        var span: any Span { get }
         @discardableResult func event(_ name: String) -> Self
-        @discardableResult func attribute(_ key: String, _ value: String) -> Self
-        @discardableResult func attribute(_ key: String, _ value: Int) -> Self
-        @discardableResult func attribute(_ key: String, _ value: Double) -> Self
-        @discardableResult func attribute(_ key: String, _ value: Bool) -> Self
+        @discardableResult func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self
+        @discardableResult func emit<E: TerraEvent>(_ event: E) -> Self
         func recordError(_ error: any Error)
     }
-
-    // MARK: - InferenceTrace
-
-    public struct InferenceTrace: Trace {
-        public let span: any Span
-
-        public init(span: any Span) { self.span = span }
-
-        @discardableResult public func event(_ name: String) -> Self {
-            span.addEvent(name: name); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: String) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: Int) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: Double) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: Bool) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        public func recordError(_ error: any Error) {
-            span.addEvent(name: "exception", attributes: [
-                "exception.type": .string(String(describing: type(of: error))),
-                "exception.message": .string(error.localizedDescription)
-            ])
-            span.status = .error(description: error.localizedDescription)
-        }
-
-        // Inference-specific
-        @discardableResult public func tokens(input: Int? = nil, output: Int? = nil) -> Self {
-            if let input { span.setAttribute(key: "gen_ai.usage.input_tokens", value: input) }
-            if let output { span.setAttribute(key: "gen_ai.usage.output_tokens", value: output) }
-            return self
-        }
-        @discardableResult public func responseModel(_ value: String) -> Self {
-            span.setAttribute(key: "gen_ai.response.model", value: value); return self
-        }
-    }
-
-    // MARK: - StreamingTrace
-
-    public final class StreamingTrace: @unchecked Sendable, Trace {
-        public let span: any Span
-        private let lock = NSLock()
-        private var outputTokenCount: Int = 0
-        private var chunkCount: Int = 0
-        private var firstChunkTime: ContinuousClock.Instant?
-        private let startTime: ContinuousClock.Instant
-
-        public init(span: any Span) {
-            self.span = span
-            self.startTime = .now
-        }
-
-        @discardableResult public func event(_ name: String) -> Self {
-            span.addEvent(name: name); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: String) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: Int) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: Double) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: Bool) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        public func recordError(_ error: any Error) {
-            span.addEvent(name: "exception", attributes: [
-                "exception.type": .string(String(describing: type(of: error))),
-                "exception.message": .string(error.localizedDescription)
-            ])
-            span.status = .error(description: error.localizedDescription)
-        }
-
-        // Streaming-specific
-        @discardableResult public func chunk(tokens: Int = 1) -> Self {
-            lock.withLock {
-                if firstChunkTime == nil { firstChunkTime = .now }
-                chunkCount += 1
-                outputTokenCount += tokens
-            }
-            span.setAttribute(key: "terra.stream.output_tokens", value: outputTokenCount)
-            span.setAttribute(key: "terra.stream.chunk_count", value: chunkCount)
-            return self
-        }
-
-        @discardableResult public func outputTokens(_ total: Int) -> Self {
-            lock.withLock { outputTokenCount = total }
-            span.setAttribute(key: "terra.stream.output_tokens", value: total)
-            return self
-        }
-
-        @discardableResult public func firstToken() -> Self {
-            lock.withLock { if firstChunkTime == nil { firstChunkTime = .now } }
-            return self
-        }
-
-        func finish() {
-            lock.withLock {
-                if let ttft = firstChunkTime {
-                    let ms = Double(startTime.duration(to: ttft).components.attoseconds) / 1e15
-                    span.setAttribute(key: "terra.stream.time_to_first_token_ms", value: ms)
-                }
-                if outputTokenCount > 0, let ttft = firstChunkTime {
-                    let totalSec = Double(ttft.duration(to: .now).components.attoseconds) / 1e18
-                    if totalSec > 0 {
-                        span.setAttribute(key: "terra.stream.tokens_per_second",
-                                          value: Double(outputTokenCount) / totalSec)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Simple Traces (protocol only, no extra methods)
-
-    public struct AgentTrace: Trace {
-        public let span: any Span
-        public init(span: any Span) { self.span = span }
-        @discardableResult public func event(_ name: String) -> Self {
-            span.addEvent(name: name); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: String) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: Int) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: Double) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        @discardableResult public func attribute(_ key: String, _ value: Bool) -> Self {
-            span.setAttribute(key: key, value: value); return self
-        }
-        public func recordError(_ error: any Error) {
-            span.addEvent(name: "exception", attributes: [
-                "exception.type": .string(String(describing: type(of: error))),
-                "exception.message": .string(error.localizedDescription)
-            ])
-            span.status = .error(description: error.localizedDescription)
-        }
-    }
-
-    // ToolTrace, EmbeddingTrace, SafetyCheckTrace follow the same pattern as AgentTrace
-    public struct ToolTrace: Trace { /* same as AgentTrace */ }
-    public struct EmbeddingTrace: Trace { /* same as AgentTrace */ }
-    public struct SafetyCheckTrace: Trace { /* same as AgentTrace */ }
 }
 ```
 
-> **Note:** The ToolTrace, EmbeddingTrace, SafetyCheckTrace implementations are identical to AgentTrace. Use copy-paste or a shared base implementation to DRY. Consider a protocol extension with default implementations using the `span` property.
+Then:
+1. Move existing trace types from `Terra+FluentAPI.swift` into this file.
+2. Add `recordError(_:)` to each trace type by delegating to underlying scope behavior.
+3. Delete moved declarations from the original file to avoid duplicate symbol errors.
 
 **Step 4: Run tests**
 
@@ -486,8 +259,8 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add Sources/Terra/Terra+TraceProtocol.swift Tests/TerraTests/TerraTraceProtocolTests.swift
-git commit -m "feat: add Trace protocol with InferenceTrace, StreamingTrace, and simple traces"
+git add Sources/Terra/Terra+TraceProtocol.swift Sources/Terra/Terra+FluentAPI.swift Tests/TerraTests/TerraTraceProtocolTests.swift
+git commit -m "feat: introduce Trace protocol by extracting existing trace types"
 ```
 
 ---
@@ -497,134 +270,27 @@ git commit -m "feat: add Trace protocol with InferenceTrace, StreamingTrace, and
 ### Task 3.1: Inference and Agent Factories
 
 **Files:**
-- Create: `Sources/Terra/Terra+ClosureAPI.swift`
+- Modify: `Sources/Terra/Terra+FluentAPI.swift`
 - Test: `Tests/TerraTests/TerraClosureAPITests.swift`
 
-**Step 1: Write the failing test**
+**Step 1: Write failing tests**
 
-```swift
-// Tests/TerraTests/TerraClosureAPITests.swift
-import Testing
-@testable import TerraCore
-
-@Test("Terra.inference creates span with model attribute")
-func inferenceCreatesSpan() async throws {
-    let support = TerraTestSupport()
-
-    let result = try await Terra.inference(model: "gpt-4") {
-        "hello"
-    }
-
-    #expect(result == "hello")
-    let spans = support.finishedSpans()
-    #expect(spans.count == 1)
-    #expect(spans[0].name == "gen_ai.inference")
-    #expect(spans[0].attributes["gen_ai.request.model"]?.description == "gpt-4")
-}
-
-@Test("Terra.inference with trace context allows token recording")
-func inferenceWithTraceContext() async throws {
-    let support = TerraTestSupport()
-
-    try await Terra.inference(model: "gpt-4") { (trace: Terra.InferenceTrace) in
-        trace.tokens(input: 50, output: 100)
-    }
-
-    let spans = support.finishedSpans()
-    #expect(spans[0].attributes["gen_ai.usage.input_tokens"]?.description == "50")
-    #expect(spans[0].attributes["gen_ai.usage.output_tokens"]?.description == "100")
-}
-
-@Test("Terra.inference auto-records errors")
-func inferenceAutoRecordsErrors() async throws {
-    let support = TerraTestSupport()
-
-    do {
-        try await Terra.inference(model: "gpt-4") {
-            throw TestError.simulated
-        }
-    } catch {}
-
-    let spans = support.finishedSpans()
-    #expect(spans[0].status == .error(description: "simulated"))
-    #expect(spans[0].events.contains { $0.name == "exception" })
-}
-
-@Test("Terra.inference with metadata parameters")
-func inferenceWithMetadata() async throws {
-    let support = TerraTestSupport()
-
-    try await Terra.inference(
-        model: "gpt-4",
-        prompt: "Hello",
-        provider: "openai",
-        temperature: 0.7
-    ) {
-        // body
-    }
-
-    let spans = support.finishedSpans()
-    #expect(spans[0].attributes["gen_ai.provider.name"]?.description == "openai")
-    #expect(spans[0].attributes["gen_ai.request.temperature"]?.description == "0.7")
-}
-
-@Test("Terra.agent creates agent span with name")
-func agentCreatesSpan() async throws {
-    let support = TerraTestSupport()
-
-    try await Terra.agent(name: "ResearchAgent") {
-        // agent body
-    }
-
-    let spans = support.finishedSpans()
-    #expect(spans[0].name == "gen_ai.agent")
-    #expect(spans[0].attributes["gen_ai.agent.name"]?.description == "ResearchAgent")
-}
-
-@Test("Nested spans create parent-child relationships")
-func nestedSpansCreateTree() async throws {
-    let support = TerraTestSupport()
-
-    try await Terra.agent(name: "MyAgent") {
-        try await Terra.inference(model: "gpt-4") {
-            // inner body
-        }
-    }
-
-    let spans = support.finishedSpans()
-    #expect(spans.count == 2)
-    // The inference span should be a child of the agent span
-    let inferenceSpan = spans.first { $0.name == "gen_ai.inference" }!
-    let agentSpan = spans.first { $0.name == "gen_ai.agent" }!
-    #expect(inferenceSpan.parentSpanId == agentSpan.spanId)
-}
-
-enum TestError: Error, CustomStringConvertible {
-    case simulated
-    var description: String { "simulated" }
-}
-```
+Add tests for both overloads of `inference` and `agent`:
+1. No-trace closure overload.
+2. Trace-parameter overload.
+3. Parent-child nesting correctness.
+4. Cancellation behavior (`CancellationError` is rethrown and not recorded as failure).
 
 **Step 2: Run test to verify it fails**
 
 Run: `swift test --filter TerraTests.TerraClosureAPITests`
-Expected: FAIL — closure-first factory methods not found
+Expected: FAIL — closure-first overloads not found
 
-**Step 3: Write minimal implementation**
+**Step 3: Implement via delegation (do not reimplement raw OTel plumbing)**
 
 ```swift
-// Sources/Terra/Terra+ClosureAPI.swift
-import OpenTelemetryApi
-
+// Sources/Terra/Terra+FluentAPI.swift
 extension Terra {
-
-    // MARK: - Inference
-
-    /// Trace an LLM inference call.
-    ///
-    ///     let response = try await Terra.inference(model: "gpt-4") {
-    ///         try await llm.generate("Hello")
-    ///     }
     @discardableResult
     public static func inference<R>(
         model: String,
@@ -635,33 +301,18 @@ extension Terra {
         maxOutputTokens: Int? = nil,
         _ body: @Sendable () async throws -> R
     ) async rethrows -> R {
-        let tracer = currentTracer()
-        let span = tracer.spanBuilder(spanName: SpanNames.inference).startSpan()
-        span.setAttribute(key: "gen_ai.operation.name", value: "inference")
-        span.setAttribute(key: "gen_ai.request.model", value: model)
-        if let prompt { applyPrompt(prompt, to: span) }
-        if let provider { span.setAttribute(key: "gen_ai.provider.name", value: provider) }
-        if let runtime { span.setAttribute(key: "terra.runtime", value: runtime) }
-        if let temperature { span.setAttribute(key: "gen_ai.request.temperature", value: temperature) }
-        if let maxOutputTokens { span.setAttribute(key: "gen_ai.request.max_tokens", value: maxOutputTokens) }
-
-        do {
-            let result = try await OpenTelemetry.instance.contextProvider
-                .withSpan(span) { try await body() }
-            span.end()
-            return result
-        } catch {
-            span.addEvent(name: "exception", attributes: [
-                "exception.type": .string(String(describing: type(of: error))),
-                "exception.message": .string(error.localizedDescription)
-            ])
-            span.status = .error(description: error.localizedDescription)
-            span.end()
-            throw error
+        try await inference(
+            model: model,
+            prompt: prompt,
+            provider: provider,
+            runtime: runtime,
+            temperature: temperature,
+            maxOutputTokens: maxOutputTokens
+        ) { _ in
+            try await body()
         }
     }
 
-    /// Trace an LLM inference call with trace context access.
     @discardableResult
     public static func inference<R>(
         model: String,
@@ -672,78 +323,18 @@ extension Terra {
         maxOutputTokens: Int? = nil,
         _ body: @Sendable (InferenceTrace) async throws -> R
     ) async rethrows -> R {
-        let tracer = currentTracer()
-        let span = tracer.spanBuilder(spanName: SpanNames.inference).startSpan()
-        span.setAttribute(key: "gen_ai.operation.name", value: "inference")
-        span.setAttribute(key: "gen_ai.request.model", value: model)
-        if let prompt { applyPrompt(prompt, to: span) }
-        if let provider { span.setAttribute(key: "gen_ai.provider.name", value: provider) }
-        if let runtime { span.setAttribute(key: "terra.runtime", value: runtime) }
-        if let temperature { span.setAttribute(key: "gen_ai.request.temperature", value: temperature) }
-        if let maxOutputTokens { span.setAttribute(key: "gen_ai.request.max_tokens", value: maxOutputTokens) }
-
-        let trace = InferenceTrace(span: span)
-        do {
-            let result = try await OpenTelemetry.instance.contextProvider
-                .withSpan(span) { try await body(trace) }
-            span.end()
-            return result
-        } catch {
-            trace.recordError(error)
-            span.end()
-            throw error
-        }
-    }
-
-    // MARK: - Agent
-
-    /// Trace an agent invocation.
-    @discardableResult
-    public static func agent<R>(
-        name: String,
-        id: String? = nil,
-        provider: String? = nil,
-        _ body: @Sendable () async throws -> R
-    ) async rethrows -> R {
-        let tracer = currentTracer()
-        let span = tracer.spanBuilder(spanName: SpanNames.agentInvocation).startSpan()
-        span.setAttribute(key: "gen_ai.operation.name", value: "invoke_agent")
-        span.setAttribute(key: "gen_ai.agent.name", value: name)
-        if let id { span.setAttribute(key: "gen_ai.agent.id", value: id) }
-        if let provider { span.setAttribute(key: "gen_ai.provider.name", value: provider) }
-
-        do {
-            let result = try await OpenTelemetry.instance.contextProvider
-                .withSpan(span) { try await body() }
-            span.end()
-            return result
-        } catch {
-            span.addEvent(name: "exception", attributes: [
-                "exception.type": .string(String(describing: type(of: error))),
-                "exception.message": .string(error.localizedDescription)
-            ])
-            span.status = .error(description: error.localizedDescription)
-            span.end()
-            throw error
-        }
-    }
-
-    // MARK: - Helpers
-
-    private static func currentTracer() -> any TracerBuilder {
-        OpenTelemetry.instance.tracerProvider
-            .get(instrumentationName: instrumentationName,
-                 instrumentationVersion: instrumentationVersion)
-    }
-
-    private static func applyPrompt(_ prompt: String, to span: any Span) {
-        // Respect privacy policy — implementation delegates to runtime privacy config
-        span.setAttribute(key: "terra.prompt.length", value: prompt.count)
+        var call = inference(model: model, prompt: prompt)
+        if let provider { call = call.provider(provider) }
+        if let runtime { call = call.runtime(runtime) }
+        if let temperature { call = call.temperature(temperature) }
+        if let maxOutputTokens { call = call.maxOutputTokens(maxOutputTokens) }
+        return try await call.run(body)
     }
 }
 ```
 
-> **Note:** Implement remaining factories (stream, tool, embedding, safetyCheck) following the same pattern. Each is a straightforward copy with different span name, operation name, and attribute keys.
+Apply the same delegation pattern for `agent` overloads. This preserves existing privacy redaction, metrics, enrichment attributes, and `CancellationError` handling.
+Phase 5 will introduce `.execute` and keep `.run` as a deprecated forwarder.
 
 **Step 4: Run tests**
 
@@ -753,8 +344,8 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add Sources/Terra/Terra+ClosureAPI.swift Tests/TerraTests/TerraClosureAPITests.swift
-git commit -m "feat: add closure-first inference and agent factories with auto error recording"
+git add Sources/Terra/Terra+FluentAPI.swift Tests/TerraTests/TerraClosureAPITests.swift
+git commit -m "feat: add closure-first inference and agent factories"
 ```
 
 ---
@@ -762,10 +353,10 @@ git commit -m "feat: add closure-first inference and agent factories with auto e
 ### Task 3.2: Remaining Factories (stream, tool, embedding, safetyCheck)
 
 **Files:**
-- Modify: `Sources/Terra/Terra+ClosureAPI.swift`
+- Modify: `Sources/Terra/Terra+FluentAPI.swift`
 - Test: `Tests/TerraTests/TerraClosureAPITests.swift` (add more tests)
 
-Follow the same pattern as Task 3.1 for each factory. Key differences:
+Follow the same delegation pattern as Task 3.1 for each factory. Key differences:
 
 | Factory | Span name | Operation name | Required params | Trace type |
 |---------|-----------|---------------|----------------|------------|
@@ -779,6 +370,7 @@ Follow the same pattern as Task 3.1 for each factory. Key differences:
 2. Auto-records errors
 3. Returns body result
 4. With trace context overload
+5. Cancellation is not marked as span failure
 
 **Commit after each factory is green:**
 ```bash
@@ -832,6 +424,10 @@ extension Terra {
 }
 ```
 
+**Step 4: Compatibility aliases**
+
+Keep existing `Terra.Keys.*` available during migration. Add deprecated aliases from old constants to `Terra.Key.*` as needed so external and internal call sites do not break in the same release.
+
 **Commit:**
 ```bash
 git commit -m "feat: add flattened Terra.Key typed attribute constants"
@@ -846,18 +442,25 @@ git commit -m "feat: add flattened Terra.Key typed attribute constants"
 **Files:**
 - Modify: `Sources/Terra/Terra+FluentAPI.swift`
 - Modify: `Tests/TerraTests/TerraFluentAPITests.swift`
+- Modify: `Sources/TerraFoundationModels/TerraTracedSession.swift`
+- Modify: `Sources/TerraMLX/TerraMLX.swift`
+- Modify: `Sources/TerraLlama/TerraLlama.swift`
+- Modify: `Sources/TerraTracedMacroPlugin/TracedMacro.swift`
+- Modify: `Tests/TerraTracedMacroTests/TracedMacroExpansionTests.swift`
 
-**Step 1:** Rename `.run {}` to `.execute {}` on all Call types (InferenceCall, StreamingCall, etc.)
+**Step 1:** Add `.execute {}` on all Call types (InferenceCall, StreamingCall, etc.) as the new preferred terminal.
 
-**Step 2:** Update fluent builders to delegate to closure-first factories instead of internal `withSpan` methods.
+**Step 2:** Keep `.run {}` as a deprecated forwarder to `.execute {}` for migration safety.
 
-**Step 3:** Add `.includeContent()` method replacing `.capture(CaptureIntent)`.
+**Step 3:** Add `.includeContent()` and keep `.capture(CaptureIntent)` as a deprecated compatibility wrapper.
 
-**Step 4:** Run existing fluent API tests (updated for new method names).
+**Step 4:** Migrate all internal call sites to `.execute {}` (core targets, macros, examples, tests). No mixed-state commits.
+
+**Step 5:** Run fluent API + macro + module tests after migration.
 
 **Commit:**
 ```bash
-git commit -m "refactor: rename .run to .execute, add .includeContent on builders"
+git commit -m "refactor: add .execute terminal and compatibility shims for .run/.capture"
 ```
 
 ---
@@ -886,12 +489,7 @@ func agentMacroExpansion() {
         expandedSource: """
         func research(topic: String) async throws -> Report {
             return try await Terra.agent(name: "ResearchAgent") { trace in
-                do {
-                    return try await doResearch(topic)
-                } catch {
-                    trace.recordError(error)
-                    throw error
-                }
+                return try await doResearch(topic)
             }
         }
         """,
@@ -911,12 +509,7 @@ func toolMacroExpansion() {
         expandedSource: """
         func search(query: String) async throws -> [Result] {
             return try await Terra.tool(name: "search", callID: UUID().uuidString) { trace in
-                do {
-                    return try await doSearch(query)
-                } catch {
-                    trace.recordError(error)
-                    throw error
-                }
+                return try await doSearch(query)
             }
         }
         """,
@@ -944,7 +537,7 @@ Inspect the first argument label to determine span type:
 - `embedding:` → `Terra.embedding(...)`
 - `safety:` → `Terra.safetyCheck(...)`
 
-All expansions now include do-catch for error recording.
+**Important:** Macro expansions must NOT add their own do-catch error recording when targeting closure-first factories. Factories already record errors; double wrapping duplicates exception telemetry.
 
 **Commit:**
 ```bash
@@ -960,6 +553,7 @@ git commit -m "feat: expand @Traced macro to support agent, tool, embedding, saf
 - Test: `Tests/TerraTracedMacroTests/TracedMacroExpansionTests.swift`
 
 Add detection for: `temperature`, `provider`, `message`, `subject`, `stream` Bool.
+Also preserve current aliases (`prompt`, `input`, `query`, `text`, `maxTokens`, `maxOutputTokens`, `max_tokens`).
 
 **Commit:**
 ```bash
@@ -993,17 +587,19 @@ git commit -m "feat: add streaming macro support via @Traced(model:, streaming: 
 - Test: `Tests/TerraTests/TerraTraceableTests.swift`
 
 ```swift
-public protocol TerraTraceable {
-    var terraTokenUsage: Terra.TokenUsage? { get }
-    var terraResponseModel: String? { get }
-}
+extension Terra {
+    public protocol TerraTraceable {
+        var terraTokenUsage: TokenUsage? { get }
+        var terraResponseModel: String? { get }
+    }
 
-public struct TokenUsage: Sendable {
-    public var input: Int?
-    public var output: Int?
-    public init(input: Int? = nil, output: Int? = nil) {
-        self.input = input
-        self.output = output
+    public struct TokenUsage: Sendable {
+        public var input: Int?
+        public var output: Int?
+        public init(input: Int? = nil, output: Int? = nil) {
+            self.input = input
+            self.output = output
+        }
     }
 }
 ```
@@ -1026,6 +622,8 @@ git commit -m "feat: add TerraTraceable protocol for auto token extraction"
 - Test: `Tests/TerraTests/TerraAgentContextTests.swift`
 
 ```swift
+import Foundation
+
 extension Terra {
     @TaskLocal static var agentContext: AgentContext?
 
@@ -1046,7 +644,10 @@ extension Terra {
 }
 ```
 
-Test: Verify that `Terra.inference()` inside `Terra.agent()` registers with the agent context.
+Tests:
+1. `Terra.inference()` inside `Terra.agent()` registers with agent context.
+2. Child `Task {}` inherits context.
+3. `Task.detached` does not inherit context (explicitly document this behavior).
 
 **Commit:**
 ```bash
@@ -1070,6 +671,8 @@ Rewrite `TerraTracedSession` to use the new closure-first API and add:
 - Structured output type name tracking
 - Streaming field completion events
 
+Migration note: complete this while `.run` compatibility forwarders still exist, then switch to `.execute` in the same phase commit.
+
 > **Note:** Foundation Models tests require macOS 26+ simulator. Use `#if canImport(FoundationModels)` guards.
 
 **Commit:**
@@ -1081,16 +684,24 @@ git commit -m "feat: rewrite Terra.Session with transcript inspection and guardr
 
 ## Phase 10: Cleanup and Migration
 
-### Task 10.1: Deprecate V1 API
+### Task 10.1: Deprecate Legacy APIs with Forwarders (No Hard Break)
 
 **Files:**
 - Modify: `Sources/Terra/Terra.swift`
+- Modify: `Sources/Terra/Terra+FluentAPI.swift`
+- Modify: `Sources/TerraAutoInstrument/Terra+Start.swift`
+- Modify: `Sources/Terra/Terra+Privacy.swift`
 
-Mark all `withSpan` methods as `@available(*, deprecated, renamed:)` pointing to v3 equivalents.
+Mark legacy entry points as deprecated forwarders:
+1. `with*Span` helpers.
+2. `.run {}` terminal (forward to `.execute {}`).
+3. `.capture(CaptureIntent)` (forward to `.includeContent()`).
+4. Old startup wrappers (`enable/configure`) pointing to `start`.
+5. Legacy privacy knobs that are replaced by v3 policy API.
 
 **Commit:**
 ```bash
-git commit -m "chore: deprecate v1 withSpan methods in favor of v3 closure-first API"
+git commit -m "chore: add deprecation forwarders for legacy APIs during v3 migration"
 ```
 
 ### Task 10.2: Update Examples
@@ -1099,7 +710,7 @@ git commit -m "chore: deprecate v1 withSpan methods in favor of v3 closure-first
 - Modify: `Examples/Terra Sample/main.swift`
 - Modify: `Examples/Terra AutoInstrument/main.swift`
 
-Rewrite examples using v3 API patterns.
+Rewrite examples using v3 API patterns (`.execute`, closure-first factories, `start`).
 
 **Commit:**
 ```bash
@@ -1129,6 +740,10 @@ Expected: ALL tests pass
 
 Fix any regressions from the refactor.
 
+Additionally run targeted sweeps before full suite:
+1. `rg -n "\\.run\\s*\\{" Sources Tests Examples` should only show deprecated shim implementations (or intentionally retained docs).
+2. `rg -n "capture\\(\\.optIn|capture\\(" Sources Tests Examples` should only show deprecated compatibility coverage.
+
 **Commit:**
 ```bash
 git commit -m "fix: resolve test regressions from v3 API migration"
@@ -1140,6 +755,7 @@ git commit -m "fix: resolve test regressions from v3 API migration"
 
 | Phase | Tasks | Estimated Effort |
 |-------|-------|-----------------|
+| 0. Migration Guardrails | 2 tasks | Small |
 | 1. Privacy | 2 tasks | Small |
 | 2. Trace Protocol | 1 task | Medium |
 | 3. Closure-First Factories | 2 tasks | Medium |
@@ -1150,7 +766,7 @@ git commit -m "fix: resolve test regressions from v3 API migration"
 | 8. Agent Context | 1 task | Medium |
 | 9. Foundation Models | 1 task | Large |
 | 10. Cleanup | 4 tasks | Medium |
-| **Total** | **17 tasks** | |
+| **Total** | **19 tasks** | |
 
 ---
 

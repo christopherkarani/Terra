@@ -18,12 +18,14 @@ import OpenTelemetryApi
 import TerraCoreML
 import Terra
 
-let request = Terra.InferenceRequest(model: "coreml/com.yourorg.model@v3")
+let request = Terra.InferenceRequest.chat(model: "coreml/com.yourorg.model@v3")
 
-await Terra.withInferenceSpan(request) { scope in
+await Terra.inference(request).execute { trace in
   let config = MLModelConfiguration()
   config.computeUnits = .all
-  scope.setCoreMLAttributes(configuration: config)
+  trace
+    .runtime("coreml")
+    .attribute(.init("terra.coreml.compute_units"), "all")
 
   // ... call into Core ML
 }
@@ -43,14 +45,13 @@ Example:
 import OpenTelemetryApi
 import Terra
 
-let request = Terra.InferenceRequest(model: "mlx/local/llama-3.2-1b")
+let request = Terra.InferenceRequest.chat(model: "mlx/local/llama-3.2-1b")
 
-await Terra.withInferenceSpan(request) { scope in
-  scope.setAttributes([
-    "terra.runtime": .string("mlx"),
-    "terra.mlx.device": .string("gpu"),
-    "terra.mlx.quantization": .string("q4"),
-  ])
+await Terra.inference(request).execute { trace in
+  trace
+    .runtime("mlx")
+    .attribute(.init("terra.mlx.device"), "gpu")
+    .attribute(.init("terra.mlx.quantization"), "q4")
 
   // ... call into MLX
 }

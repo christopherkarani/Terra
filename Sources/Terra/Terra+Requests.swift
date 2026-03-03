@@ -18,7 +18,45 @@ extension Terra {
 
     public var maxOutputTokens: Int?
     public var temperature: Double?
-    public var stream: Bool?
+
+    public init(
+      model: String,
+      prompt: String? = nil,
+      promptCapture: CaptureIntent = .default,
+      maxOutputTokens: Int? = nil,
+      temperature: Double? = nil
+    ) {
+      self.model = model
+      self.prompt = prompt
+      self.promptCapture = promptCapture
+      self.maxOutputTokens = maxOutputTokens
+      self.temperature = temperature
+    }
+
+    public static func chat(model: String, prompt: String? = nil) -> Self {
+      .init(model: model, prompt: prompt)
+    }
+
+    public func maxOutputTokens(_ value: Int) -> Self {
+      var copy = self
+      copy.maxOutputTokens = value
+      return copy
+    }
+
+    public func temperature(_ value: Double) -> Self {
+      var copy = self
+      copy.temperature = value
+      return copy
+    }
+  }
+
+  public struct StreamingRequest: Sendable, Hashable {
+    public var model: String
+    public var prompt: String?
+    public var promptCapture: CaptureIntent
+    public var maxOutputTokens: Int?
+    public var temperature: Double?
+    public var expectedOutputTokens: Int?
 
     public init(
       model: String,
@@ -26,14 +64,36 @@ extension Terra {
       promptCapture: CaptureIntent = .default,
       maxOutputTokens: Int? = nil,
       temperature: Double? = nil,
-      stream: Bool? = nil
+      expectedOutputTokens: Int? = nil
     ) {
       self.model = model
       self.prompt = prompt
       self.promptCapture = promptCapture
       self.maxOutputTokens = maxOutputTokens
       self.temperature = temperature
-      self.stream = stream
+      self.expectedOutputTokens = expectedOutputTokens
+    }
+
+    public static func chat(model: String, prompt: String? = nil) -> Self {
+      .init(model: model, prompt: prompt)
+    }
+
+    public func maxOutputTokens(_ value: Int) -> Self {
+      var copy = self
+      copy.maxOutputTokens = value
+      return copy
+    }
+
+    public func temperature(_ value: Double) -> Self {
+      var copy = self
+      copy.temperature = value
+      return copy
+    }
+
+    public func expectedOutputTokens(_ value: Int) -> Self {
+      var copy = self
+      copy.expectedOutputTokens = value
+      return copy
     }
   }
 
@@ -47,7 +107,7 @@ extension Terra {
     }
   }
 
-  public struct Agent: Sendable, Hashable {
+  public struct AgentRequest: Sendable, Hashable {
     public var name: String
     public var id: String?
 
@@ -57,25 +117,19 @@ extension Terra {
     }
   }
 
-  public struct Tool: Sendable, Hashable {
+  public struct ToolRequest: Sendable, Hashable {
     public var name: String
+    public var callID: String
     public var type: String?
 
-    public init(name: String, type: String? = nil) {
+    public init(name: String, callID: String, type: String? = nil) {
       self.name = name
+      self.callID = callID
       self.type = type
     }
   }
 
-  public struct ToolCall: Sendable, Hashable {
-    public var id: String
-
-    public init(id: String) {
-      self.id = id
-    }
-  }
-
-  public struct SafetyCheck: Sendable, Hashable {
+  public struct SafetyCheckRequest: Sendable, Hashable {
     public var name: String
     public var subject: String?
     public var subjectCapture: CaptureIntent
@@ -87,4 +141,3 @@ extension Terra {
     }
   }
 }
-

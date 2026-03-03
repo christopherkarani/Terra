@@ -243,6 +243,33 @@
 - 6 concurrency stress tests in `TerraLifecycleConcurrencyTests` (concurrent install, concurrent shutdown, interleaved start/shutdown, concurrent state reads).
 - Verification: `swift test` passes all targets.
 
+## Terra API 100% Readiness Execution (Phases 4-9) - 2026-03-03
+
+- [x] Phase 4.0 preflight: fix `Terra.start()` overload ambiguity blocking test compilation.
+- [ ] Phase 4.1 verify no internal `.run {}` usage outside deprecated compatibility shims/tests.
+- [ ] Phase 4.2 verify no internal `.capture(...)` usage outside deprecated compatibility shims/tests.
+- [ ] Phase 4.3 add API parity tests across closure-first vs builder-execute for all 6 span types.
+- [ ] Phase 5.1 enforce explicit-first macro argument resolution with code comment + tests.
+- [ ] Phase 5.2 add comprehensive macro expansion matrix (20+ cases).
+- [ ] Phase 5.3 add import-minimal macro compile smoke test.
+- [ ] Phase 6.1 gate exception message capture by privacy policy in all error recording paths.
+- [ ] Phase 6.2 verify HMAC-SHA256 default coverage and keyed determinism tests.
+- [ ] Phase 6.3 add privacy audit tests across all content-emitting call paths.
+- [ ] Phase 6.4 verify OpenClaw disabled mode produces empty gateway hosts at start resolution.
+- [ ] Phase 7.1 add Foundation Models tool-call capture via transcript diff + tests.
+- [ ] Phase 7.2 add guardrail safety-check child spans + tests.
+- [ ] Phase 7.3 add generation options capture on Foundation Models inference spans + tests.
+- [ ] Phase 7.4 align MLX/Llama/FoundationModels wrapper metadata semantics + tests.
+- [ ] Phase 8.1 rewrite README for canonical v3 API onboarding.
+- [ ] Phase 8.2 add `Docs/Migration_Guide.md` (v1->v2->v3).
+- [ ] Phase 8.3 add `Docs/API_Cookbook.md` with 8 copy-paste recipes.
+- [ ] Phase 8.4 complete v3 unreleased `CHANGELOG.md` section.
+- [ ] Phase 9.1 run full RC test/build matrix and strict concurrency check.
+- [ ] Phase 9.2 deprecation sweep: annotations + forwarding + compatibility tests.
+- [ ] Phase 9.3 run consistency grep checks (`.run`, `sha256Hex`, examples usage).
+- [ ] Phase 9.4 add and complete `Docs/RC_CHECKLIST.md`.
+- [ ] Phase 9.5 final RC qualification commit.
+
 - [ ] **Phase 4: Fluent + Closure API Finalization**
 - [ ] Ensure closure-first overloads are first-class in docs and examples; builders remain advanced mode.
 - [ ] Keep `.run/.capture` deprecated shims but eliminate internal usage outside compatibility tests.
