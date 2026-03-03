@@ -32,6 +32,7 @@ public enum TerraMLX {
     )
     var call = Terra
       .inference(request)
+      .provider("mlx")
       .runtime("mlx")
       .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)
 

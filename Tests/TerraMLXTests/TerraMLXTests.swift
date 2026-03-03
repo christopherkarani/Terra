@@ -1,6 +1,6 @@
 import Testing
 import TerraMLX
-import TerraCore
+@testable import TerraCore
 import OpenTelemetryApi
 import OpenTelemetrySdk
 import InMemoryExporter
@@ -67,6 +67,19 @@ struct TerraMLXTests {
     let spans = h.finishedSpans()
     let span = try #require(spans.first)
     #expect(span.attributes[Terra.Keys.Terra.runtime]?.description == "mlx")
+  }
+
+  @Test("traced sets provider attribute to mlx")
+  func tracedSetsProviderAttribute() async throws {
+    let h = SpanTestHarness()
+    defer { h.tearDown() }
+
+    _ = try await TerraMLX.traced(model: "mlx-community/Llama-3.2-1B") {
+      "response"
+    }
+
+    let span = try #require(h.finishedSpans().first)
+    #expect(span.attributes[Terra.Keys.GenAI.providerName]?.description == "mlx")
   }
 
   @Test("traced sets terra.auto_instrumented attribute to true")

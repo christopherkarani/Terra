@@ -39,6 +39,7 @@ public enum TerraLlama {
     let request = Terra.StreamingRequest(model: model, prompt: prompt)
     return try await Terra
       .stream(request)
+      .provider("llama.cpp")
       .runtime("llama_cpp")
       .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)
       .execute { trace in
