@@ -1,14 +1,14 @@
 import Foundation
 
 extension Terra {
-  public enum SpanNames {
-    public static let inference = "gen_ai.inference"
-    public static let embedding = "gen_ai.embeddings"
-    public static let agentInvocation = "gen_ai.agent"
-    public static let toolExecution = "gen_ai.tool"
-    public static let safetyCheck = "terra.safety_check"
+  enum SpanNames {
+    static let inference = "gen_ai.inference"
+    static let embedding = "gen_ai.embeddings"
+    static let agentInvocation = "gen_ai.agent"
+    static let toolExecution = "gen_ai.tool"
+    static let safetyCheck = "terra.safety_check"
 
-    public static func isTerraSpanName(_ name: String) -> Bool {
+    static func isTerraSpanName(_ name: String) -> Bool {
       switch name {
       case inference, embedding, agentInvocation, toolExecution, safetyCheck:
         return true
@@ -18,15 +18,13 @@ extension Terra {
     }
   }
 
-  public enum MetricNames {
-    public static let inferenceCount = "terra.inference.count"
-    public static let inferenceDurationMs = "terra.inference.duration_ms"
+  enum MetricNames {
+    static let inferenceCount = "terra.inference.count"
+    static let inferenceDurationMs = "terra.inference.duration_ms"
   }
 
-  public enum OperationName: String, Sendable {
+  enum OperationName: String, Sendable {
     case inference
-    case chat
-    case textCompletion = "text_completion"
     case embeddings
     case invokeAgent = "invoke_agent"
     case executeTool = "execute_tool"

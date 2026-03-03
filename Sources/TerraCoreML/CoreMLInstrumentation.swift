@@ -189,9 +189,9 @@ public enum CoreMLInstrumentation {
     let computeUnitsLabel = model.configuration.computeUnits.terraLabel
     return OpenTelemetry.instance.tracerProvider
       .get(instrumentationName: Terra.instrumentationName)
-      .spanBuilder(spanName: Terra.SpanNames.inference)
+      .spanBuilder(spanName: "gen_ai.inference")
       .setSpanKind(spanKind: .internal)
-      .setAttribute(key: Terra.Keys.GenAI.operationName, value: Terra.OperationName.inference.rawValue)
+      .setAttribute(key: Terra.Keys.GenAI.operationName, value: "inference")
       .setAttribute(key: Terra.Keys.GenAI.requestModel, value: modelName)
       .setAttribute(key: Terra.Keys.GenAI.providerName, value: "on_device")
       .setAttribute(key: Terra.Keys.Terra.runtime, value: "coreml")

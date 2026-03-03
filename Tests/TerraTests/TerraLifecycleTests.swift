@@ -82,6 +82,38 @@ final class TerraLifecycleTests: XCTestCase {
       XCTAssertEqual(error as? Terra.InstallOpenTelemetryError, .alreadyInstalled)
     }
   }
+
+  func testShutdown_withAugmentExistingStrategy_leavesStateUninitialized() async throws {
+    // .augmentExisting borrows the existing global provider; Terra must not
+    // call shutdown() on it, but must still transition its own lifecycle state.
+    var config = minimalConfig()
+    // We can't easily verify the borrowed provider is not shut down without
+    // deeper OTel SDK inspection, so we assert the lifecycle contract:
+    // after shutdown Terra is .uninitialized and a fresh install is allowed.
+    config = Terra.OpenTelemetryConfiguration(
+      tracerProviderStrategy: .augmentExisting,
+      enableTraces: false,
+      enableMetrics: false,
+      enableLogs: false,
+      enableSignposts: false,
+      enableSessions: false,
+      otlpTracesEndpoint: URL(string: "http://127.0.0.1:14098/v1/traces")!,
+      otlpMetricsEndpoint: URL(string: "http://127.0.0.1:14098/v1/metrics")!,
+      otlpLogsEndpoint: URL(string: "http://127.0.0.1:14098/v1/logs")!
+    )
+
+    XCTAssertNoThrow(try Terra.installOpenTelemetry(config))
+    XCTAssertTrue(Terra.isRunning)
+
+    await Terra.shutdown()
+
+    XCTAssertFalse(Terra.isRunning)
+    XCTAssertEqual(Terra.lifecycleState, .uninitialized)
+
+    // Fresh install must succeed after augmentExisting shutdown
+    XCTAssertNoThrow(try Terra.installOpenTelemetry(minimalConfig(port: 14097)))
+    XCTAssertTrue(Terra.isRunning)
+  }
 }
 
 // MARK: - Helpers

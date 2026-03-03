@@ -13,6 +13,11 @@ import OpenTelemetryApi
 
 extension Terra {
   /// The lifecycle state of the Terra runtime.
+  ///
+  /// - Note: During `installOpenTelemetry()`, there is a brief window where
+  ///   `installedOpenTelemetryConfiguration` is committed but `lifecycleState`
+  ///   still reports `.uninitialized`. Do not use `lifecycleState` as a strict
+  ///   proxy for whether a configuration is active across concurrent contexts.
   public enum LifecycleState: Sendable, Equatable {
     /// Terra has not been started, or has been shut down. `Terra.start()` may be called.
     case uninitialized
@@ -80,6 +85,9 @@ final class Runtime {
     privacyValue = .default
     tracerProviderOverride = nil
     loggerProviderOverride = nil
+    let key = Runtime.loadOrCreateAnonymizationKey()
+    anonymizationKey = key
+    anonymizationKeyID = Runtime.deriveAnonymizationKeyID(from: key)
   }
 
   private init() {

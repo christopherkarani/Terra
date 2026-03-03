@@ -173,6 +173,7 @@ extension Terra {
       installedTracerProvider = nil
       installedMeterProvider = nil
       installedLogProcessor = nil
+      ownsInstalledTracerProvider = false
       throw error
     }
 
@@ -351,11 +352,16 @@ extension Terra {
   /// running is a no-op.
   ///
   /// - Note: Flush and shutdown calls are currently synchronous.
+  /// - Important: `shutdown()` may block the calling thread briefly while
+  ///   flushing telemetry to the configured exporter. Avoid calling from
+  ///   latency-sensitive or main-actor contexts in production; a future
+  ///   update will make flush fully async.
   public static func shutdown() async {
     _performShutdown()
   }
 
-  /// Synchronous shutdown core — keeps NSLock usage off the async call stack.
+  /// Synchronous shutdown core — performs all locking and I/O synchronously
+  /// with no suspension points, so the lock is never held across an await.
   private static func _performShutdown() {
     openTelemetryInstallLock.lock()
     guard installedOpenTelemetryConfiguration != nil else {
