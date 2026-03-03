@@ -154,6 +154,21 @@ final class TerraRedactionPolicyTests: XCTestCase {
     #endif
   }
 
+  func testHMACDigest_isDeterministicForSameKeyAndInput() {
+    let input = "hello"
+    let key = Data("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".utf8)
+
+    #if canImport(CryptoKit) || canImport(Crypto)
+      let digestA = Runtime.hmacSHA256Hex(input, key: key)
+      let digestB = Runtime.hmacSHA256Hex(input, key: key)
+      XCTAssertNotNil(digestA)
+      XCTAssertNotNil(digestB)
+      XCTAssertEqual(digestA, digestB)
+    #else
+      XCTAssertNil(Runtime.hmacSHA256Hex(input, key: key))
+    #endif
+  }
+
   func testSha256Hex_matchesExpectedOutput_orRequiresSha256LengthFallback() {
     let input = "hello"
     #if canImport(CryptoKit) || canImport(Crypto)
