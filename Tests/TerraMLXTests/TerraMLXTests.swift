@@ -16,7 +16,9 @@ private struct SpanTestHarness {
   let tracerProvider: TracerProviderSdk
 
   init() {
+    Terra.lockTestingIsolation()
     previousTracerProvider = OpenTelemetry.instance.tracerProvider
+    Terra.resetOpenTelemetryForTesting()
     spanExporter = InMemoryExporter()
     tracerProvider = TracerProviderSdk()
     tracerProvider.addSpanProcessor(SimpleSpanProcessor(spanExporter: spanExporter))
@@ -31,7 +33,9 @@ private struct SpanTestHarness {
   }
 
   func tearDown() {
+    Terra.resetOpenTelemetryForTesting()
     OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+    Terra.unlockTestingIsolation()
   }
 }
 

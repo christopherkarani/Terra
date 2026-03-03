@@ -1,5 +1,5 @@
 import Testing
-import TerraCore
+@testable import TerraCore
 import TerraTracedMacro
 import OpenTelemetryApi
 import OpenTelemetrySdk
@@ -11,7 +11,9 @@ private struct MacroPrivacyHarness {
   let tracerProvider: TracerProviderSdk
 
   init(privacy: Terra.Privacy) {
+    Terra.lockTestingIsolation()
     previousTracerProvider = OpenTelemetry.instance.tracerProvider
+    Terra.resetOpenTelemetryForTesting()
     spanExporter = InMemoryExporter()
     tracerProvider = TracerProviderSdk()
     tracerProvider.addSpanProcessor(SimpleSpanProcessor(spanExporter: spanExporter))
@@ -29,7 +31,9 @@ private struct MacroPrivacyHarness {
   }
 
   func tearDown() {
+    Terra.resetOpenTelemetryForTesting()
     OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+    Terra.unlockTestingIsolation()
   }
 }
 

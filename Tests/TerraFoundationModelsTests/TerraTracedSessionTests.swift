@@ -2,7 +2,7 @@ import Testing
 
 #if canImport(FoundationModels)
 import FoundationModels
-import TerraCore
+@testable import TerraCore
 @testable import TerraFoundationModels
 import OpenTelemetryApi
 import OpenTelemetrySdk
@@ -16,6 +16,7 @@ private struct SpanHarness {
 
   init() {
     previousTracerProvider = OpenTelemetry.instance.tracerProvider
+    Terra.resetOpenTelemetryForTesting()
     spanExporter = InMemoryExporter()
     tracerProvider = TracerProviderSdk()
     tracerProvider.addSpanProcessor(SimpleSpanProcessor(spanExporter: spanExporter))
@@ -29,6 +30,7 @@ private struct SpanHarness {
   }
 
   func tearDown() {
+    Terra.resetOpenTelemetryForTesting()
     OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
   }
 }

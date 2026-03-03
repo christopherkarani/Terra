@@ -8,8 +8,16 @@ import XCTest
 
 final class HTTPIntegrationTests: XCTestCase {
   func testHTTPInstrumentationCapturesRequestAndResponseGenAIAttributes() async throws {
+    Terra.lockTestingIsolation()
+    let previousTracerProvider = OpenTelemetry.instance.tracerProvider
+    Terra.resetOpenTelemetryForTesting()
     HTTPAIInstrumentation.resetForTesting()
-    defer { HTTPAIInstrumentation.resetForTesting() }
+    defer {
+      HTTPAIInstrumentation.resetForTesting()
+      Terra.resetOpenTelemetryForTesting()
+      OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+      Terra.unlockTestingIsolation()
+    }
 
     let exporter = InMemoryExporter()
     let tracerProvider = TracerProviderSdk()
