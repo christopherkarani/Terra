@@ -115,6 +115,30 @@ final class TerraInferenceSpanTests: XCTestCase {
     XCTAssertEqual(exception.attributes["exception.type"]?.description, String(reflecting: TestFailure.self))
   }
 
+  func testWithInferenceSpan_privacyRedacted_omitsExceptionMessage() async throws {
+    Terra.install(
+      .init(
+        privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256),
+        tracerProvider: support.tracerProvider,
+        registerProvidersAsGlobal: false
+      )
+    )
+
+    let request = Terra.InferenceRequest(model: "local/llama-3.2-1b", prompt: "Hello")
+
+    do {
+      try await Terra.withInferenceSpan(request) { _ in
+        throw TestFailure.secret
+      }
+      XCTFail("Expected error")
+    } catch {}
+
+    let span = try XCTUnwrap(support.finishedSpans().first)
+    let exception = try XCTUnwrap(span.events.first(where: { $0.name == "exception" }))
+    XCTAssertNil(exception.attributes["exception.message"])
+    XCTAssertEqual(exception.attributes["exception.type"]?.description, String(reflecting: TestFailure.self))
+  }
+
   func testWithInferenceSpan_privacyAlways_recordsExceptionMessage() async throws {
     Terra.install(
       .init(
