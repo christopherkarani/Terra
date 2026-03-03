@@ -328,11 +328,16 @@
 
 ## Phase 9 Review (2026-03-03)
 
-- Root cause of full-suite failures was order-dependent global state leakage: tests in `TerraMLXTests`, `TerraTracedMacroTests`, and `TerraHTTPInstrumentTests` modified global Terra/OpenTelemetry providers without the shared testing isolation protocol.
-- Fix applied: each affected harness/test now uses `Terra.lockTestingIsolation()`, `Terra.resetOpenTelemetryForTesting()`, and deterministic provider restore/unlock teardown.
-- Additional hardening: `TerraFoundationModels` span harness now resets Terra runtime before install and during teardown while the suite-level lock is held.
+- Root cause was an order-dependent lock leak across suites:
+  - `NSRecursiveLock` in `Terra.lockTestingIsolation` was thread-affine and could deadlock when async test teardown unlocked on a different thread.
+  - Multiple XCTest classes retained `TerraTestSupport` until `deinit`, so isolation ownership could persist between test methods.
+- Fix applied:
+  - switched test isolation lock to `DispatchSemaphore(value: 1)` in `Sources/Terra/Terra+OpenTelemetry.swift`.
+  - added deterministic regression test `testTestingIsolationLockSupportsAsyncThreadHop` in `Tests/TerraHTTPInstrumentTests/HTTPIntegrationTests.swift`.
+  - set `support = nil` in `tearDown()` across affected Terra test classes after `support.reset()`.
 - Verification evidence:
-  - full suite: `swift test` passed (`173` Swift Testing tests + `68` XCTest tests, `0` failures).
-  - filtered suites: `TerraTests`, `TerraAutoInstrumentTests`, `TerraTracedMacroTests`, `TerraMLXTests`, `TerraTraceKitTests`, `TerraHTTPInstrumentTests` all passed.
-  - strict concurrency: `STRICT_ERRORS=0`.
-  - command logs: `/tmp/terra-matrix-20260303-171823`.
+  - full suite: `swift test` passed (`Test run with 167 tests passed`, exit 0).
+  - filtered suites passed: `TerraTests` (`36`), `TerraAutoInstrumentTests` (`37`), `TerraTracedMacroTests` (`24`), `TerraMLXTests` (`12`), `TerraTraceKitTests` (`21`), `TerraHTTPInstrumentTests` (`20`).
+  - strict concurrency one-liner output: `STRICT_ERRORS=0`.
+  - required grep checks completed; expected zero-match checks returned exit 1 as pass condition.
+  - command logs: `/tmp/terra-rc-phase9-20260304-013833`.
