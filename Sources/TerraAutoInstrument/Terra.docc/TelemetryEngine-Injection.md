@@ -9,6 +9,7 @@ Use ``TerraCore/Terra/TelemetryEngine`` to inject deterministic execution for te
 - ``TerraCore/Terra/TraceHandle``
 
 The seam entry point is ``TerraCore/Terra/Call/run(using:_:)``.
+Engine implementers handle ``TerraCore/Terra/TelemetryEngine/run(context:attributes:_:)``.
 
 ## Minimal Mock Engine
 

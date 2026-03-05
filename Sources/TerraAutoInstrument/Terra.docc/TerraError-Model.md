@@ -30,4 +30,5 @@ do {
 }
 ```
 
-`error.code` is the branching key; `context` and `underlying` provide diagnostics.
+Use ``TerraCore/Terra/TerraError/code`` as the branching key.
+Use ``TerraCore/Terra/TerraError/context`` and ``TerraCore/Terra/TerraError/underlying`` for diagnostics.

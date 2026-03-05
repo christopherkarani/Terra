@@ -4,6 +4,8 @@ This path gets one traced call running with current canonical APIs.
 
 ## 1) Start Terra
 
+Initialize once with ``TerraCore/Terra/start(_:)``.
+
 ```swift
 import Terra
 
@@ -36,6 +38,8 @@ let answer = try await Terra
 ```
 
 ## 3) Shutdown Cleanly
+
+Flush and teardown with ``TerraCore/Terra/shutdown()``.
 
 ```swift
 await Terra.shutdown()
