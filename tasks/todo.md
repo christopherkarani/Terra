@@ -218,6 +218,45 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 - [x] Run full `swift test`.
 - [x] Add review notes and residual risks.
 
+## Terra DocC Production Pass (2026-03-05)
+
+- [x] Audit DocC pages for stale API references and unresolved symbol links.
+- [x] Rework DocC IA: landing page + 90s quickstart + beginner/intermediate/advanced progression.
+- [x] Add focused pages for typed IDs, `TerraError`, metadata builder, and protocol seams.
+- [x] Replace plain text API references with canonical DocC symbol links.
+- [x] Ensure examples are accurate for the current public API and copy-paste friendly.
+- [x] Run required validation gates:
+  - [x] `swift package clean`
+  - [x] `swift package dump-symbol-graph --skip-synthesized-members` (executed; exits non-zero on `TerraPackageTests` symbol extraction)
+  - [x] `xcrun docc convert ...`
+  - [x] `Scripts/publish_pages_with_docc.sh --no-publish` (executed; fails at same symbol-graph step)
+- [x] Commit in logical chunks (IA pass, symbol-link pass, examples pass).
+- [x] Add review notes with warnings eliminated/remaining and exact files touched.
+
+## Review
+
+- Commits:
+  - `1f9514a` — IA pass: landing page + progression + focused guides.
+  - `efa7abf` — symbol-link pass: explicit DocC symbol cross-links in prose.
+  - `e2c4129` — examples pass: reusable snippet alignment from `Examples/Terra Sample/RecipeSnippets.swift`.
+- Warnings eliminated:
+  - Removed DocC unresolved symbol warnings in touched pages by switching canonical links to `TerraCore/Terra/...`.
+  - Removed invalid technology-root-on-extension warning by converting `Terra.docc/Terra.md` to a true article root.
+- Validation outcomes:
+  - `swift package clean` ✅
+  - `swift package dump-symbol-graph --skip-synthesized-members` ⚠️ exits `1` with `Failed to emit symbol graph for 'TerraPackageTests': Couldn't load module 'TerraPackageTests'...` while still writing module symbol graphs.
+  - `xcrun docc convert ...` ✅ with zero warnings/errors in `/tmp/terra-docc-final.log`.
+  - `Scripts/publish_pages_with_docc.sh --no-publish` ⚠️ exits `1` because it runs the same symbol-graph command.
+- Exact files touched:
+  - `Sources/TerraAutoInstrument/Terra.docc/Terra.md`
+  - `Sources/TerraAutoInstrument/Terra.docc/Canonical-API.md`
+  - `Sources/TerraAutoInstrument/Terra.docc/TelemetryEngine-Injection.md`
+  - `Sources/TerraAutoInstrument/Terra.docc/Quickstart-90s.md` (new)
+  - `Sources/TerraAutoInstrument/Terra.docc/Typed-IDs.md` (new)
+  - `Sources/TerraAutoInstrument/Terra.docc/Metadata-Builder.md` (new)
+  - `Sources/TerraAutoInstrument/Terra.docc/TerraError-Model.md` (new)
+  - `tasks/todo.md`
+
 ## Review
 
 - `Package.swift` has no TraceMacApp targets/products and CI remains SwiftPM-focused.
