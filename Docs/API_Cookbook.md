@@ -97,7 +97,35 @@ let debug = try await Terra
   .run { try await llm.generate(prompt) }
 ```
 
-## 8) Macro-Based Instrumentation
+## 8) Deterministic Engine Injection for Tests
+
+```swift
+import Terra
+
+struct TestEngine: Terra.TelemetryEngine {
+  func run<R: Sendable>(
+    context: Terra.TelemetryContext,
+    attributes: [Terra.TraceAttribute],
+    _ body: @escaping @Sendable (Terra.TraceHandle) async throws -> R
+  ) async throws -> R {
+    let trace = Terra.TraceHandle(
+      onEvent: { _ in },
+      onAttribute: { _, _ in },
+      onError: { _ in }
+    )
+    return try await body(trace)
+  }
+}
+
+let result = try await Terra
+  .tool("search", callID: Terra.ToolCallID("call-1"))
+  .run(using: TestEngine()) { trace in
+    trace.event("tool.mocked")
+    return "stubbed"
+  }
+```
+
+## 9) Macro-Based Instrumentation
 
 ```swift
 import Terra

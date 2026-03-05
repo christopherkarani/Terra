@@ -152,6 +152,8 @@ static func agentRecipe(task: String) async throws -> String {
 ### Injection seams
 
 - `Terra.TelemetryEngine`
+- `Terra.TelemetryEngine.run(context:attributes:_:)`
+- `Terra.TelemetryContext.Operation` (`inference`, `streaming`, `embedding`, `agent`, `tool`, `safety`)
 
 ### Error model
 

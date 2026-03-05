@@ -628,3 +628,22 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
   - `python3 Scripts/public_symbol_count.py` ✅ (with escalation due sandbox cache restrictions)
 - Follow-up:
   - Full test run exposed cross-suite span selection nondeterminism in `TerraTracedSessionTests`; stabilized by selecting the inference span using deterministic tool metadata instead of first-match ordering.
+
+## Docs + README Seam Refresh (2026-03-05)
+
+- [x] Audit README + canonical docs for single-seam API coverage.
+- [x] Add `TelemetryEngine`/`TelemetryContext` usage examples.
+- [x] Ensure docs show `run(using: engine)` as the injection path.
+- [x] Run canonical stale-reference validation.
+
+## Review (Docs + README Seam Refresh)
+
+- [x] Summary of docs updates.
+- [x] Validation evidence.
+
+- README now keeps only the elegant beginner-first API path and links out to advanced seam/mocking docs.
+- Added explicit single-seam examples in canonical docs:
+  - `Docs/API_Cookbook.md` (deterministic engine injection recipe).
+  - `Docs/Front_Facing_API_Examples.md` (engine injection end-to-end snippet).
+  - `Docs/Front_Facing_API.md` (injection seam signatures + operation enum coverage).
+- Validation: `bash Scripts/validate_no_legacy_refs.sh` ✅

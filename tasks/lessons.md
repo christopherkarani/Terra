@@ -7,3 +7,4 @@
 ## 2026-03-05
 
 - For file edits, always use the `apply_patch` tool directly instead of invoking patch flows through shell commands.
+- Keep `README.md` beginner-first and elegant; move advanced API seams/injection patterns to detailed docs instead of front-loading them in README.

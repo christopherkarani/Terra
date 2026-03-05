@@ -80,6 +80,8 @@ let result = try await Terra
   }
 ```
 
+Advanced seams/mocking patterns are documented in [`Docs/API_Cookbook.md`](Docs/API_Cookbook.md) and [`Docs/Front_Facing_API_Examples.md`](Docs/Front_Facing_API_Examples.md).
+
 ## Configuration Persistence
 
 ```swift

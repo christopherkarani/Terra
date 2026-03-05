@@ -131,7 +131,37 @@ _ = try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: "Test").run { tr
 }
 ```
 
-## 8) `@Traced` Macro
+## 8) Engine Injection (`TelemetryEngine`)
+
+```swift
+import Terra
+
+struct RecordingEngine: Terra.TelemetryEngine {
+  func run<R: Sendable>(
+    context: Terra.TelemetryContext,
+    attributes: [Terra.TraceAttribute],
+    _ body: @escaping @Sendable (Terra.TraceHandle) async throws -> R
+  ) async throws -> R {
+    let trace = Terra.TraceHandle(
+      onEvent: { _ in },
+      onAttribute: { _, _ in },
+      onError: { _ in }
+    )
+    return try await body(trace)
+  }
+}
+
+let response = try await Terra
+  .infer(Terra.ModelID("gpt-4o-mini"), prompt: "hello")
+  .run(using: RecordingEngine()) { trace in
+    trace.event("engine.injected")
+    return "ok"
+  }
+
+_ = response
+```
+
+## 9) `@Traced` Macro
 
 ```swift
 import Terra
@@ -146,7 +176,7 @@ func generate(prompt: String) async throws -> String {
 func planner() async throws -> String { "done" }
 ```
 
-## 9) Foundation Models (`TerraFoundationModels`)
+## 10) Foundation Models (`TerraFoundationModels`)
 
 ```swift
 #if canImport(FoundationModels)
@@ -162,7 +192,7 @@ func runFoundationModels() async throws {
 #endif
 ```
 
-## 10) MLX (`TerraMLX`)
+## 11) MLX (`TerraMLX`)
 
 ```swift
 import TerraMLX
