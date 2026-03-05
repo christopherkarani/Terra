@@ -48,6 +48,30 @@ let answer = try await Terra
 await Terra.shutdown()
 ```
 
+## Reusable Examples
+
+These recipes are directly reusable from `Examples/Terra Sample/RecipeSnippets.swift`.
+
+```swift
+import Terra
+
+let results = try await Terra
+  .tool(
+    "search",
+    callID: Terra.ToolCallID("tool-call-1"),
+    type: "web_search",
+    provider: Terra.ProviderID("openai"),
+    runtime: Terra.RuntimeID("http_api")
+  )
+  .metadata {
+    Terra.event("tool.invoked")
+    Terra.attr(.init("sample.kind"), "tool")
+  }
+  .run { _ in
+    ["result for query"]
+  }
+```
+
 ## Next Guides
 
 - Typed IDs: <doc:Typed-IDs>
