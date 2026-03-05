@@ -265,6 +265,9 @@ let package = Package(
       dependencies: [
         "TerraTracedMacroPlugin",
         "TerraTracedMacro",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+        .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
         .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
       ],
