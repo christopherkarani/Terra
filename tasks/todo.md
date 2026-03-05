@@ -549,10 +549,10 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
   - [x] Ensure no canonical docs/examples use deprecated closure-first names.
   - [x] TDD: add/adjust tests asserting canonical type-first paths remain stable.
 
-- [ ] Phase B: Macro fix-it diagnostics.
-  - [ ] TDD: add macro diagnostics tests for raw string args in typed slots.
-  - [ ] Add diagnostics + fix-its for `model/provider/runtime/callID` raw string literals.
-  - [ ] Keep expansions canonical after fix-it implementation.
+- [x] Phase B: Macro fix-it diagnostics.
+  - [x] TDD: add macro diagnostics tests for raw string args in typed slots.
+  - [x] Add diagnostics + fix-its for `model/provider/runtime/callID` raw string literals.
+  - [x] Keep expansions canonical after fix-it implementation.
 
 - [ ] Phase C: Human quickstart upgrade.
   - [ ] Add a 90-second quickstart path to canonical docs.

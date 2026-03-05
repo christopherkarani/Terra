@@ -553,6 +553,126 @@ func toolMacroWrapsRuntimeStringParameter() {
   )
 }
 
+@Test("Model macro emits fix-it when model is passed as raw string")
+func modelMacroRawStringDiagnostic() {
+  assertMacroExpansion(
+    """
+    @Traced(model: "gpt-4")
+    func generate(prompt: String) async throws -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    expandedSource: """
+    func generate(prompt: String) async throws -> String {
+      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: prompt).run { trace in
+        _ = trace
+        try await doGenerate(prompt)
+      }
+    }
+    """,
+    diagnostics: [
+      DiagnosticSpec(
+        message: "@Traced model expects Terra.ModelID; wrap string literal with Terra.ModelID(...)",
+        line: 1,
+        column: 1,
+        severity: .warning,
+        fixIts: [FixItSpec(message: "wrap with Terra.ModelID(...)")]
+      )
+    ],
+    macros: testMacros
+  )
+}
+
+@Test("Model macro emits fix-it when provider is passed as raw string")
+func modelMacroRawProviderDiagnostic() {
+  assertMacroExpansion(
+    """
+    @Traced(model: Terra.ModelID("gpt-4"), provider: "openai")
+    func generate(prompt: String) async throws -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    expandedSource: """
+    func generate(prompt: String) async throws -> String {
+      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: prompt, provider: Terra.ProviderID("openai")).run { trace in
+        _ = trace
+        try await doGenerate(prompt)
+      }
+    }
+    """,
+    diagnostics: [
+      DiagnosticSpec(
+        message: "@Traced provider expects Terra.ProviderID; wrap string literal with Terra.ProviderID(...)",
+        line: 1,
+        column: 1,
+        severity: .warning,
+        fixIts: [FixItSpec(message: "wrap with Terra.ProviderID(...)")]
+      )
+    ],
+    macros: testMacros
+  )
+}
+
+@Test("Model macro emits fix-it when runtime is passed as raw string")
+func modelMacroRawRuntimeDiagnostic() {
+  assertMacroExpansion(
+    """
+    @Traced(model: Terra.ModelID("gpt-4"), runtime: "mlx")
+    func generate(prompt: String) async throws -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    expandedSource: """
+    func generate(prompt: String) async throws -> String {
+      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: prompt, runtime: Terra.RuntimeID("mlx")).run { trace in
+        _ = trace
+        try await doGenerate(prompt)
+      }
+    }
+    """,
+    diagnostics: [
+      DiagnosticSpec(
+        message: "@Traced runtime expects Terra.RuntimeID; wrap string literal with Terra.RuntimeID(...)",
+        line: 1,
+        column: 1,
+        severity: .warning,
+        fixIts: [FixItSpec(message: "wrap with Terra.RuntimeID(...)")]
+      )
+    ],
+    macros: testMacros
+  )
+}
+
+@Test("Tool macro emits fix-it when callID is passed as raw string")
+func toolMacroRawCallIDDiagnostic() {
+  assertMacroExpansion(
+    """
+    @Traced(tool: "search", callID: "call-1")
+    func run(query: String) async throws -> String {
+      try await doSearch(query)
+    }
+    """,
+    expandedSource: """
+    func run(query: String) async throws -> String {
+      return try await Terra.tool("search", callID: Terra.ToolCallID("call-1")).run { trace in
+        _ = trace
+        try await doSearch(query)
+      }
+    }
+    """,
+    diagnostics: [
+      DiagnosticSpec(
+        message: "@Traced callID expects Terra.ToolCallID; wrap string literal with Terra.ToolCallID(...)",
+        line: 1,
+        column: 1,
+        severity: .warning,
+        fixIts: [FixItSpec(message: "wrap with Terra.ToolCallID(...)")]
+      )
+    ],
+    macros: testMacros
+  )
+}
+
 @Test("Macro requires async function")
 func macroRequiresAsyncFunction() {
   assertMacroExpansion(

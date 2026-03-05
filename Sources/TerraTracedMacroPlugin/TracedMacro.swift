@@ -1,5 +1,6 @@
 import Foundation
 import SwiftCompilerPlugin
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxMacros
 
@@ -50,12 +51,19 @@ public struct TracedMacro: BodyMacro {
       embeddingInputCount: params.first { matches($0, names: embeddingCountParamNames) }.map(parameterName),
       safetySubject: params.first { matches($0, names: safetySubjectParamNames) }.map(parameterName)
     )
-    let resolved = ResolvedArguments(arguments: arguments, detected: detected)
+    let resolved = ResolvedArguments(
+      arguments: arguments,
+      detected: detected,
+      diagnosticNode: node,
+      context: context
+    )
     let operation = try resolveOperation(arguments)
-    var callExpression = try makeBaseCallExpression(
+    let callExpression = try makeBaseCallExpression(
       operation: operation,
       arguments: arguments,
-      resolved: resolved
+      resolved: resolved,
+      diagnosticNode: node,
+      context: context
     )
 
     let returnTypeText = funcDecl.signature.returnClause?.type.description
@@ -119,11 +127,21 @@ public struct TracedMacro: BodyMacro {
   private static func makeBaseCallExpression(
     operation: Operation,
     arguments: LabeledExprListSyntax,
-    resolved: ResolvedArguments
+    resolved: ResolvedArguments,
+    diagnosticNode: AttributeSyntax,
+    context: some MacroExpansionContext
   ) throws -> String {
     switch operation {
     case .model:
-      let modelExpr = try requiredArg(named: "model", in: arguments)
+      let modelExpr = try requiredTypedArg(
+        named: "model",
+        wrapperType: "Terra.ModelID",
+        diagnosticMessage: "@Traced model expects Terra.ModelID; wrap string literal with Terra.ModelID(...)",
+        fixItMessage: "wrap with Terra.ModelID(...)",
+        in: arguments,
+        diagnosticNode: diagnosticNode,
+        context: context
+      )
       let streamingArg = argument(named: "streaming", in: arguments)
       let forceStreaming = streamingArg == "true"
       let inference = buildModelCall(
@@ -167,7 +185,15 @@ public struct TracedMacro: BodyMacro {
       )
 
     case .embedding:
-      let embeddingExpr = try requiredArg(named: "embedding", in: arguments)
+      let embeddingExpr = try requiredTypedArg(
+        named: "embedding",
+        wrapperType: "Terra.ModelID",
+        diagnosticMessage: "@Traced embedding expects Terra.ModelID; wrap string literal with Terra.ModelID(...)",
+        fixItMessage: "wrap with Terra.ModelID(...)",
+        in: arguments,
+        diagnosticNode: diagnosticNode,
+        context: context
+      )
       return buildCall(
         "Terra.embed(\(embeddingExpr)",
         labeledArguments: [("inputCount", resolved.embeddingInputCount), ("provider", resolved.provider), ("runtime", resolved.runtime)]
@@ -236,7 +262,12 @@ public struct TracedMacro: BodyMacro {
     let embeddingInputCount: String?
     let safetySubject: String?
 
-    init(arguments: LabeledExprListSyntax, detected: DetectedParameters) {
+    init(
+      arguments: LabeledExprListSyntax,
+      detected: DetectedParameters,
+      diagnosticNode: AttributeSyntax,
+      context: some MacroExpansionContext
+    ) {
       // Priority: 1. Explicit macro args  2. Auto-detected function params  3. Omitted (nil)
       prompt = TracedMacro.argument(named: "prompt", in: arguments) ?? detected.modelPrompt
 
@@ -247,13 +278,37 @@ public struct TracedMacro: BodyMacro {
 
       temperature = TracedMacro.argument(named: "temperature", in: arguments) ?? detected.temperature
       provider =
-        TracedMacro.argument(named: "provider", in: arguments)
+        TracedMacro.typedArgument(
+          named: "provider",
+          wrapperType: "Terra.ProviderID",
+          diagnosticMessage: "@Traced provider expects Terra.ProviderID; wrap string literal with Terra.ProviderID(...)",
+          fixItMessage: "wrap with Terra.ProviderID(...)",
+          in: arguments,
+          diagnosticNode: diagnosticNode,
+          context: context
+        )
         ?? detected.provider
       runtime =
-        TracedMacro.argument(named: "runtime", in: arguments)
+        TracedMacro.typedArgument(
+          named: "runtime",
+          wrapperType: "Terra.RuntimeID",
+          diagnosticMessage: "@Traced runtime expects Terra.RuntimeID; wrap string literal with Terra.RuntimeID(...)",
+          fixItMessage: "wrap with Terra.RuntimeID(...)",
+          in: arguments,
+          diagnosticNode: diagnosticNode,
+          context: context
+        )
         ?? detected.runtime
       toolCallID =
-        TracedMacro.argument(named: "callID", in: arguments)
+        TracedMacro.typedArgument(
+          named: "callID",
+          wrapperType: "Terra.ToolCallID",
+          diagnosticMessage: "@Traced callID expects Terra.ToolCallID; wrap string literal with Terra.ToolCallID(...)",
+          fixItMessage: "wrap with Terra.ToolCallID(...)",
+          in: arguments,
+          diagnosticNode: diagnosticNode,
+          context: context
+        )
         ?? detected.toolCallID
 
       embeddingInputCount =
@@ -281,6 +336,28 @@ public struct TracedMacro: BodyMacro {
   private static func argument(named label: String, in arguments: LabeledExprListSyntax) -> String? {
     arguments.first(where: { $0.label?.text == label })?.expression.description
       .trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private static func typedArgument(
+    named label: String,
+    wrapperType: String,
+    diagnosticMessage: String,
+    fixItMessage: String,
+    in arguments: LabeledExprListSyntax,
+    diagnosticNode: AttributeSyntax,
+    context: some MacroExpansionContext
+  ) -> String? {
+    guard let argument = arguments.first(where: { $0.label?.text == label }) else {
+      return nil
+    }
+    return wrappedTypedIDExpression(
+      argument.expression,
+      wrapperType: wrapperType,
+      diagnosticMessage: diagnosticMessage,
+      fixItMessage: fixItMessage,
+      diagnosticNode: diagnosticNode,
+      context: context
+    )
   }
 
   private static func providerExpression(_ param: FunctionParameterSyntax) -> String {
@@ -362,6 +439,81 @@ public struct TracedMacro: BodyMacro {
       throw MacroError.missingOperationArgument
     }
     return value
+  }
+
+  private static func requiredTypedArg(
+    named label: String,
+    wrapperType: String,
+    diagnosticMessage: String,
+    fixItMessage: String,
+    in arguments: LabeledExprListSyntax,
+    diagnosticNode: AttributeSyntax,
+    context: some MacroExpansionContext
+  ) throws -> String {
+    guard let value = typedArgument(
+      named: label,
+      wrapperType: wrapperType,
+      diagnosticMessage: diagnosticMessage,
+      fixItMessage: fixItMessage,
+      in: arguments,
+      diagnosticNode: diagnosticNode,
+      context: context
+    ),
+      !value.isEmpty
+    else {
+      throw MacroError.missingOperationArgument
+    }
+    return value
+  }
+
+  private static func wrappedTypedIDExpression(
+    _ expression: ExprSyntax,
+    wrapperType: String,
+    diagnosticMessage: String,
+    fixItMessage: String,
+    diagnosticNode: AttributeSyntax,
+    context: some MacroExpansionContext
+  ) -> String {
+    let expressionText = expression.description.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard expression.is(StringLiteralExprSyntax.self) else {
+      return expressionText
+    }
+
+    let wrappedExpression = "\(wrapperType)(\(expressionText))"
+    let replacementExpr: ExprSyntax = "\(raw: wrappedExpression)"
+
+    context.diagnose(
+      Diagnostic(
+        node: Syntax(diagnosticNode),
+        message: TracedDiagnosticMessage(
+          message: diagnosticMessage,
+          diagnosticID: .init(domain: "TerraTracedMacro", id: "raw_string_\(wrapperType)"),
+          severity: .warning
+        ),
+        fixIts: [
+          FixIt(
+            message: TracedFixItMessage(
+              message: fixItMessage,
+              fixItID: .init(domain: "TerraTracedMacro", id: "wrap_\(wrapperType)")
+            ),
+            changes: [.replace(oldNode: Syntax(expression), newNode: Syntax(replacementExpr))]
+          )
+        ]
+      )
+    )
+
+    return wrappedExpression
+  }
+
+  private struct TracedDiagnosticMessage: DiagnosticMessage {
+    let message: String
+    let diagnosticID: MessageID
+    let severity: DiagnosticSeverity
+  }
+
+  private struct TracedFixItMessage: FixItMessage {
+    let message: String
+    let fixItID: MessageID
   }
 
   enum MacroError: Error, CustomStringConvertible {
