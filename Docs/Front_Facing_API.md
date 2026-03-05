@@ -6,10 +6,12 @@ This document lists the canonical public API for SDK consumers.
 
 ### Startup
 
-- `Terra.start(_ config: Terra.Configuration = .init()) throws`
+- `Terra.start(_ config: Terra.Configuration = .init()) async throws`
 - `Terra.lifecycleState`
 - `Terra.isRunning`
-- `await Terra.shutdown()`
+- `Terra.shutdown() async`
+- `Terra.reset() async`
+- `Terra.reconfigure(_ config: Terra.Configuration) async throws`
 
 ### Canonical operation factories
 

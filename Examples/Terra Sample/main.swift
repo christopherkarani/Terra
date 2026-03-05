@@ -11,7 +11,7 @@ import Terra
 @main
 struct TerraSample {
   static func main() async throws {
-    try Terra.start()
+    try await Terra.start()
 
     try await Terra
       .agent(name: "DemoAgent")

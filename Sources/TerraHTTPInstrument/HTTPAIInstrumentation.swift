@@ -24,45 +24,76 @@ public enum HTTPAIInstrumentation {
     private static let lock = NSLock()
     private static var instance: URLSessionInstrumentation?
 
+    private struct Configuration: Sendable, Equatable {
+        var hosts: Set<String>
+        var openClawGatewayHosts: Set<String>
+        var openClawMode: String
+    }
+
+    private static var configuration = Configuration(
+        hosts: defaultAIHosts,
+        openClawGatewayHosts: [],
+        openClawMode: "disabled"
+    )
+
+    private static func loadConfiguration() -> Configuration {
+        lock.lock()
+        let config = configuration
+        lock.unlock()
+        return config
+    }
+
     public static func install(
         hosts: Set<String> = defaultAIHosts,
         openClawGatewayHosts: Set<String> = [],
         openClawMode: String = "disabled"
     ) {
         lock.lock()
-        defer { lock.unlock() }
+        configuration = Configuration(
+            hosts: hosts,
+            openClawGatewayHosts: openClawGatewayHosts,
+            openClawMode: openClawMode
+        )
+        let shouldCreate = instance == nil && (!hosts.isEmpty || !openClawGatewayHosts.isEmpty)
+        lock.unlock()
 
-        guard instance == nil else { return }
-
+        guard shouldCreate else { return }
         let config = URLSessionInstrumentationConfiguration(
             shouldInstrument: { request in
+                let config = loadConfiguration()
+                guard !config.hosts.isEmpty || !config.openClawGatewayHosts.isEmpty else { return false }
                 guard let host = request.url?.host else { return false }
-                return isHostMatched(host, hosts: hosts)
-                    || isHostMatched(host, hosts: openClawGatewayHosts)
+                return isHostMatched(host, hosts: config.hosts)
+                    || isHostMatched(host, hosts: config.openClawGatewayHosts)
             },
             nameSpan: { request in
+                let config = loadConfiguration()
+                guard !config.hosts.isEmpty || !config.openClawGatewayHosts.isEmpty else { return nil }
                 guard let host = request.url?.host else { return nil }
-                if isHostMatched(host, hosts: openClawGatewayHosts) {
+                if isHostMatched(host, hosts: config.openClawGatewayHosts) {
                     return "chat openclaw.gateway"
                 }
-                for aiHost in hosts where isHostBoundaryMatch(host: host, target: aiHost) {
+                for aiHost in config.hosts where isHostBoundaryMatch(host: host, target: aiHost) {
                     return "chat \(host)"
                 }
                 return nil
             },
             spanCustomization: { request, spanBuilder in
+                let config = loadConfiguration()
+                guard !config.hosts.isEmpty || !config.openClawGatewayHosts.isEmpty else { return }
+
                 spanBuilder.setAttribute(key: Terra.Keys.Terra.autoInstrumented, value: true)
                 spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: "http_api")
                 spanBuilder.setAttribute(key: Terra.Keys.GenAI.operationName, value: "chat")
 
                 if let host = request.url?.host {
-                    let isOpenClawGateway = isHostMatched(host, hosts: openClawGatewayHosts)
-                    let provider = providerName(from: host, openClawGatewayHosts: openClawGatewayHosts)
+                    let isOpenClawGateway = isHostMatched(host, hosts: config.openClawGatewayHosts)
+                    let provider = providerName(from: host, openClawGatewayHosts: config.openClawGatewayHosts)
                     spanBuilder.setAttribute(key: Terra.Keys.GenAI.providerName, value: provider)
                     if isOpenClawGateway {
                         spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: "openclaw_gateway")
                         spanBuilder.setAttribute(key: Terra.Keys.Terra.openClawGateway, value: true)
-                        spanBuilder.setAttribute(key: Terra.Keys.Terra.openClawMode, value: openClawMode)
+                        spanBuilder.setAttribute(key: Terra.Keys.Terra.openClawMode, value: config.openClawMode)
                     }
                 }
 
@@ -99,6 +130,9 @@ public enum HTTPAIInstrumentation {
             semanticConvention: .old
         )
 
+        lock.lock()
+        defer { lock.unlock() }
+        guard instance == nil else { return }
         instance = URLSessionInstrumentation(configuration: config)
     }
 
@@ -106,6 +140,11 @@ public enum HTTPAIInstrumentation {
         lock.lock()
         defer { lock.unlock() }
         instance = nil
+        configuration = Configuration(
+            hosts: defaultAIHosts,
+            openClawGatewayHosts: [],
+            openClawMode: "disabled"
+        )
     }
 
     private static func isHostMatched(_ host: String, hosts: Set<String>) -> Bool {

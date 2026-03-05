@@ -141,6 +141,7 @@ extension Terra {
     installedOpenTelemetryConfiguration = configuration
 
     do {
+      Runtime.shared.markStarting()
       if let persistence = configuration.persistence {
         try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
       }
@@ -174,6 +175,7 @@ extension Terra {
       installedMeterProvider = nil
       installedLogProcessor = nil
       ownsInstalledTracerProvider = false
+      Runtime.shared.markStopped()
       throw error
     }
 
@@ -331,13 +333,13 @@ extension Terra {
   // MARK: - Lifecycle Queries
 
   /// The current lifecycle state of the Terra runtime.
-  public static var lifecycleState: Terra.LifecycleState {
+  package static var _lifecycleState: Terra.LifecycleState {
     Runtime.shared.lifecycleState
   }
 
   /// `true` when Terra has been started and is actively collecting telemetry.
-  public static var isRunning: Bool {
-    lifecycleState == .running
+  package static var _isRunning: Bool {
+    _lifecycleState == .running
   }
 
   // MARK: - Shutdown
@@ -356,7 +358,7 @@ extension Terra {
   ///   flushing telemetry to the configured exporter. Avoid calling from
   ///   latency-sensitive or main-actor contexts in production; a future
   ///   update will make flush fully async.
-  public static func shutdown() async {
+  package static func _shutdownOpenTelemetry() {
     _performShutdown()
   }
 
@@ -368,6 +370,7 @@ extension Terra {
       openTelemetryInstallLock.unlock()
       return
     }
+    Runtime.shared.markShuttingDown()
     // Atomically claim ownership of all provider refs before releasing the lock.
     // No other caller can enter after this point — installedOpenTelemetryConfiguration is nil.
     installedOpenTelemetryConfiguration = nil
@@ -390,7 +393,7 @@ extension Terra {
     _ = logProcessor?.forceFlush()
     _ = logProcessor?.shutdown()
 
-    Runtime.shared.markUninitialized()
+    Runtime.shared.markStopped()
   }
 }
 
@@ -416,7 +419,7 @@ extension Terra {
     installedMeterProvider = nil
     installedLogProcessor = nil
     ownsInstalledTracerProvider = false
-    Runtime.shared.markUninitialized()
+    Runtime.shared.markStopped()
   }
 }
 #endif

@@ -2,8 +2,8 @@ import Foundation
 
 extension Terra {
   /// OpenClaw-specific auto-instrumentation settings for `Terra.start()`.
-  public struct OpenClawConfiguration: Sendable {
-    public enum Mode: Sendable {
+  public struct OpenClawConfiguration: Sendable, Equatable {
+    public enum Mode: Sendable, Equatable {
       case disabled
       case diagnosticsOnly
       case gatewayOnly
@@ -97,7 +97,7 @@ extension Terra {
   }
 
   /// Proxy configuration reserved for low-level proxy instrumentation paths.
-  public struct ProxyConfiguration: Sendable {
+  public struct ProxyConfiguration: Sendable, Equatable {
     public struct Upstream: Sendable, Hashable {
       public var host: String
       public var port: Int

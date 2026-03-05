@@ -8,7 +8,7 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 
 extension Terra {
-  public struct Configuration: Sendable {
+  public struct Configuration: Sendable, Equatable {
     public enum Preset: Sendable {
       case quickstart
       case production
@@ -237,7 +237,7 @@ extension Terra {
     }
   }
 
-  public struct Profiling: Sendable {
+  public struct Profiling: Sendable, Equatable {
     public var enableMemoryProfiler: Bool
     public var enableMetalProfiler: Bool
 
@@ -251,7 +251,7 @@ extension Terra {
   }
 
   /// Which auto-instrumentations to enable with `Terra.start()`.
-  public struct Instrumentations: OptionSet, Sendable {
+  public struct Instrumentations: OptionSet, Sendable, Equatable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }
 
@@ -287,22 +287,22 @@ extension Terra {
   ///
   /// ```swift
   /// // Quickstart (zero config)
-  /// try Terra.start()
+  /// try await Terra.start()
   ///
   /// // Production with persistence
-  /// try Terra.start(.init(preset: .production))
+  /// try await Terra.start(.init(preset: .production))
   ///
   /// // Custom
   /// var config = Terra.Configuration()
   /// config.enableLogs = true
   /// config.profiling.enableMemoryProfiler = true
-  /// try Terra.start(config)
+  /// try await Terra.start(config)
   /// ```
-  public static func start(_ config: Configuration = .init()) throws {
-    try start(config.asAutoInstrumentConfiguration())
+  public static func start(_ config: Configuration = .init()) async throws {
+    try await _lifecycleController.start(config)
   }
 
-  static func start(_ config: _ResolvedStartConfiguration) throws {
+  static func _performStart(_ config: _ResolvedStartConfiguration) throws {
     // 1. Set up OpenTelemetry providers (traces, metrics, signposts, sessions)
     var openTelemetryConfig = config.openTelemetry
     if openTelemetryConfig.serviceName == nil {
@@ -317,11 +317,10 @@ extension Terra {
     install(.init(privacy: config.privacy))
 
     // 3. Enable CoreML auto-instrumentation
-    if config.instrumentations.contains(.coreML) {
-      CoreMLInstrumentation.install(.init(
-        excludedModels: config.excludedCoreMLModels
-      ))
-    }
+    CoreMLInstrumentation.install(.init(
+      enabled: config.instrumentations.contains(.coreML),
+      excludedModels: config.excludedCoreMLModels
+    ))
 
     // 3b. Optional low-level profilers.
     if config.profiling.enableMemoryProfiler {
@@ -343,8 +342,14 @@ extension Terra {
 
     if config.instrumentations.contains(.httpAIAPIs) || shouldEnableOpenClawGateway {
       HTTPAIInstrumentation.install(
-        hosts: monitoredHosts,
+        hosts: config.instrumentations.contains(.httpAIAPIs) ? monitoredHosts : [],
         openClawGatewayHosts: openClawGatewayHosts,
+        openClawMode: config.openClaw.modeString
+      )
+    } else {
+      HTTPAIInstrumentation.install(
+        hosts: [],
+        openClawGatewayHosts: [],
         openClawMode: config.openClaw.modeString
       )
     }
@@ -358,9 +363,13 @@ extension Terra {
     let shouldEnableDiagnostics =
       config.instrumentations.contains(.openClawDiagnostics)
       || config.openClaw.shouldEnableDiagnosticsExport
-    if shouldEnableDiagnostics {
-      OpenClawDiagnosticsExporter.installIfNeeded(configuration: config.openClaw)
-    }
+    OpenClawDiagnosticsExporter.configure(configuration: shouldEnableDiagnostics ? config.openClaw : .disabled)
+  }
+
+  static func _disableAutoInstrumentationsForShutdown() {
+    CoreMLInstrumentation.install(.init(enabled: false, excludedModels: []))
+    HTTPAIInstrumentation.install(hosts: [], openClawGatewayHosts: [], openClawMode: "disabled")
+    OpenClawDiagnosticsExporter.configure(configuration: .disabled)
   }
 }
 

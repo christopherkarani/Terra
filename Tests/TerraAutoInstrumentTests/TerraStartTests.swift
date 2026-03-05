@@ -124,38 +124,48 @@ final class TerraStartTests {
   // MARK: - Terra.start() Smoke Tests
 
   @Test("Terra.start() with .none instrumentations does not crash")
-  func terraStartWithNoneInstrumentationsDoesNotCrash() throws {
+  func terraStartWithNoneInstrumentationsDoesNotCrash() async throws {
     Terra.resetOpenTelemetryForTesting()
+    await Terra.reset()
     defer { Terra.resetOpenTelemetryForTesting() }
 
     var config = Terra.Configuration()
     config.instrumentations = .none
     config.enableSignposts = false
     config.enableSessions = false
-    try Terra.start(config)
+    try await Terra.start(config)
+    await Terra.reset()
   }
 
   @Test("Terra.start() throws alreadyInstalled when called twice with different config")
-  func terraStartThrowsAlreadyInstalledOnSecondCall() throws {
+  func terraStartThrowsAlreadyInstalledOnSecondCall() async throws {
     Terra.resetOpenTelemetryForTesting()
+    await Terra.reset()
     defer { Terra.resetOpenTelemetryForTesting() }
 
     var config1 = Terra.Configuration()
     config1.instrumentations = .none
     config1.enableSignposts = false
     config1.enableSessions = false
-    try Terra.start(config1)
+    try await Terra.start(config1)
 
     var config2 = config1
     config2.serviceName = "com.example.changed"
-    #expect(throws: Terra.InstallOpenTelemetryError.alreadyInstalled) {
-      try Terra.start(config2)
+    do {
+      try await Terra.start(config2)
+      #expect(false, "Expected Terra.start to throw alreadyInstalled when called with a different config while running.")
+    } catch let error as Terra.InstallOpenTelemetryError {
+      #expect(error == .alreadyInstalled)
+    } catch {
+      #expect(false, "Unexpected error: \(error)")
     }
+    await Terra.reset()
   }
 
   @Test("Terra.start() is idempotent when called twice with identical config")
-  func terraStartIsIdempotentWithSameConfig() throws {
+  func terraStartIsIdempotentWithSameConfig() async throws {
     Terra.resetOpenTelemetryForTesting()
+    await Terra.reset()
     defer { Terra.resetOpenTelemetryForTesting() }
 
     var config = Terra.Configuration()
@@ -163,7 +173,8 @@ final class TerraStartTests {
     config.enableSignposts = false
     config.enableSessions = false
 
-    try Terra.start(config)
-    try Terra.start(config)
+    try await Terra.start(config)
+    try await Terra.start(config)
+    await Terra.reset()
   }
 }

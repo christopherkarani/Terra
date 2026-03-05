@@ -83,7 +83,7 @@ export default function LandingPage() {
             <ul className="space-y-4">
               <li className="flex gap-3 text-sm text-gray-400">
                 <span className="text-emerald-500 font-black">✓</span> 
-                <strong>Tier 1:</strong> One call with Terra.start() for global coverage.
+                <strong>Tier 1:</strong> One call with <code>try await Terra.start()</code> for global coverage.
               </li>
               <li className="flex gap-3 text-sm text-gray-400">
                 <span className="text-emerald-500 font-black">✓</span> 
@@ -100,15 +100,15 @@ export default function LandingPage() {
               title="AppDelegate.swift"
               code={`import Terra
 
-@main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-    func application(...) {
-        // One line for global auto-instrumentation
-        try? Terra.start()
-        
-        return true
-    }
-}`}
+	@main
+	class AppDelegate: UIResponder, UIApplicationDelegate {
+	    func application(...) {
+	        // One line for global auto-instrumentation
+	        Task { try? await Terra.start() }
+	        
+	        return true
+	    }
+	}`}
             />
              <CodeBlock 
               title="Summarizer.swift"
@@ -130,11 +130,11 @@ func summarize(prompt: String) async throws -> String {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
              <div className="order-2 lg:order-1">
                 <CodeBlock 
-                  title="Persistence.swift"
-                  code={`var config = Terra.Configuration(preset: .production)
-config.persistence = .defaults()
-try Terra.start(config)`}
-                />
+	                  title="Persistence.swift"
+	                  code={`var config = Terra.Configuration(preset: .production)
+	config.persistence = .defaults()
+	Task { try? await Terra.start(config) }`}
+	                />
              </div>
              <div className="order-1 lg:order-2 space-y-6">
                 <h2 className="text-4xl font-black">Export anywhere. Persist everywhere.</h2>

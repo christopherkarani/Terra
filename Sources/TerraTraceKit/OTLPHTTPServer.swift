@@ -11,7 +11,7 @@ import OpenTelemetryProtocolExporterHttp
 import OpenTelemetryProtocolExporterHTTP
 #endif
 
-public final class OTLPHTTPServer: @unchecked Sendable {
+public final class OTLPHTTPServer {
   public struct Limits: Sendable {
     public var maxHeaderBytes: Int
     public var maxBodyBytes: Int

@@ -159,13 +159,15 @@ final class ConfigurationCanonicalStartTests {
   }
 
   @Test("start with Configuration delegates correctly")
-  func startWithConfiguration() throws {
+  func startWithConfiguration() async throws {
     Terra.resetOpenTelemetryForTesting()
+    await Terra.reset()
     defer { Terra.resetOpenTelemetryForTesting() }
     var config = Terra.Configuration()
     config.instrumentations = .none
     config.enableSignposts = false
     config.enableSessions = false
-    try Terra.start(config)
+    try await Terra.start(config)
+    await Terra.reset()
   }
 }

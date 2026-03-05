@@ -7,9 +7,9 @@ Copy-paste examples for the canonical public API.
 ```swift
 import Terra
 
-try Terra.start()
-try Terra.start(.init(preset: .production))
-try Terra.start(.init(preset: .diagnostics))
+try await Terra.start()
+try await Terra.start(.init(preset: .production))
+try await Terra.start(.init(preset: .diagnostics))
 ```
 
 ## 2) Custom `Terra.Configuration`
@@ -29,7 +29,7 @@ config.openClaw = .init(mode: .gatewayOnly, gatewayHosts: ["localhost", "127.0.0
 config.profiling = .init(enableMemoryProfiler: true, enableMetalProfiler: true)
 config.persistence = .defaults()
 
-try Terra.start(config)
+try await Terra.start(config)
 ```
 
 ## 3) Inference

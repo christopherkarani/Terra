@@ -2,7 +2,7 @@
 
 This guide migrates existing integrations to the canonical composable API:
 
-- Startup: `Terra.start(...)`
+- Startup: `Terra.start(...)` (`async`)
 - Operations: `Terra.infer/stream/embed/agent/tool/safety`
 - Terminal: `.run { ... }`
 - Metadata: `.attr(...)`
@@ -36,7 +36,7 @@ try Terra.enable(.quickstart)
 ### After
 
 ```swift
-try Terra.start()
+try await Terra.start()
 ```
 
 ## Inference Call Migration
@@ -90,7 +90,7 @@ Use `Terra.PrivacyPolicy` in `Terra.Configuration`:
 ```swift
 var config = Terra.Configuration()
 config.privacy = .redacted
-try Terra.start(config)
+try await Terra.start(config)
 ```
 
 ## Recommended Migration Order

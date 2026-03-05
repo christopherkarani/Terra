@@ -2,25 +2,25 @@ import Foundation
 
 /// View model for trace list filtering and selection.
 @MainActor
-public final class TraceListViewModel {
+final class TraceListViewModel {
   /// All known traces.
-  public private(set) var traces: [Trace]
+  private(set) var traces: [Trace]
   /// Traces after filtering and sorting.
-  public private(set) var filteredTraces: [Trace]
+  private(set) var filteredTraces: [Trace]
   /// Current search query used for filtering.
-  public var searchQuery: String {
+  var searchQuery: String {
     didSet {
       applyFilter()
     }
   }
   /// Currently selected trace.
-  public private(set) var selectedTrace: Trace?
+  private(set) var selectedTrace: Trace?
 
   /// Pre-sorted traces cache — re-sorted only when traces change.
   private var sortedTraces: [Trace] = []
 
   /// Creates a view model with an initial set of traces.
-  public init(traces: [Trace]) {
+  init(traces: [Trace]) {
     self.traces = traces
     self.searchQuery = ""
     self.filteredTraces = []
@@ -29,14 +29,14 @@ public final class TraceListViewModel {
   }
 
   /// Replaces the trace list and re-applies filtering.
-  public func updateTraces(_ traces: [Trace]) {
+  func updateTraces(_ traces: [Trace]) {
     self.traces = traces
     self.sortedTraces = traces.sorted { $0.fileTimestamp > $1.fileTimestamp }
     applyFilter()
   }
 
   /// Selects a trace by identifier.
-  public func selectTrace(id: String) {
+  func selectTrace(id: String) {
     selectedTrace = filteredTraces.first { $0.id == id }
   }
 
@@ -50,7 +50,7 @@ public final class TraceListViewModel {
     filteredTraces = sortedTraces.filter { trace in
       trace.id.lowercased().contains(query)
         || trace.displayName.lowercased().contains(query)
-        || trace.traceId.hexString.lowercased().contains(query)
+        || trace.traceID.hexString.lowercased().contains(query)
     }
   }
 }

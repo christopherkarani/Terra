@@ -10,45 +10,45 @@ final class TerraLifecycleTests: XCTestCase {
 
   override func tearDown() async throws {
     // Shut down if anything was installed during the test.
-    await Terra.shutdown()
+    Terra._shutdownOpenTelemetry()
   }
 
   // MARK: - State Query Tests
 
-  func testInitialState_isUninitialized() {
-    XCTAssertEqual(Terra.lifecycleState, .uninitialized)
-    XCTAssertFalse(Terra.isRunning)
+  func testInitialState_isStopped() {
+    XCTAssertEqual(Terra._lifecycleState, .stopped)
+    XCTAssertFalse(Terra._isRunning)
   }
 
   func testAfterInstall_isRunning() throws {
     let config = minimalConfig()
     try Terra.installOpenTelemetry(config)
-    XCTAssertEqual(Terra.lifecycleState, .running)
-    XCTAssertTrue(Terra.isRunning)
+    XCTAssertEqual(Terra._lifecycleState, .running)
+    XCTAssertTrue(Terra._isRunning)
   }
 
-  func testAfterShutdown_isUninitialized() async throws {
+  func testAfterShutdown_isStopped() async throws {
     try Terra.installOpenTelemetry(minimalConfig())
-    XCTAssertTrue(Terra.isRunning)
+    XCTAssertTrue(Terra._isRunning)
 
-    await Terra.shutdown()
+    Terra._shutdownOpenTelemetry()
 
-    XCTAssertEqual(Terra.lifecycleState, .uninitialized)
-    XCTAssertFalse(Terra.isRunning)
+    XCTAssertEqual(Terra._lifecycleState, .stopped)
+    XCTAssertFalse(Terra._isRunning)
   }
 
   func testShutdown_whenNotRunning_isIdempotent() async {
-    XCTAssertFalse(Terra.isRunning)
-    await Terra.shutdown()  // no-op: must not crash
-    await Terra.shutdown()  // second call: must not crash
-    XCTAssertFalse(Terra.isRunning)
+    XCTAssertFalse(Terra._isRunning)
+    Terra._shutdownOpenTelemetry()  // no-op: must not crash
+    Terra._shutdownOpenTelemetry()  // second call: must not crash
+    XCTAssertFalse(Terra._isRunning)
   }
 
   func testShutdown_isIdempotent_afterInstall() async throws {
     try Terra.installOpenTelemetry(minimalConfig())
-    await Terra.shutdown()
-    await Terra.shutdown()  // second call: must not crash
-    XCTAssertFalse(Terra.isRunning)
+    Terra._shutdownOpenTelemetry()
+    Terra._shutdownOpenTelemetry()  // second call: must not crash
+    XCTAssertFalse(Terra._isRunning)
   }
 
   func testStartAfterShutdown_succeeds() async throws {
@@ -56,14 +56,14 @@ final class TerraLifecycleTests: XCTestCase {
     let config2 = minimalConfig(port: 14002)
 
     try Terra.installOpenTelemetry(config1)
-    XCTAssertTrue(Terra.isRunning)
+    XCTAssertTrue(Terra._isRunning)
 
-    await Terra.shutdown()
-    XCTAssertFalse(Terra.isRunning)
+    Terra._shutdownOpenTelemetry()
+    XCTAssertFalse(Terra._isRunning)
 
-    // Must succeed — state is uninitialized after shutdown
+    // Must succeed — state is stopped after shutdown
     XCTAssertNoThrow(try Terra.installOpenTelemetry(config2))
-    XCTAssertTrue(Terra.isRunning)
+    XCTAssertTrue(Terra._isRunning)
   }
 
   func testStartSameConfig_isIdempotent() throws {
@@ -71,7 +71,7 @@ final class TerraLifecycleTests: XCTestCase {
     try Terra.installOpenTelemetry(config)
     // Second call with identical config: no throw, stays running
     XCTAssertNoThrow(try Terra.installOpenTelemetry(config))
-    XCTAssertTrue(Terra.isRunning)
+    XCTAssertTrue(Terra._isRunning)
   }
 
   func testStartDifferentConfig_throwsAlreadyInstalled() throws {
@@ -83,7 +83,7 @@ final class TerraLifecycleTests: XCTestCase {
     }
   }
 
-  func testShutdown_withAugmentExistingStrategy_leavesStateUninitialized() async throws {
+  func testShutdown_withAugmentExistingStrategy_leavesStateStopped() async throws {
     // .augmentExisting borrows the existing global provider; Terra must not
     // call shutdown() on it, but must still transition its own lifecycle state.
     var config = minimalConfig()
@@ -103,16 +103,16 @@ final class TerraLifecycleTests: XCTestCase {
     )
 
     XCTAssertNoThrow(try Terra.installOpenTelemetry(config))
-    XCTAssertTrue(Terra.isRunning)
+    XCTAssertTrue(Terra._isRunning)
 
-    await Terra.shutdown()
+    Terra._shutdownOpenTelemetry()
 
-    XCTAssertFalse(Terra.isRunning)
-    XCTAssertEqual(Terra.lifecycleState, .uninitialized)
+    XCTAssertFalse(Terra._isRunning)
+    XCTAssertEqual(Terra._lifecycleState, .stopped)
 
     // Fresh install must succeed after augmentExisting shutdown
     XCTAssertNoThrow(try Terra.installOpenTelemetry(minimalConfig(port: 14097)))
-    XCTAssertTrue(Terra.isRunning)
+    XCTAssertTrue(Terra._isRunning)
   }
 }
 

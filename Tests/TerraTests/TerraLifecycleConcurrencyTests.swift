@@ -9,7 +9,7 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        await Terra.shutdown()
+        Terra._shutdownOpenTelemetry()
     }
 
     // MARK: - Test 1: Concurrent Same-Config Install
@@ -38,7 +38,7 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
 
         group.wait()
         XCTAssertTrue(errors.isEmpty, "Unexpected errors from same-config concurrent install: \(errors)")
-        XCTAssertTrue(Terra.isRunning, "Terra should be running after concurrent same-config install")
+        XCTAssertTrue(Terra._isRunning, "Terra should be running after concurrent same-config install")
     }
 
     // MARK: - Test 2: Concurrent Different-Config Install
@@ -78,23 +78,23 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
         XCTAssertEqual(successCount, 1, "Expected exactly 1 winner; got \(successCount)")
         XCTAssertEqual(alreadyInstalledCount, 9, "Expected 9 .alreadyInstalled; got \(alreadyInstalledCount)")
         XCTAssertEqual(successCount + alreadyInstalledCount, 10, "Total outcomes must equal 10")
-        XCTAssertTrue(Terra.isRunning, "Terra should be running after concurrent different-config install")
+        XCTAssertTrue(Terra._isRunning, "Terra should be running after concurrent different-config install")
     }
 
     // MARK: - Test 3: Concurrent Shutdown
 
-    /// 10 concurrent `shutdown()` calls must all complete without crash or deadlock.
-    /// After all complete, Terra is uninitialized.
+    /// 10 concurrent shutdown calls must all complete without crash or deadlock.
+    /// After all complete, Terra is stopped.
     func testConcurrentShutdown_allComplete() async throws {
         try Terra.installOpenTelemetry(minimalConfig(port: 15021))
 
         await withTaskGroup(of: Void.self) { group in
             for _ in 0..<10 {
-                group.addTask { await Terra.shutdown() }
+                group.addTask { Terra._shutdownOpenTelemetry() }
             }
         }
 
-        XCTAssertFalse(Terra.isRunning, "Terra should be uninitialized after concurrent shutdowns")
+        XCTAssertFalse(Terra._isRunning, "Terra should be stopped after concurrent shutdowns")
     }
 
     // MARK: - Test 4: Interleaved Start/Shutdown
@@ -113,7 +113,7 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
                         try Terra.installOpenTelemetry(minimalConfig(port: 15031 + i))
                     } catch {}
                     // Shutdown unconditionally
-                    await Terra.shutdown()
+                    Terra._shutdownOpenTelemetry()
                     // Record completion atomically
                     completionCount.withLock { $0 += 1 }
                 }
@@ -128,14 +128,14 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
         )
 
         // After concurrent interleaving, the final state can be either — both are valid.
-        let finalState = Terra.lifecycleState
+        let finalState = Terra._lifecycleState
         XCTAssertTrue(
-            finalState == .running || finalState == .uninitialized,
+            finalState == .running || finalState == .stopped,
             "Final state must be a valid LifecycleState, got: \(finalState)"
         )
 
         // Clean up to reach a known state for subsequent tests.
-        await Terra.shutdown()
+        Terra._shutdownOpenTelemetry()
     }
 
     // MARK: - Test 5: Start After Concurrent Shutdown
@@ -146,15 +146,15 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
 
         await withTaskGroup(of: Void.self) { group in
             for _ in 0..<5 {
-                group.addTask { await Terra.shutdown() }
+                group.addTask { Terra._shutdownOpenTelemetry() }
             }
         }
 
-        XCTAssertFalse(Terra.isRunning, "Terra should be uninitialized after concurrent shutdowns")
+        XCTAssertFalse(Terra._isRunning, "Terra should be stopped after concurrent shutdowns")
 
         // Fresh install must succeed once the lock is clear
         XCTAssertNoThrow(try Terra.installOpenTelemetry(minimalConfig(port: 15052)))
-        XCTAssertTrue(Terra.isRunning, "Terra should be running after fresh install post-shutdown")
+        XCTAssertTrue(Terra._isRunning, "Terra should be running after fresh install post-shutdown")
     }
 
     // MARK: - Test 6: Concurrent State Reads During Install/Shutdown
@@ -180,8 +180,8 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
             for _ in 0..<50 {
                 group.addTask {
                     // Two separate reads — no atomicity guarantee between them.
-                    let state = Terra.lifecycleState
-                    let running = Terra.isRunning
+                    let state = Terra._lifecycleState
+                    let running = Terra._isRunning
 
                     // Yield so the cooperative scheduler can interleave the writer task.
                     await Task.yield()
@@ -194,7 +194,7 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
 
             // Writer task: shutdown then reinstall using the ports reserved for this test.
             group.addTask {
-                await Terra.shutdown()
+                Terra._shutdownOpenTelemetry()
                 try? Terra.installOpenTelemetry(minimalConfig(port: 15062))
             }
         }
@@ -202,7 +202,10 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
         // Every observed lifecycleState must be a valid enum case.
         for pair in observedPairs {
             XCTAssertTrue(
-                pair.state == .running || pair.state == .uninitialized,
+                pair.state == .running
+                  || pair.state == .starting
+                  || pair.state == .shuttingDown
+                  || pair.state == .stopped,
                 "Read an invalid lifecycle state: \(pair.state)"
             )
             // isRunning is a Bool — any Bool value is valid; just confirm it was read.

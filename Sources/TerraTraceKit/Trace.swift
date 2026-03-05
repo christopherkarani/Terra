@@ -17,7 +17,9 @@ public struct Trace {
   /// Timestamp derived from the leading digits of the persistence filename.
   public let fileTimestamp: Date
   /// Trace identifier shared by all spans in this trace.
-  public let traceId: TraceId
+  public let traceID: TraceId
+  @available(*, deprecated, renamed: "traceID")
+  public var traceId: TraceId { traceID }
   /// All spans belonging to this trace.
   public let spans: [SpanData]
   /// Spans sorted by start time, then end time.
@@ -45,8 +47,8 @@ public struct Trace {
       throw TraceModelError.invalidFileName
     }
 
-    let traceId = spans[0].traceId
-    if spans.contains(where: { $0.traceId != traceId }) {
+    let traceID = spans[0].traceId
+    if spans.contains(where: { $0.traceId != traceID }) {
       throw TraceModelError.mismatchedTraceIds
     }
     if Set(spans.map(\.spanId)).count != spans.count {
@@ -74,7 +76,7 @@ public struct Trace {
 
     self.id = fileName
     self.fileTimestamp = fileTimestamp
-    self.traceId = traceId
+    self.traceID = traceID
     self.spans = spans
     self.orderedSpans = ordered
     self.rootSpans = roots
@@ -82,7 +84,7 @@ public struct Trace {
     self.endTime = end
     self.duration = end.timeIntervalSince(start)
     self.hasError = hasError
-    self.displayName = roots.first?.name ?? ordered.first?.name ?? traceId.hexString
+    self.displayName = roots.first?.name ?? ordered.first?.name ?? traceID.hexString
   }
 }
 

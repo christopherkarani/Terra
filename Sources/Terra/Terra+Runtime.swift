@@ -16,13 +16,20 @@ extension Terra {
   ///
   /// - Note: During `installOpenTelemetry()`, there is a brief window where
   ///   `installedOpenTelemetryConfiguration` is committed but `lifecycleState`
-  ///   still reports `.uninitialized`. Do not use `lifecycleState` as a strict
+  ///   still reports `.stopped`. Do not use `lifecycleState` as a strict
   ///   proxy for whether a configuration is active across concurrent contexts.
   public enum LifecycleState: Sendable, Equatable {
     /// Terra has not been started, or has been shut down. `Terra.start()` may be called.
-    case uninitialized
+    case stopped
+
+    /// Terra is starting. A start/reconfigure call is in progress.
+    case starting
+
     /// Terra is running. Telemetry is being collected and exported.
     case running
+
+    /// Terra is shutting down. A shutdown/reset/reconfigure call is in progress.
+    case shuttingDown
   }
 }
 
@@ -64,12 +71,18 @@ final class Runtime {
 
   // MARK: - Lifecycle
 
-  private var lifecycleStateValue: Terra.LifecycleState = .uninitialized
+  private var lifecycleStateValue: Terra.LifecycleState = .stopped
 
   var lifecycleState: Terra.LifecycleState {
     lock.lock()
     defer { lock.unlock() }
     return lifecycleStateValue
+  }
+
+  func markStarting() {
+    lock.lock()
+    defer { lock.unlock() }
+    lifecycleStateValue = .starting
   }
 
   func markRunning() {
@@ -78,10 +91,16 @@ final class Runtime {
     lifecycleStateValue = .running
   }
 
-  func markUninitialized() {
+  func markShuttingDown() {
     lock.lock()
     defer { lock.unlock() }
-    lifecycleStateValue = .uninitialized
+    lifecycleStateValue = .shuttingDown
+  }
+
+  func markStopped() {
+    lock.lock()
+    defer { lock.unlock() }
+    lifecycleStateValue = .stopped
     privacyValue = .default
     tracerProviderOverride = nil
     loggerProviderOverride = nil

@@ -166,7 +166,7 @@ internal final class FoundationModelsBackend: TerraTracedSessionBackend, @unchec
 }
 
 @available(macOS 26.0, iOS 26.0, *)
-public final class TerraTracedSession: @unchecked Sendable {
+public final class TerraTracedSession {
   private let backend: any TerraTracedSessionBackend
   public let modelIdentifier: String
 

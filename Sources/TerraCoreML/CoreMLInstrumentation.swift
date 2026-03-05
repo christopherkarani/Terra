@@ -18,12 +18,21 @@ public enum CoreMLInstrumentation {
 
   /// Configuration for the auto-instrumentation.
   public struct Configuration: Sendable {
+    /// Whether CoreML predictions should be traced.
+    ///
+    /// - Note: When disabled, the swizzle remains installed (if it was ever
+    ///   installed) but becomes a fast no-op. This enables deterministic
+    ///   `Terra.start()/shutdown()/reconfigure()` lifecycle behavior without
+    ///   requiring unswizzling.
+    public var enabled: Bool
+
     /// Model names (as they appear in `gen_ai.request.model`) that should be excluded
     /// from automatic tracing. Useful for low-latency models where tracing overhead is
     /// not desired.
     public var excludedModels: Set<String>
 
-    public init(excludedModels: Set<String> = []) {
+    public init(enabled: Bool = true, excludedModels: Set<String> = []) {
+      self.enabled = enabled
       self.excludedModels = excludedModels
     }
   }
@@ -36,24 +45,31 @@ public enum CoreMLInstrumentation {
 
   // MARK: - Public API
 
-  /// Thread-safe check if a model name is excluded from tracing.
-  private static func isExcluded(_ modelName: String) -> Bool {
+  /// Thread-safe check if a model prediction should be traced.
+  private static func shouldTrace(_ modelName: String) -> Bool {
     lock.lock()
-    defer { lock.unlock() }
-    return configuration.excludedModels.contains(modelName)
+    let config = configuration
+    lock.unlock()
+
+    guard config.enabled else { return false }
+    return !config.excludedModels.contains(modelName)
   }
 
   /// Installs the auto-instrumentation. Safe to call multiple times; only the first call takes effect.
   ///
   /// - Parameter config: Configuration controlling which models are excluded.
   public static func install(_ config: Configuration = .init()) {
+    var shouldSwizzle = false
+
     lock.lock()
-    defer { lock.unlock() }
-
-    guard !isInstalled else { return }
-    isInstalled = true
     configuration = config
+    if !isInstalled, config.enabled {
+      isInstalled = true
+      shouldSwizzle = true
+    }
+    lock.unlock()
 
+    guard shouldSwizzle else { return }
     swizzlePrediction()
     swizzlePredictionWithOptions()
   }
@@ -81,7 +97,7 @@ public enum CoreMLInstrumentation {
 
       let modelName = CoreMLInstrumentation.resolveModelName(model)
 
-      guard !CoreMLInstrumentation.isExcluded(modelName) else {
+      guard CoreMLInstrumentation.shouldTrace(modelName) else {
         return originalFn(self_, selector, features, errorPtr)
       }
 
@@ -144,7 +160,7 @@ public enum CoreMLInstrumentation {
 
       let modelName = CoreMLInstrumentation.resolveModelName(model)
 
-      guard !CoreMLInstrumentation.isExcluded(modelName) else {
+      guard CoreMLInstrumentation.shouldTrace(modelName) else {
         return originalFn(self_, selector, features, options, errorPtr)
       }
 

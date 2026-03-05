@@ -7,7 +7,7 @@ Copy-paste recipes for common instrumentation patterns.
 ```swift
 import Terra
 
-try Terra.start()
+try await Terra.start()
 
 let answer = try await Terra.infer("gpt-4o-mini", prompt: prompt).run {
   try await llm.generate(prompt)
@@ -84,7 +84,7 @@ import Terra
 
 var config = Terra.Configuration()
 config.privacy = .redacted
-try Terra.start(config)
+try await Terra.start(config)
 
 let debug = try await Terra
   .infer("gpt-4o-mini", prompt: prompt)

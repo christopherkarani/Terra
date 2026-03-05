@@ -10,7 +10,7 @@ Instrument inference, streaming, agents, tools, embeddings, and safety checks wi
 ```swift
 import Terra
 
-try Terra.start()
+try await Terra.start()
 let result = try await Terra.infer("gpt-4o-mini", prompt: "Say hello").run { "Hello" }
 ```
 
@@ -23,7 +23,7 @@ let result = try await Terra.infer("gpt-4o-mini", prompt: "Say hello").run { "He
 ```swift
 import Terra
 
-try Terra.start()
+try await Terra.start()
 
 let answer = try await Terra
   .infer("gpt-4o-mini", prompt: userPrompt, provider: "openai", runtime: "http_api")
@@ -38,9 +38,9 @@ let answer = try await Terra
 
 | Preset | Use when | Start call |
 | --- | --- | --- |
-| `quickstart` | Local dev defaults | `try Terra.start()` |
-| `production` | Persist traces and export in apps | `try Terra.start(.init(preset: .production))` |
-| `diagnostics` | Deep troubleshooting with extra telemetry | `try Terra.start(.init(preset: .diagnostics))` |
+| `quickstart` | Local dev defaults | `try await Terra.start()` |
+| `production` | Persist traces and export in apps | `try await Terra.start(.init(preset: .production))` |
+| `diagnostics` | Deep troubleshooting with extra telemetry | `try await Terra.start(.init(preset: .diagnostics))` |
 
 ## Span Types
 
@@ -84,7 +84,7 @@ let result = try await Terra
 ```swift
 var config = Terra.Configuration(preset: .production)
 config.persistence = .defaults()
-try Terra.start(config)
+try await Terra.start(config)
 ```
 
 ## Macros (`@Traced`)

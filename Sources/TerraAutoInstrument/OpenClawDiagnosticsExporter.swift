@@ -5,29 +5,43 @@ import TerraCore
 
 enum OpenClawDiagnosticsExporter {
   private static let lock = NSLock()
-  private static var installed = false
+  private static var installedProviderID: ObjectIdentifier?
+  private static var diagnosticsDirectoryURL: URL?
 
-  static func installIfNeeded(configuration: Terra.OpenClawConfiguration) {
-    guard configuration.shouldEnableDiagnosticsExport else { return }
-    guard let directoryURL = configuration.diagnosticsDirectoryURL else { return }
-    guard let provider = OpenTelemetry.instance.tracerProvider as? TracerProviderSdk else { return }
+  static func configure(configuration: Terra.OpenClawConfiguration) {
+    let directoryURL = configuration.shouldEnableDiagnosticsExport
+      ? configuration.diagnosticsDirectoryURL
+      : nil
 
     lock.lock()
-    defer { lock.unlock() }
-    guard !installed else { return }
-    installed = true
+    diagnosticsDirectoryURL = directoryURL
+    lock.unlock()
 
-    let exporter = DiagnosticsJSONLSpanExporter(directoryURL: directoryURL)
+    guard let provider = OpenTelemetry.instance.tracerProvider as? TracerProviderSdk else { return }
+
+    let providerID = ObjectIdentifier(provider)
+    lock.lock()
+    defer { lock.unlock() }
+    guard installedProviderID != providerID else { return }
+    installedProviderID = providerID
+
+    let exporter = DiagnosticsJSONLSpanExporter(directoryURL: { currentDiagnosticsDirectoryURL() })
     provider.addSpanProcessor(SimpleSpanProcessor(spanExporter: exporter))
+  }
+
+  private static func currentDiagnosticsDirectoryURL() -> URL? {
+    lock.lock()
+    defer { lock.unlock() }
+    return diagnosticsDirectoryURL
   }
 }
 
 private final class DiagnosticsJSONLSpanExporter: SpanExporter {
-  private let directoryURL: URL
+  private let directoryURL: @Sendable () -> URL?
   private let lock = NSLock()
   private let encoder = JSONEncoder()
 
-  init(directoryURL: URL) {
+  init(directoryURL: @escaping @Sendable () -> URL?) {
     self.directoryURL = directoryURL
   }
 
@@ -35,12 +49,14 @@ private final class DiagnosticsJSONLSpanExporter: SpanExporter {
     _ = explicitTimeout
     guard !spans.isEmpty else { return .success }
 
+    guard let directoryURL = directoryURL() else { return .success }
+
     lock.lock()
     defer { lock.unlock() }
 
     do {
       try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-      let targetFile = fileURL(for: Date())
+      let targetFile = fileURL(in: directoryURL, for: Date())
       if !FileManager.default.fileExists(atPath: targetFile.path) {
         FileManager.default.createFile(atPath: targetFile.path, contents: nil)
       }
@@ -79,7 +95,7 @@ private final class DiagnosticsJSONLSpanExporter: SpanExporter {
     return formatter
   }()
 
-  private func fileURL(for date: Date) -> URL {
+  private func fileURL(in directoryURL: URL, for date: Date) -> URL {
     let dayString = Self.dayFormatter.string(from: date)
     return directoryURL.appendingPathComponent("openclaw-\(dayString).jsonl", isDirectory: false)
   }
