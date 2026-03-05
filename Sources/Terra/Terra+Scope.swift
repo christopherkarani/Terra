@@ -30,7 +30,7 @@ extension Terra {
     func recordError(_ error: any Error, captureMessage: Bool? = nil) {
       let message = String(describing: error)
       let exceptionType = String(reflecting: type(of: error))
-      let shouldCaptureMessage = captureMessage ?? Runtime.shared.privacy.shouldCapture(promptCapture: .default)
+      let shouldCaptureMessage = captureMessage ?? Runtime.shared.privacy.shouldCapture(includeContent: false)
       underlyingSpan.status = .error(description: shouldCaptureMessage ? message : exceptionType)
 
       var attributes: [String: AttributeValue] = [

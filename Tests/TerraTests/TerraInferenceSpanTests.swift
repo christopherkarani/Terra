@@ -101,7 +101,7 @@ final class TerraInferenceSpanTests: XCTestCase {
       )
     )
 
-    let request = Terra.InferenceRequest(model: "local/llama-3.2-1b", prompt: "Hello", promptCapture: .optIn)
+    let request = Terra.InferenceRequest(model: "local/llama-3.2-1b", prompt: "Hello", includeContent: true)
 
     do {
       try await Terra.withInferenceSpan(request) { _ in

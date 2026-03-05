@@ -62,6 +62,22 @@ struct TerraPrivacyAuditTests {
     #expect(third.attributes[Terra.Keys.Terra.promptHMACSHA256] == nil)
   }
 
+  @Test("CapturePolicy.includeContent captures prompt for composable API calls")
+  func capturePolicyIncludeContentCapturesPrompt() async throws {
+    let secret = "capture-policy-secret"
+    let privacy = Terra.Privacy(contentPolicy: .optIn, redaction: .hashHMACSHA256)
+
+    let span = try await captureSpan(privacy: privacy) {
+      _ = try await Terra
+        .infer("audit-model", prompt: secret)
+        .capture(.includeContent)
+        .run { "ok" }
+    }
+
+    #expect(span.attributes[Terra.Keys.Terra.promptHMACSHA256] != nil)
+    #expect(span.attributes.values.allSatisfy { !$0.description.contains(secret) })
+  }
+
   @Test("recordError omits exception.message under redacted-like policy")
   func recordErrorIsGatedByPrivacy() async throws {
     let span = try await captureErrorSpan(

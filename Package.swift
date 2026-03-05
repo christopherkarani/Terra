@@ -31,8 +31,8 @@ let package = Package(
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", from: "2.3.0"),
     .package(url: "https://github.com/apple/swift-crypto.git", from: "4.2.0"),
-    .package(url: "https://github.com/apple/swift-testing.git", from: "0.99.0"),
-    .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0")
+    .package(url: "https://github.com/apple/swift-testing.git", exact: "6.2.3"),
+    .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0")
   ],
   targets: [
     // MARK: - Core Libraries
@@ -273,9 +273,9 @@ let package = Package(
       dependencies: [
         "TerraTracedMacroPlugin",
         "TerraTracedMacro",
+        .product(name: "Testing", package: "swift-testing"),
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
         .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
-        .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraTracedMacroTests",
       exclude: ["CLAUDE.md"]

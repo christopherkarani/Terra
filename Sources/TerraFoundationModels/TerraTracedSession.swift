@@ -265,7 +265,7 @@ public final class TerraTracedSession {
     let request = Terra.StreamingRequest(
       model: modelIdentifier,
       prompt: prompt,
-      promptCapture: promptCapture.legacyCaptureIntent,
+      includeContent: promptCapture == .includeContent,
     )
 
     return AsyncThrowingStream { continuation in
@@ -519,18 +519,6 @@ public final class TerraTracedSession {
       if let result {
         attributes.set(.init("terra.fm.tool.result"), result)
       }
-    }
-  }
-}
-
-@available(macOS 26.0, iOS 26.0, *)
-private extension Terra.CapturePolicy {
-  var legacyCaptureIntent: Terra.CaptureIntent {
-    switch self {
-    case .default:
-      return .default
-    case .includeContent:
-      return .optIn
     }
   }
 }

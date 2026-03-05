@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:pages": "NEXT_PUBLIC_GH_PAGES=true GITHUB_REPOSITORY=christopherkarani/Terra next build",
     "start": "next start",
     "lint": "eslint"
   },

@@ -39,7 +39,7 @@ public enum Terra {
       attributes[Keys.GenAI.requestStream] = .bool(stream)
     }
 
-    if let prompt = request.prompt, privacy.shouldCapture(promptCapture: request.promptCapture) {
+    if let prompt = request.prompt, privacy.shouldCapture(includeContent: request.includeContent) {
       attributes.merge(
         redactedStringAttributes(
           original: prompt,
@@ -61,7 +61,7 @@ public enum Terra {
       name: SpanNames.inference,
       kind: .internal,
       attributes: attributes,
-      allowErrorMessageCapture: privacy.shouldCapture(promptCapture: request.promptCapture),
+      allowErrorMessageCapture: privacy.shouldCapture(includeContent: request.includeContent),
       body
     )
   }
@@ -74,7 +74,7 @@ public enum Terra {
     let streamingRequest = InferenceRequest(
       model: request.model,
       prompt: request.prompt,
-      promptCapture: request.promptCapture,
+      includeContent: request.includeContent,
       maxOutputTokens: request.maxOutputTokens,
       temperature: request.temperature
     )
@@ -107,7 +107,7 @@ public enum Terra {
       name: SpanNames.agentInvocation,
       kind: .internal,
       attributes: attributes,
-      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(promptCapture: .default),
+      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(includeContent: false),
       body
     )
   }
@@ -130,7 +130,7 @@ public enum Terra {
       name: SpanNames.toolExecution,
       kind: .internal,
       attributes: attributes,
-      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(promptCapture: .default),
+      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(includeContent: false),
       body
     )
   }
@@ -152,7 +152,7 @@ public enum Terra {
       name: SpanNames.embedding,
       kind: .internal,
       attributes: attributes,
-      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(promptCapture: .default),
+      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(includeContent: false),
       body
     )
   }
@@ -169,7 +169,7 @@ public enum Terra {
       Keys.Terra.safetyCheckName: .string(check.name),
     ]
 
-    if let subject = check.subject, privacy.shouldCapture(promptCapture: check.subjectCapture) {
+    if let subject = check.subject, privacy.shouldCapture(includeContent: check.includeContent) {
       attributes.merge(
         redactedStringAttributes(
           original: subject,
@@ -185,7 +185,7 @@ public enum Terra {
       name: SpanNames.safetyCheck,
       kind: .internal,
       attributes: attributes,
-      allowErrorMessageCapture: privacy.shouldCapture(promptCapture: check.subjectCapture),
+      allowErrorMessageCapture: privacy.shouldCapture(includeContent: check.includeContent),
       body
     )
   }

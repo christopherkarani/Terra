@@ -14,15 +14,15 @@ struct TerraSample {
     try await Terra.start()
 
     try await Terra
-      .agent(name: "DemoAgent")
-      .execute { trace in
+      .agent("DemoAgent")
+      .run { trace in
         trace.event("agent.start")
 
-        try await Terra.inference(model: "local/demo", prompt: "Hello") {
+        try await Terra.infer("local/demo", prompt: "Hello").run {
           try await Task.sleep(nanoseconds: 50_000_000)
         }
 
-        try await Terra.tool(name: "search", callID: "call-1") {
+        try await Terra.tool("search", callID: "call-1").run {
           try await Task.sleep(nanoseconds: 20_000_000)
         }
 

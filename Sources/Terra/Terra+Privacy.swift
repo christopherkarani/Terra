@@ -7,11 +7,6 @@ extension Terra {
     case always
   }
 
-  package enum CaptureIntent: Sendable, Hashable {
-    case `default`
-    case optIn
-  }
-
   package enum RedactionStrategy: Sendable, Hashable {
     case drop
     case lengthOnly
@@ -40,16 +35,14 @@ extension Terra {
 
     package static let `default` = Privacy()
 
-    func shouldCapture(promptCapture: CaptureIntent) -> Bool {
-      switch (contentPolicy, promptCapture) {
-      case (.never, _):
+    func shouldCapture(includeContent: Bool) -> Bool {
+      switch contentPolicy {
+      case .never:
         return false
-      case (.always, _):
+      case .always:
         return true
-      case (.optIn, .optIn):
-        return true
-      case (.optIn, .default):
-        return false
+      case .optIn:
+        return includeContent
       }
     }
   }

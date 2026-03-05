@@ -30,7 +30,7 @@ export default function LandingPage() {
       <section className="relative pt-24 pb-32 px-6 overflow-hidden">
         <div className="max-w-6xl mx-auto flex flex-col items-center text-center">
           <div className="mb-8 p-1 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-lg">
-             <img src="/terra-banner.svg" alt="Terra Banner" className="w-full max-w-2xl rounded-xl" />
+             <img src="terra-banner.svg" alt="Terra Banner" className="w-full max-w-2xl rounded-xl" />
           </div>
           <h1 className="text-5xl md:text-7xl font-black tracking-tight mb-6 bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent">
             Stop flying blind with local AI.

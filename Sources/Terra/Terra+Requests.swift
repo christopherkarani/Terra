@@ -14,7 +14,7 @@ extension Terra {
   package struct InferenceRequest: Sendable, Hashable {
     package var model: String
     package var prompt: String?
-    package var promptCapture: CaptureIntent
+    package var includeContent: Bool
 
     package var maxOutputTokens: Int?
     package var temperature: Double?
@@ -22,13 +22,13 @@ extension Terra {
     package init(
       model: String,
       prompt: String? = nil,
-      promptCapture: CaptureIntent = .default,
+      includeContent: Bool = false,
       maxOutputTokens: Int? = nil,
       temperature: Double? = nil
     ) {
       self.model = model
       self.prompt = prompt
-      self.promptCapture = promptCapture
+      self.includeContent = includeContent
       self.maxOutputTokens = maxOutputTokens
       self.temperature = temperature
     }
@@ -53,7 +53,7 @@ extension Terra {
   package struct StreamingRequest: Sendable, Hashable {
     package var model: String
     package var prompt: String?
-    package var promptCapture: CaptureIntent
+    package var includeContent: Bool
     package var maxOutputTokens: Int?
     package var temperature: Double?
     package var expectedOutputTokens: Int?
@@ -61,14 +61,14 @@ extension Terra {
     package init(
       model: String,
       prompt: String? = nil,
-      promptCapture: CaptureIntent = .default,
+      includeContent: Bool = false,
       maxOutputTokens: Int? = nil,
       temperature: Double? = nil,
       expectedOutputTokens: Int? = nil
     ) {
       self.model = model
       self.prompt = prompt
-      self.promptCapture = promptCapture
+      self.includeContent = includeContent
       self.maxOutputTokens = maxOutputTokens
       self.temperature = temperature
       self.expectedOutputTokens = expectedOutputTokens
@@ -132,12 +132,12 @@ extension Terra {
   package struct SafetyCheckRequest: Sendable, Hashable {
     package var name: String
     package var subject: String?
-    package var subjectCapture: CaptureIntent
+    package var includeContent: Bool
 
-    package init(name: String, subject: String? = nil, subjectCapture: CaptureIntent = .default) {
+    package init(name: String, subject: String? = nil, includeContent: Bool = false) {
       self.name = name
       self.subject = subject
-      self.subjectCapture = subjectCapture
+      self.includeContent = includeContent
     }
   }
 }

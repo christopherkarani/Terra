@@ -558,16 +558,6 @@ extension Terra {
       return copy
     }
 
-    @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    package func capture(_ intent: CaptureIntent) -> Self {
-      switch intent {
-      case .default:
-        return self
-      case .optIn:
-        return includeContent()
-      }
-    }
-
     package func runtime(_ value: String) -> Self {
       attribute(.init(Keys.Terra.runtime), value)
     }
@@ -629,7 +619,7 @@ extension Terra {
       let request: InferenceRequest = {
         var copy = self.request
         if metadata.includeContent {
-          copy.promptCapture = .optIn
+          copy.includeContent = true
         }
         return copy
       }()
@@ -665,16 +655,6 @@ extension Terra {
       var copy = self
       copy.metadata.includeContent = true
       return copy
-    }
-
-    @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    package func capture(_ intent: CaptureIntent) -> Self {
-      switch intent {
-      case .default:
-        return self
-      case .optIn:
-        return includeContent()
-      }
     }
 
     package func runtime(_ value: String) -> Self {
@@ -729,7 +709,7 @@ extension Terra {
       let request: StreamingRequest = {
         var copy = self.request
         if metadata.includeContent {
-          copy.promptCapture = .optIn
+          copy.includeContent = true
         }
         return copy
       }()
@@ -765,16 +745,6 @@ extension Terra {
       var copy = self
       copy.metadata.includeContent = true
       return copy
-    }
-
-    @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    package func capture(_ intent: CaptureIntent) -> Self {
-      switch intent {
-      case .default:
-        return self
-      case .optIn:
-        return includeContent()
-      }
     }
 
     package func runtime(_ value: String) -> Self {
@@ -842,16 +812,6 @@ extension Terra {
       return copy
     }
 
-    @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    package func capture(_ intent: CaptureIntent) -> Self {
-      switch intent {
-      case .default:
-        return self
-      case .optIn:
-        return includeContent()
-      }
-    }
-
     package func runtime(_ value: String) -> Self {
       attribute(.init(Keys.Terra.runtime), value)
     }
@@ -915,16 +875,6 @@ extension Terra {
       var copy = self
       copy.metadata.includeContent = true
       return copy
-    }
-
-    @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    package func capture(_ intent: CaptureIntent) -> Self {
-      switch intent {
-      case .default:
-        return self
-      case .optIn:
-        return includeContent()
-      }
     }
 
     package func runtime(_ value: String) -> Self {
@@ -992,16 +942,6 @@ extension Terra {
       return copy
     }
 
-    @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    package func capture(_ intent: CaptureIntent) -> Self {
-      switch intent {
-      case .default:
-        return self
-      case .optIn:
-        return includeContent()
-      }
-    }
-
     package func runtime(_ value: String) -> Self {
       attribute(.init(Keys.Terra.runtime), value)
     }
@@ -1036,7 +976,7 @@ extension Terra {
       let request: SafetyCheckRequest = {
         var copy = self.request
         if metadata.includeContent {
-          copy.subjectCapture = .optIn
+          copy.includeContent = true
         }
         return copy
       }()

@@ -1,4 +1,30 @@
+## Website Manual GitHub Pages Publish (2026-03-05)
+
+- [x] Capture deploy plan and checkpoints in this task file.
+- [x] Configure `website/` for static export compatible with GitHub Pages branch deploy.
+- [x] Build static site and validate expected output artifacts.
+- [x] Publish static output to `gh-pages` branch manually.
+- [x] Verify GitHub Pages source/status and confirm public URL.
+- [x] Add review notes with deployment result and residual risks.
+
+## Review
+
+- Added static export settings in `website/next.config.ts` (`output: "export"`, `trailingSlash`, `basePath/assetPrefix`, unoptimized images) and `build:pages` script in `website/package.json`.
+- Fixed one absolute static asset path in `website/src/app/page.tsx` to keep banner loading correct under project Pages path.
+- Built site via `npm run build:pages`; verified output in `website/out`.
+- Manually published `website/out` to `origin/gh-pages` (latest deploy commit: `579445a`).
+- Updated GitHub Pages config from `build_type: workflow` to `build_type: legacy` with source `gh-pages` `/`, then republished.
+- Verified live URL now serves with `HTTP 200`: `https://christopherkarani.github.io/Terra/index.html`.
+- Residual risk: local `npm run build` (without `build:pages`) remains for non-Pages builds; Pages publishes should continue using `npm run build:pages`.
+
 ## API Hardening Follow-Up (2026-03-05)
+
+- [x] Capture model duplication investigation (CapturePolicy vs CaptureIntent):
+  - [x] Inventory public exposures (symbols, docs, macros, integrations).
+  - [x] Map internal usage and bridging points.
+  - [x] Propose unified single public model + internal representation.
+  - [x] List files/tests/docs needing updates.
+  - [x] Record findings in Wax session memory.
 
 - [x] Promote lifecycle surface to public (`Terra.LifecycleState`, `Terra.lifecycleState`, `Terra.isRunning`, `Terra.shutdown()`).
 - [x] Promote streaming completeness controls on composable trace handle (`TraceHandle.outputTokens(_:)`, `TraceHandle.firstToken()`).
@@ -13,7 +39,7 @@
 - Public API fixes landed for lifecycle visibility, streaming trace completeness, canonical macro call-shapes, and capture-model unification.
 - `@Traced` now emits clean public call-sites and no longer relies on deprecated names/terminal.
 - FoundationModels now accepts `CapturePolicy` publicly while preserving previous behavior via an internal mapping.
-- Verification passed: full package build + full tests green (`swift test` 169/169); focused suites for macro and FoundationModels also passed.
+- Verification passed: full package build + full tests green (`swift test` 174 tests); focused suites for macro and FoundationModels also passed.
 - Residual warnings are external dependency/plugin deprecations from `grpc-swift` and `swift-protobuf` plugin code.
 
 ## API vNext Hard Improvements (2026-03-05)
@@ -36,10 +62,10 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 
 ### Phase 2 — Capture model unification
 
-- [ ] Delete public `Terra.CaptureIntent`; keep single per-call capture model.
-- [ ] Refactor internal privacy gating + request structs to use `includeContent: Bool`.
-- [ ] Migrate public integrations (FoundationModels) away from `CaptureIntent`.
-- [ ] Add/adjust privacy tests for silent/capturing/lengthOnly edge cases.
+- [x] Delete public `Terra.CaptureIntent`; keep single per-call capture model.
+- [x] Refactor internal privacy gating + request structs to use `includeContent: Bool`.
+- [x] Migrate public integrations (FoundationModels) away from `CaptureIntent`.
+- [x] Add/adjust privacy tests for silent/capturing/lengthOnly edge cases.
 
 ### Phase 3 — Type system hardening
 
