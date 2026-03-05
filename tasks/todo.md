@@ -564,14 +564,25 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
   - [x] Add remediation hints for each lifecycle-facing public error code.
   - [x] Keep migration and front-facing docs aligned.
 
-- [ ] Validation + commits.
-  - [ ] Commit per phase with focused tests.
-  - [ ] Run `swift build`.
-  - [ ] Run `swift test`.
-  - [ ] Run `bash Scripts/validate_no_legacy_refs.sh`.
+- [x] Validation + commits.
+  - [x] Commit per phase with focused tests.
+  - [x] Run `swift build`.
+  - [x] Run `swift test`.
+  - [x] Run `bash Scripts/validate_no_legacy_refs.sh`.
 
 ## Review (API DX Uplift Sprint)
 
-- [ ] Summary of shipped changes.
-- [ ] Verification evidence.
-- [ ] Remaining risks and next cuts.
+- [x] Summary of shipped changes.
+- [x] Verification evidence.
+- [x] Remaining risks and next cuts.
+
+- Shipped:
+  - `6dc0ca4` adds macro diagnostics + fix-its for raw string typed-ID slots (`model`, `provider`, `runtime`, `callID`) and keeps canonical expansion output.
+  - `4460af9` adds `Examples/Terra Sample/RecipeSnippets.swift` with a 90-second path and infer/tool/agent recipes, plus canonical docs/README updates.
+  - `4460af9` also adds `Terra.TerraError.remediationHint` and documents deterministic `code -> cause -> action` mappings.
+- Verification:
+  - Focused: `swift test --filter TracedMacroExpansionTests`, `swift test --filter quickstartSnippetsExistAndUseCanonicalAPIs`, `swift test --filter TerraErrorRemediationTests`, `swift test --filter TerraLegacyClosureDeprecationTests`.
+  - Gates: `swift build`, `swift test` (198 tests, 21 suites), `bash Scripts/validate_no_legacy_refs.sh`.
+- Remaining risks / next cuts:
+  - Macro diagnostics tests still rely on `assertMacroExpansion` infrastructure that emits `XCTest` failures under Swift Testing; worth migrating to explicit failure handlers for stricter red/green signaling.
+  - Build/test output still includes third-party plugin deprecation warnings (`grpc-swift`, `swift-protobuf`) outside Terra-owned source.
