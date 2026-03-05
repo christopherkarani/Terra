@@ -26,9 +26,9 @@ extension Terra {
   }
 
   package enum TraceKeys {
-    static let runtime = TraceKey<String>("terra.runtime")
-    static let provider = TraceKey<String>("gen_ai.provider.name")
-    static let responseModel = TraceKey<String>("gen_ai.response.model")
+    static let runtime = TraceKey<RuntimeID>("terra.runtime")
+    static let provider = TraceKey<ProviderID>("gen_ai.provider.name")
+    static let responseModel = TraceKey<ModelID>("gen_ai.response.model")
     static let inputTokens = TraceKey<Int>("gen_ai.usage.input_tokens")
     static let outputTokens = TraceKey<Int>("gen_ai.usage.output_tokens")
     static let temperature = TraceKey<Double>("gen_ai.request.temperature")
@@ -155,10 +155,10 @@ extension Terra {
   }
 
   public static func infer(
-    _ model: String,
+    _ model: ModelID,
     prompt: String? = nil,
-    provider: String? = nil,
-    runtime: String? = nil,
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil,
     temperature: Double? = nil,
     maxTokens: Int? = nil
   ) -> Call<some OperationKind> {
@@ -173,10 +173,10 @@ extension Terra {
   }
 
   public static func stream(
-    _ model: String,
+    _ model: ModelID,
     prompt: String? = nil,
-    provider: String? = nil,
-    runtime: String? = nil,
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil,
     temperature: Double? = nil,
     maxTokens: Int? = nil,
     expectedTokens: Int? = nil
@@ -193,10 +193,10 @@ extension Terra {
   }
 
   public static func embed(
-    _ model: String,
+    _ model: ModelID,
     inputCount: Int? = nil,
-    provider: String? = nil,
-    runtime: String? = nil
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil
   ) -> Call<some OperationKind> {
     Call<EmbedOp>(operation: .embed(.init(
       model: model,
@@ -209,18 +209,18 @@ extension Terra {
   public static func agent(
     _ name: String,
     id: String? = nil,
-    provider: String? = nil,
-    runtime: String? = nil
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil
   ) -> Call<some OperationKind> {
     Call<AgentOp>(operation: .agent(.init(name: name, id: id, provider: provider, runtime: runtime)))
   }
 
   public static func tool(
     _ name: String,
-    callID: String,
+    callID: ToolCallID,
     type: String? = nil,
-    provider: String? = nil,
-    runtime: String? = nil
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil
   ) -> Call<some OperationKind> {
     Call<ToolOp>(operation: .tool(.init(name: name, callID: callID, type: type, provider: provider, runtime: runtime)))
   }
@@ -228,8 +228,8 @@ extension Terra {
   public static func safety(
     _ name: String,
     subject: String? = nil,
-    provider: String? = nil,
-    runtime: String? = nil
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil
   ) -> Call<some OperationKind> {
     Call<SafetyOp>(operation: .safety(.init(name: name, subject: subject, provider: provider, runtime: runtime)))
   }
@@ -273,51 +273,51 @@ private extension Terra {
   }
 
   struct _Infer: Sendable {
-    var model: String
+    var model: ModelID
     var prompt: String?
-    var provider: String?
-    var runtime: String?
+    var provider: ProviderID?
+    var runtime: RuntimeID?
     var temperature: Double?
     var maxTokens: Int?
   }
 
   struct _Stream: Sendable {
-    var model: String
+    var model: ModelID
     var prompt: String?
-    var provider: String?
-    var runtime: String?
+    var provider: ProviderID?
+    var runtime: RuntimeID?
     var temperature: Double?
     var maxTokens: Int?
     var expectedTokens: Int?
   }
 
   struct _Embed: Sendable {
-    var model: String
+    var model: ModelID
     var inputCount: Int?
-    var provider: String?
-    var runtime: String?
+    var provider: ProviderID?
+    var runtime: RuntimeID?
   }
 
   struct _Agent: Sendable {
     var name: String
     var id: String?
-    var provider: String?
-    var runtime: String?
+    var provider: ProviderID?
+    var runtime: RuntimeID?
   }
 
   struct _Tool: Sendable {
     var name: String
-    var callID: String
+    var callID: ToolCallID
     var type: String?
-    var provider: String?
-    var runtime: String?
+    var provider: ProviderID?
+    var runtime: RuntimeID?
   }
 
   struct _Safety: Sendable {
     var name: String
     var subject: String?
-    var provider: String?
-    var runtime: String?
+    var provider: ProviderID?
+    var runtime: RuntimeID?
   }
 
   enum _Operation: Sendable {
@@ -356,10 +356,10 @@ private extension Terra {
   ) async rethrows -> R {
     switch operation {
     case .infer(let operation):
-      var call = inference(model: operation.model, prompt: operation.prompt)
+      var call = inference(model: operation.model.rawValue, prompt: operation.prompt)
       if capturePolicy == .includeContent { call = call.includeContent() }
-      if let provider = operation.provider { call = call.provider(provider) }
-      if let runtime = operation.runtime { call = call.runtime(runtime) }
+      if let provider = operation.provider { call = call.provider(provider.rawValue) }
+      if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
       if let temperature = operation.temperature { call = call.temperature(temperature) }
       if let maxTokens = operation.maxTokens { call = call.maxOutputTokens(maxTokens) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
@@ -375,10 +375,10 @@ private extension Terra {
       }
 
     case .stream(let operation):
-      var call = stream(model: operation.model, prompt: operation.prompt)
+      var call = stream(model: operation.model.rawValue, prompt: operation.prompt)
       if capturePolicy == .includeContent { call = call.includeContent() }
-      if let provider = operation.provider { call = call.provider(provider) }
-      if let runtime = operation.runtime { call = call.runtime(runtime) }
+      if let provider = operation.provider { call = call.provider(provider.rawValue) }
+      if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
       if let temperature = operation.temperature { call = call.temperature(temperature) }
       if let maxTokens = operation.maxTokens { call = call.maxOutputTokens(maxTokens) }
       if let expectedTokens = operation.expectedTokens { call = call.expectedOutputTokens(expectedTokens) }
@@ -396,10 +396,10 @@ private extension Terra {
       }
 
     case .embed(let operation):
-      var call = embedding(model: operation.model, inputCount: operation.inputCount)
+      var call = embedding(model: operation.model.rawValue, inputCount: operation.inputCount)
       if capturePolicy == .includeContent { call = call.includeContent() }
-      if let provider = operation.provider { call = call.provider(provider) }
-      if let runtime = operation.runtime { call = call.runtime(runtime) }
+      if let provider = operation.provider { call = call.provider(provider.rawValue) }
+      if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
       return try await call.execute { trace in
         let handle = TraceHandle(
@@ -413,8 +413,8 @@ private extension Terra {
     case .agent(let operation):
       var call = agent(name: operation.name, id: operation.id)
       if capturePolicy == .includeContent { call = call.includeContent() }
-      if let provider = operation.provider { call = call.provider(provider) }
-      if let runtime = operation.runtime { call = call.runtime(runtime) }
+      if let provider = operation.provider { call = call.provider(provider.rawValue) }
+      if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
       return try await call.execute { trace in
         let handle = TraceHandle(
@@ -426,10 +426,10 @@ private extension Terra {
       }
 
     case .tool(let operation):
-      var call = tool(name: operation.name, callID: operation.callID, type: operation.type)
+      var call = tool(name: operation.name, callID: operation.callID.rawValue, type: operation.type)
       if capturePolicy == .includeContent { call = call.includeContent() }
-      if let provider = operation.provider { call = call.provider(provider) }
-      if let runtime = operation.runtime { call = call.runtime(runtime) }
+      if let provider = operation.provider { call = call.provider(provider.rawValue) }
+      if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
       return try await call.execute { trace in
         let handle = TraceHandle(
@@ -443,8 +443,8 @@ private extension Terra {
     case .safety(let operation):
       var call = safetyCheck(name: operation.name, subject: operation.subject)
       if capturePolicy == .includeContent { call = call.includeContent() }
-      if let provider = operation.provider { call = call.provider(provider) }
-      if let runtime = operation.runtime { call = call.runtime(runtime) }
+      if let provider = operation.provider { call = call.provider(provider.rawValue) }
+      if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
       return try await call.execute { trace in
         let handle = TraceHandle(

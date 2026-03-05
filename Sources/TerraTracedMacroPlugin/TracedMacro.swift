@@ -43,8 +43,8 @@ public struct TracedMacro: BodyMacro {
       modelPrompt: params.first { matches($0, names: modelPromptParamNames) }.map(parameterName),
       maxOutputTokens: params.first { matches($0, names: maxTokensParamNames) }.map(parameterName),
       temperature: params.first { matches($0, names: ["temperature"]) }.map(parameterName),
-      provider: params.first { matches($0, names: ["provider"]) }.map(parameterName),
-      toolCallID: params.first { matches($0, names: toolCallIDParamNames) }.map(parameterName),
+      provider: params.first { matches($0, names: ["provider"]) }.map(providerExpression),
+      toolCallID: params.first { matches($0, names: toolCallIDParamNames) }.map(toolCallIDExpression),
       embeddingInputCount: params.first { matches($0, names: embeddingCountParamNames) }.map(parameterName),
       safetySubject: params.first { matches($0, names: safetySubjectParamNames) }.map(parameterName)
     )
@@ -155,7 +155,7 @@ public struct TracedMacro: BodyMacro {
 
     case .tool:
       let toolExpr = try requiredArg(named: "tool", in: arguments)
-      let callIDExpr = resolved.toolCallID ?? "UUID().uuidString"
+      let callIDExpr = resolved.toolCallID ?? "Terra.ToolCallID()"
       let typeExpr = argument(named: "type", in: arguments)
       return buildCall(
         "Terra.tool(\(toolExpr)",
@@ -266,6 +266,64 @@ public struct TracedMacro: BodyMacro {
   private static func argument(named label: String, in arguments: LabeledExprListSyntax) -> String? {
     arguments.first(where: { $0.label?.text == label })?.expression.description
       .trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private static func providerExpression(_ param: FunctionParameterSyntax) -> String {
+    let name = parameterName(param)
+    let type = normalizedTypeName(param.type)
+
+    switch type {
+    case ("String", false):
+      return "Terra.ProviderID(\(name))"
+    case ("String", true):
+      return "\(name).map { Terra.ProviderID($0) }"
+    case ("ProviderID", _), ("Terra.ProviderID", _):
+      return name
+    default:
+      return name
+    }
+  }
+
+  private static func toolCallIDExpression(_ param: FunctionParameterSyntax) -> String {
+    let name = parameterName(param)
+    let type = normalizedTypeName(param.type)
+
+    switch type {
+    case ("String", false):
+      return "Terra.ToolCallID(\(name))"
+    case ("String", true):
+      return "(\(name).map { Terra.ToolCallID($0) } ?? Terra.ToolCallID())"
+    case ("ToolCallID", false), ("Terra.ToolCallID", false):
+      return name
+    case ("ToolCallID", true), ("Terra.ToolCallID", true):
+      return "(\(name) ?? Terra.ToolCallID())"
+    default:
+      return name
+    }
+  }
+
+  private static func normalizedTypeName(_ type: TypeSyntax?) -> (name: String, isOptional: Bool) {
+    guard var type else { return ("", false) }
+
+    var isOptional = false
+    if let optionalType = type.as(OptionalTypeSyntax.self) {
+      isOptional = true
+      type = optionalType.wrappedType
+    } else if let optionalType = type.as(ImplicitlyUnwrappedOptionalTypeSyntax.self) {
+      isOptional = true
+      type = optionalType.wrappedType
+    }
+
+    if let identifierType = type.as(IdentifierTypeSyntax.self) {
+      return (identifierType.name.text, isOptional)
+    }
+
+    if let memberType = type.as(MemberTypeSyntax.self) {
+      let base = memberType.baseType.description.trimmingCharacters(in: .whitespacesAndNewlines)
+      return ("\(base).\(memberType.name.text)", isOptional)
+    }
+
+    return (type.description.trimmingCharacters(in: .whitespacesAndNewlines), isOptional)
   }
 
   private static func requiredArg(named label: String, in arguments: LabeledExprListSyntax) throws -> String {

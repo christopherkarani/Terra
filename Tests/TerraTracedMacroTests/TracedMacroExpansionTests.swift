@@ -259,7 +259,7 @@ func agentMacroWithID() {
   )
 }
 
-@Test("Tool macro basic expansion uses UUID callID")
+@Test("Tool macro basic expansion uses ToolCallID default")
 func toolMacroBasic() {
   assertMacroExpansion(
     """
@@ -270,7 +270,7 @@ func toolMacroBasic() {
     """,
     expandedSource: """
     func search(query: String) async throws -> [Result] {
-      return try await Terra.tool("search", callID: UUID().uuidString).run { trace in
+      return try await Terra.tool("search", callID: Terra.ToolCallID()).run { trace in
         _ = trace
         try await doSearch(query)
       }
@@ -291,7 +291,7 @@ func toolMacroUsesFunctionCallID() {
     """,
     expandedSource: """
     func search(query: String, callID: String) async throws -> [Result] {
-      return try await Terra.tool("search", callID: callID).run { trace in
+      return try await Terra.tool("search", callID: Terra.ToolCallID(callID)).run { trace in
         _ = trace
         try await doSearch(query)
       }

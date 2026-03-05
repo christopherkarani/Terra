@@ -1,3 +1,5 @@
+import TerraCore
+
 /// Wraps the function body in a traced Terra operation using `.run { ... }`.
 ///
 /// The macro supports explicit metadata arguments and auto-detects common parameter names:
@@ -14,9 +16,9 @@
 /// ```
 @attached(body)
 public macro Traced(
-  model: String,
+  model: Terra.ModelID,
   prompt: String? = nil,
-  provider: String? = nil,
+  provider: Terra.ProviderID? = nil,
   temperature: Double? = nil,
   maxTokens: Int? = nil,
   maxOutputTokens: Int? = nil,
@@ -27,10 +29,10 @@ public macro Traced(
 public macro Traced(agent: String, id: String? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
 
 @attached(body)
-public macro Traced(tool: String, callID: String? = nil, type: String? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+public macro Traced(tool: String, callID: Terra.ToolCallID? = nil, type: String? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
 
 @attached(body)
-public macro Traced(embedding: String, count: Int? = nil, inputCount: Int? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+public macro Traced(embedding: Terra.ModelID, count: Int? = nil, inputCount: Int? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
 
 @attached(body)
 public macro Traced(safety: String, subject: String? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
