@@ -137,6 +137,7 @@ func runFoundationModels(prompt: String) async throws -> String {
 - API cookbook: [`Docs/API_Cookbook.md`](Docs/API_Cookbook.md)
 - Front-facing API reference: [`Docs/Front_Facing_API.md`](Docs/Front_Facing_API.md)
 - Front-facing API examples: [`Docs/Front_Facing_API_Examples.md`](Docs/Front_Facing_API_Examples.md)
+- Manual GitHub Pages + DocC publish: `Scripts/publish_pages_with_docc.sh`
 
 ## Installation (SwiftPM)
 

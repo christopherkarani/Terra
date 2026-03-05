@@ -701,3 +701,21 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 - Validation:
   - `cd website && npm run build:pages` ✅
   - Static output includes `href="#documentation"` and `id="documentation"` ✅
+
+## Pages + DocC Publish Automation (2026-03-05)
+
+- [x] Add one-command script to build website + generate DocC + publish to `gh-pages`.
+- [x] Use static-hosted DocC conversion with GitHub Pages base path support.
+- [x] Surface DocC URL from website/docs navigation.
+- [x] Validate script with local no-publish run.
+
+## Review (Pages + DocC Publish Automation)
+
+- [x] Summary of automation changes.
+- Added `Scripts/publish_pages_with_docc.sh` to build website static output, generate symbol graphs, convert `Terra.docc` for static hosting, copy to `website/out/docc`, and optionally publish to `gh-pages`.
+- Added website header link to DocC API at `https://christopherkarani.github.io/Terra/docc/documentation/terra/`.
+- Added README maintenance command reference for manual Pages + DocC publish.
+- [x] Validation evidence.
+- `Scripts/publish_pages_with_docc.sh --no-publish` completed successfully and produced:
+  - `website/out` (website static output)
+  - `website/out/docc` (DocC static bundle)
