@@ -11,19 +11,31 @@ public enum TerraSystemProfiler {
     public let timestamp: Date
   }
 
-  private static let lock = NSLock()
-  private static var memoryProfilerEnabled = false
+  private final class MemoryProfilerState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var enabled = false
+
+    func enable() {
+      lock.lock()
+      enabled = true
+      lock.unlock()
+    }
+
+    func readIsEnabled() -> Bool {
+      lock.lock()
+      defer { lock.unlock() }
+      return enabled
+    }
+  }
+
+  private static let memoryProfilerState = MemoryProfilerState()
 
   public static func installMemoryProfiler() {
-    lock.lock()
-    memoryProfilerEnabled = true
-    lock.unlock()
+    memoryProfilerState.enable()
   }
 
   public static var isMemoryProfilerEnabled: Bool {
-    lock.lock()
-    defer { lock.unlock() }
-    return memoryProfilerEnabled
+    memoryProfilerState.readIsEnabled()
   }
 
   public static func captureMemorySnapshot() -> MemorySnapshot? {

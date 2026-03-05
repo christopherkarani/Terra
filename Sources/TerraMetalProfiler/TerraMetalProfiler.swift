@@ -6,19 +6,31 @@ import OpenTelemetryApi
 /// This target intentionally starts as a light wrapper so adopters can opt in
 /// without paying overhead until counters are attached.
 public enum TerraMetalProfiler {
-  private static let lock = NSLock()
-  private static var installed = false
+  private final class InstallState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isInstalled = false
+
+    func install() {
+      lock.lock()
+      isInstalled = true
+      lock.unlock()
+    }
+
+    func readIsInstalled() -> Bool {
+      lock.lock()
+      defer { lock.unlock() }
+      return isInstalled
+    }
+  }
+
+  private static let installState = InstallState()
 
   public static func install() {
-    lock.lock()
-    installed = true
-    lock.unlock()
+    installState.install()
   }
 
   public static var isInstalled: Bool {
-    lock.lock()
-    defer { lock.unlock() }
-    return installed
+    installState.readIsInstalled()
   }
 
   public static func attributes(

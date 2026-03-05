@@ -71,7 +71,11 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 
 - [ ] Add typed IDs (`ModelID`, `ProviderID`, `RuntimeID`, `ToolCallID`) and migrate public signatures.
 - [ ] Remove public `OperationKind`; make `Terra.Call` non-generic.
-- [ ] Add stable public `TerraError` and map lifecycle/config failures.
+- [ ] Add stable public `TerraError` and map lifecycle/config failures:
+  - [x] Inventory internal start/reconfigure throw sources.
+  - [ ] Define stable `TerraError` taxonomy + diagnostics payload.
+  - [ ] Map `Terra.start`/`Terra.reconfigure` throw paths to `TerraError`.
+  - [ ] Add tests validating mapping (invalid OTLP URL, persistence FS failure, already-started conflict).
 - [ ] Update tests to new canonical API (no legacy names).
 
 ### Phase 4 — Extensibility/testability seams
@@ -87,7 +91,16 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 ### Phase 6 — Macro + docs alignment
 
 - [ ] Update `@Traced` macro expansion to use canonical public API only (`infer/stream/embed/agent/tool/safety + run`).
-- [ ] Migrate macro signatures/expansion to typed IDs (string-literal ergonomic).
+- [ ] Migrate `@Traced` expansion to typed IDs:
+  - [ ] Use `Terra.tool("name")` when no `callID` is present (rely on `callID: Terra.ToolCallID = .init()` default).
+  - [ ] Wrap auto-detected `provider`/`runtime` *String* params as `Terra.ProviderID(provider)` / `Terra.RuntimeID(runtime)` (pass through when already typed).
+  - [ ] Wrap auto-detected tool `callID` *String* params as `Terra.ToolCallID(callID)` (pass through when already typed).
+  - [ ] Add optional `runtime:` support (explicit macro arg + auto-detected function param).
+- [ ] Update macro expansion tests for typed IDs + `tool` defaults:
+  - [ ] Update tool macro default callID expectation (remove `UUID().uuidString`).
+  - [ ] Add test: tool macro wraps `callID: String` parameter.
+  - [ ] Add test: tool macro passes `callID: Terra.ToolCallID` parameter directly.
+  - [ ] Add test: model macro wraps `provider: String` parameter (and `runtime: String` when supported).
 - [ ] Update docs/examples/website snippets to final API; remove legacy names from canonical docs.
 - [ ] Add and run stale-reference sweep gate for canonical docs/snippets.
 
