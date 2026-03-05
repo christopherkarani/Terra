@@ -1,3 +1,15 @@
+## Legacy Seam Reference Sweep (2026-03-05)
+
+- [x] Initialize Wax session store.
+- [x] Scan repository for legacy seam symbols (old seam API names).
+- [x] Check docs for `TelemetryEngine`/`TelemetryContext` alignment.
+- [x] Report concise file:line match list.
+
+## Review
+
+- `rg` found no remaining references to `CallDescriptor`, `ProviderSeam`, `ExecutorSeam`, `RuntimeSeam`, or `run(using:provider:executor:)`.
+- `Docs/Front_Facing_API.md` already references `TelemetryEngine`/`TelemetryContext` and `.run(using: engine)` examples.
+
 ## Website Manual GitHub Pages Publish (2026-03-05)
 
 - [x] Capture deploy plan and checkpoints in this task file.
@@ -586,3 +598,33 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 - Remaining risks / next cuts:
   - Macro diagnostics tests still rely on `assertMacroExpansion` infrastructure that emits `XCTest` failures under Swift Testing; worth migrating to explicit failure handlers for stricter red/green signaling.
   - Build/test output still includes third-party plugin deprecation warnings (`grpc-swift`, `swift-protobuf`) outside Terra-owned source.
+
+## API Surface Slimming: Single Engine Seam (2026-03-05)
+
+- [x] Define target API for a single public execution seam.
+- [x] TDD: add failing tests for `run(using:engine)` and seam behavior.
+- [x] Replace multi-seam public protocols with one `TelemetryEngine` protocol.
+- [x] Keep default concrete behavior internal and preserve canonical call ergonomics.
+- [x] Update front-facing docs/examples for new seam entrypoint.
+- [x] Run focused and full validation (`swift build`, `swift test`, stale refs).
+
+## Review (Single Engine Seam)
+
+- [x] Summary of API shrink and tradeoffs.
+- [x] Validation evidence.
+- [x] Follow-up opportunities.
+
+- Shipped:
+  - Consolidated public seam surface to `Terra.TelemetryEngine` + `Terra.TelemetryContext`; removed public `CallDescriptor`/`ProviderSeam`/`ExecutorSeam`/`RuntimeSeam`.
+  - Kept canonical call ergonomics unchanged (`infer/stream/embed/agent/tool/safety` + `.run`) while adding engine-injected overloads (`run(using: engine)`).
+  - Updated seam tests to new API and retained deterministic mock-based instrumentation assertions.
+  - Updated canonical docs to reflect the single seam model.
+- Validation:
+  - `swift package clean`
+  - `swift build` ✅
+  - `swift test --filter TerraProtocolSeamsTests` ✅
+  - `swift test` ✅ (198 tests, 21 suites)
+  - `bash Scripts/validate_no_legacy_refs.sh` ✅
+  - `python3 Scripts/public_symbol_count.py` ✅ (with escalation due sandbox cache restrictions)
+- Follow-up:
+  - Full test run exposed cross-suite span selection nondeterminism in `TerraTracedSessionTests`; stabilized by selecting the inference span using deterministic tool metadata instead of first-match ordering.

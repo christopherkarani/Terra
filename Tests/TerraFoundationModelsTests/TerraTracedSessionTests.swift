@@ -155,9 +155,14 @@ func transcriptDiffEmitsToolEvents() async throws {
     ]
   )
   let session = TerraTracedSession(backend: backend)
-  _ = try await session.respond(to: "Find swift docs", promptCapture: .includeContent)
+  _ = try await session.respond(to: "Find swift docs [transcript-diff]", promptCapture: .includeContent)
 
-  let span = try #require(harness.finishedSpans().first(where: { $0.name == "gen_ai.inference" }))
+  let span = try #require(
+    harness.finishedSpans().last(where: {
+      $0.name == "gen_ai.inference"
+        && $0.attributes["terra.fm.tool_call_count"]?.description == "1"
+    })
+  )
   #expect(span.events.contains { $0.name == "tool_call" })
   #expect(span.events.contains { $0.name == "tool_result" })
   #expect(span.attributes["terra.fm.tools.called"]?.description == "search")

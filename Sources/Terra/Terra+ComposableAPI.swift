@@ -75,8 +75,8 @@ extension Terra {
     }
   }
 
-  public struct CallDescriptor: Sendable, Hashable {
-    public enum Kind: String, Sendable, Hashable {
+  public struct TelemetryContext: Sendable, Hashable {
+    public enum Operation: String, Sendable, Hashable {
       case inference
       case streaming
       case embedding
@@ -85,22 +85,22 @@ extension Terra {
       case safety
     }
 
-    public let kind: Kind
+    public let operation: Operation
     public let model: ModelID?
     public let name: String?
-    public var provider: ProviderID?
-    public var runtime: RuntimeID?
+    public let provider: ProviderID?
+    public let runtime: RuntimeID?
     public let capturePolicy: CapturePolicy
 
     public init(
-      kind: Kind,
+      operation: Operation,
       model: ModelID? = nil,
       name: String? = nil,
       provider: ProviderID? = nil,
       runtime: RuntimeID? = nil,
       capturePolicy: CapturePolicy = .default
     ) {
-      self.kind = kind
+      self.operation = operation
       self.model = model
       self.name = name
       self.provider = provider
@@ -109,19 +109,10 @@ extension Terra {
     }
   }
 
-  public protocol ProviderSeam: Sendable {
-    func resolve(_ descriptor: CallDescriptor) -> CallDescriptor
-  }
-
-  public protocol ExecutorSeam: Sendable {
-    func execute<R: Sendable>(_ operation: @escaping @Sendable () async throws -> R) async throws -> R
-  }
-
-  public protocol RuntimeSeam: Sendable {
+  public protocol TelemetryEngine: Sendable {
     func run<R: Sendable>(
-      descriptor: CallDescriptor,
+      context: TelemetryContext,
       attributes: [TraceAttribute],
-      executor: any ExecutorSeam,
       _ body: @escaping @Sendable (TraceHandle) async throws -> R
     ) async throws -> R
   }
@@ -282,39 +273,32 @@ extension Terra {
     }
 
     @discardableResult
-    public func run<R: Sendable, Runtime: RuntimeSeam, Provider: ProviderSeam, Executor: ExecutorSeam>(
-      using runtime: Runtime,
-      provider: Provider,
-      executor: Executor,
+    public func run<R: Sendable, Engine: TelemetryEngine>(
+      using engine: Engine,
       _ body: @escaping @Sendable () async throws -> R
     ) async throws -> R {
-      try await run(using: runtime, provider: provider, executor: executor) { _ in
+      try await run(using: engine) { _ in
         try await body()
       }
     }
 
     @discardableResult
-    public func run<R: Sendable, Runtime: RuntimeSeam, Provider: ProviderSeam, Executor: ExecutorSeam>(
-      using runtime: Runtime,
-      provider: Provider,
-      executor: Executor,
+    public func run<R: Sendable, Engine: TelemetryEngine>(
+      using engine: Engine,
       _ body: @escaping @Sendable (TraceHandle) async throws -> R
     ) async throws -> R {
-      var descriptor = _descriptor(capturePolicy: capturePolicy)
-      descriptor = provider.resolve(descriptor)
-
+      let context = _context(capturePolicy: capturePolicy)
       var seamAttributes = _mergedAttributes().map { TraceAttribute(name: $0.name, value: $0.value) }
-      if let provider = descriptor.provider {
+      if let provider = context.provider {
         seamAttributes.append(.init(name: TraceKeys.provider.name, value: provider.traceScalar))
       }
-      if let runtime = descriptor.runtime {
+      if let runtime = context.runtime {
         seamAttributes.append(.init(name: TraceKeys.runtime.name, value: runtime.traceScalar))
       }
       let events = _metadataEvents()
-      return try await runtime.run(
-        descriptor: descriptor,
+      return try await engine.run(
+        context: context,
         attributes: seamAttributes,
-        executor: executor,
         { handle in
           for event in events {
             _ = handle.event(event)
@@ -341,11 +325,11 @@ extension Terra {
       }
     }
 
-    private func _descriptor(capturePolicy: CapturePolicy) -> CallDescriptor {
+    private func _context(capturePolicy: CapturePolicy) -> TelemetryContext {
       switch operation {
       case .infer(let operation):
         .init(
-          kind: .inference,
+          operation: .inference,
           model: operation.model,
           provider: operation.provider,
           runtime: operation.runtime,
@@ -353,7 +337,7 @@ extension Terra {
         )
       case .stream(let operation):
         .init(
-          kind: .streaming,
+          operation: .streaming,
           model: operation.model,
           provider: operation.provider,
           runtime: operation.runtime,
@@ -361,7 +345,7 @@ extension Terra {
         )
       case .embed(let operation):
         .init(
-          kind: .embedding,
+          operation: .embedding,
           model: operation.model,
           provider: operation.provider,
           runtime: operation.runtime,
@@ -369,7 +353,7 @@ extension Terra {
         )
       case .agent(let operation):
         .init(
-          kind: .agent,
+          operation: .agent,
           name: operation.name,
           provider: operation.provider,
           runtime: operation.runtime,
@@ -377,7 +361,7 @@ extension Terra {
         )
       case .tool(let operation):
         .init(
-          kind: .tool,
+          operation: .tool,
           name: operation.name,
           provider: operation.provider,
           runtime: operation.runtime,
@@ -385,7 +369,7 @@ extension Terra {
         )
       case .safety(let operation):
         .init(
-          kind: .safety,
+          operation: .safety,
           name: operation.name,
           provider: operation.provider,
           runtime: operation.runtime,

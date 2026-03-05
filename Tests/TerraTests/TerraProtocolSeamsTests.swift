@@ -4,20 +4,20 @@ import Testing
 
 @Suite("Protocol seams", .serialized)
 struct TerraProtocolSeamsTests {
-  @Test("Injected runtime/provider/executor seams capture deterministic instrumentation")
-  func injectedSeamsCaptureDeterministicInstrumentation() async throws {
+  @Test("Injected telemetry engine captures deterministic instrumentation")
+  func injectedTelemetryEngineCapturesDeterministicInstrumentation() async throws {
     let log = SeamLog()
-    let runtime = MockRuntime(log: log)
-    let provider = MockProvider(
-      providerID: Terra.ProviderID("mock-provider"),
-      runtimeID: Terra.RuntimeID("mock-runtime")
-    )
-    let executor = MockExecutor(log: log)
+    let engine = MockEngine(log: log)
 
     let result = try await Terra
-      .infer(Terra.ModelID("gpt-test"), prompt: "hello")
+      .infer(
+        Terra.ModelID("gpt-test"),
+        prompt: "hello",
+        provider: Terra.ProviderID("mock-provider"),
+        runtime: Terra.RuntimeID("mock-runtime")
+      )
       .attr(.init("app.request.id"), "req-1")
-      .run(using: runtime, provider: provider, executor: executor) { trace in
+      .run(using: engine) { trace in
         trace.event("request.start")
         trace.attr(.init("app.phase"), "decode")
         trace.tokens(input: 5, output: 7)
@@ -26,15 +26,15 @@ struct TerraProtocolSeamsTests {
       }
 
     #expect(result == "ok")
-    #expect(log.executorRuns == 1)
-    #expect(log.beginDescriptors.count == 1)
+    #expect(log.engineRuns == 1)
+    #expect(log.beginContexts.count == 1)
 
-    let descriptor = try #require(log.beginDescriptors.first)
-    #expect(descriptor.kind == .inference)
-    #expect(descriptor.model == Terra.ModelID("gpt-test"))
-    #expect(descriptor.provider == Terra.ProviderID("mock-provider"))
-    #expect(descriptor.runtime == Terra.RuntimeID("mock-runtime"))
-    #expect(descriptor.capturePolicy == .default)
+    let context = try #require(log.beginContexts.first)
+    #expect(context.operation == .inference)
+    #expect(context.model == Terra.ModelID("gpt-test"))
+    #expect(context.provider == Terra.ProviderID("mock-provider"))
+    #expect(context.runtime == Terra.RuntimeID("mock-runtime"))
+    #expect(context.capturePolicy == .default)
 
     #expect(log.events == ["request.start"])
     #expect(log.recordedAttributes[.init(name: "app.request.id", value: .string("req-1"))] == true)
@@ -46,63 +46,37 @@ struct TerraProtocolSeamsTests {
     #expect(log.finishCount == 1)
   }
 
-  @Test("Injected seams record thrown errors without real transport")
-  func injectedSeamsRecordThrownErrors() async {
+  @Test("Injected engine records thrown errors without real transport")
+  func injectedEngineRecordsThrownErrors() async {
     enum ExpectedError: Error { case boom }
 
     let log = SeamLog()
-    let runtime = MockRuntime(log: log)
-    let provider = MockProvider(providerID: nil, runtimeID: nil)
-    let executor = MockExecutor(log: log)
+    let engine = MockEngine(log: log)
 
     await #expect(throws: ExpectedError.self) {
       _ = try await Terra
         .tool("search", callID: Terra.ToolCallID("call-1"))
-        .run(using: runtime, provider: provider, executor: executor) { _ in
+        .run(using: engine) { _ in
           throw ExpectedError.boom
         }
     }
 
-    #expect(log.executorRuns == 1)
-    #expect(log.beginDescriptors.count == 1)
+    #expect(log.engineRuns == 1)
+    #expect(log.beginContexts.count == 1)
     #expect(log.errors.count == 1)
     #expect(log.finishCount == 1)
   }
 }
 
-private struct MockProvider: Terra.ProviderSeam {
-  let providerID: Terra.ProviderID?
-  let runtimeID: Terra.RuntimeID?
-
-  func resolve(_ descriptor: Terra.CallDescriptor) -> Terra.CallDescriptor {
-    var copy = descriptor
-    copy.provider = providerID
-    copy.runtime = runtimeID
-    return copy
-  }
-}
-
-private struct MockExecutor: Terra.ExecutorSeam {
-  let log: SeamLog
-
-  func execute<R: Sendable>(
-    _ operation: @escaping @Sendable () async throws -> R
-  ) async throws -> R {
-    log.executorRuns += 1
-    return try await operation()
-  }
-}
-
-private struct MockRuntime: Terra.RuntimeSeam {
+private struct MockEngine: Terra.TelemetryEngine {
   let log: SeamLog
 
   func run<R: Sendable>(
-    descriptor: Terra.CallDescriptor,
+    context: Terra.TelemetryContext,
     attributes: [Terra.TraceAttribute],
-    executor: any Terra.ExecutorSeam,
     _ body: @escaping @Sendable (Terra.TraceHandle) async throws -> R
   ) async throws -> R {
-    log.beginDescriptors.append(descriptor)
+    log.beginContexts.append(context)
     var merged = log.recordedAttributes
     for attribute in attributes {
       merged[attribute] = true
@@ -121,9 +95,8 @@ private struct MockRuntime: Terra.RuntimeSeam {
     )
 
     do {
-      let result = try await executor.execute {
-        try await body(handle)
-      }
+      log.engineRuns += 1
+      let result = try await body(handle)
       log.finishCount += 1
       return result
     } catch {
@@ -137,16 +110,16 @@ private struct MockRuntime: Terra.RuntimeSeam {
 private final class SeamLog: @unchecked Sendable {
   private let lock = NSLock()
 
-  private var _beginDescriptors: [Terra.CallDescriptor] = []
+  private var _beginContexts: [Terra.TelemetryContext] = []
   private var _recordedAttributes: [Terra.TraceAttribute: Bool] = [:]
   private var _events: [String] = []
   private var _errors: [String] = []
-  private var _executorRuns: Int = 0
+  private var _engineRuns: Int = 0
   private var _finishCount: Int = 0
 
-  var beginDescriptors: [Terra.CallDescriptor] {
-    get { lock.withLock { _beginDescriptors } }
-    set { lock.withLock { _beginDescriptors = newValue } }
+  var beginContexts: [Terra.TelemetryContext] {
+    get { lock.withLock { _beginContexts } }
+    set { lock.withLock { _beginContexts = newValue } }
   }
 
   var recordedAttributes: [Terra.TraceAttribute: Bool] {
@@ -164,9 +137,9 @@ private final class SeamLog: @unchecked Sendable {
     set { lock.withLock { _errors = newValue } }
   }
 
-  var executorRuns: Int {
-    get { lock.withLock { _executorRuns } }
-    set { lock.withLock { _executorRuns = newValue } }
+  var engineRuns: Int {
+    get { lock.withLock { _engineRuns } }
+    set { lock.withLock { _engineRuns = newValue } }
   }
 
   var finishCount: Int {

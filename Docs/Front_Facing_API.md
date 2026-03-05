@@ -114,6 +114,8 @@ static func agentRecipe(task: String) async throws -> String {
 - `.metadata { ... }` (`@Terra.MetadataBuilder`)
 - `.run { ... }`
 - `.run { trace in ... }`
+- `.run(using: engine) { ... }` where `engine: any Terra.TelemetryEngine`
+- `.run(using: engine) { trace in ... }` where `engine: any Terra.TelemetryEngine`
 
 ### Trace handle (`Terra.TraceHandle`)
 
@@ -138,7 +140,7 @@ static func agentRecipe(task: String) async throws -> String {
 - `Terra.event(_:)`
 - `Terra.attr(_:_:)`
 - `Terra.Call`
-- `Terra.CallDescriptor`
+- `Terra.TelemetryContext`
 
 ### Typed identifiers
 
@@ -149,9 +151,7 @@ static func agentRecipe(task: String) async throws -> String {
 
 ### Injection seams
 
-- `Terra.ProviderSeam`
-- `Terra.ExecutorSeam`
-- `Terra.RuntimeSeam`
+- `Terra.TelemetryEngine`
 
 ### Error model
 
