@@ -168,6 +168,7 @@ extension Terra {
 
   // MARK: - Closure-first factories (v3)
 
+  @available(*, deprecated, message: "Use Terra.infer(...).run { ... }")
   @discardableResult
   package static func inference<R>(
     model: String,
@@ -190,6 +191,7 @@ extension Terra {
     }
   }
 
+  @available(*, deprecated, message: "Use Terra.infer(...).run { ... }")
   @discardableResult
   package static func inference<R>(
     model: String,
@@ -208,6 +210,7 @@ extension Terra {
     return try await call.execute(body)
   }
 
+  @available(*, deprecated, message: "Use Terra.stream(...).run { ... }")
   @discardableResult
   package static func stream<R>(
     model: String,
@@ -230,6 +233,7 @@ extension Terra {
     }
   }
 
+  @available(*, deprecated, message: "Use Terra.stream(...).run { ... }")
   @discardableResult
   package static func stream<R>(
     model: String,
@@ -248,6 +252,7 @@ extension Terra {
     return try await call.execute(body)
   }
 
+  @available(*, deprecated, message: "Use Terra.embed(...).run { ... }")
   @discardableResult
   package static func embedding<R>(
     model: String,
@@ -266,6 +271,7 @@ extension Terra {
     }
   }
 
+  @available(*, deprecated, message: "Use Terra.embed(...).run { ... }")
   @discardableResult
   package static func embedding<R>(
     model: String,
@@ -280,6 +286,7 @@ extension Terra {
     return try await call.execute(body)
   }
 
+  @available(*, deprecated, message: "Use Terra.agent(...).run { ... }")
   @discardableResult
   package static func agent<R>(
     name: String,
@@ -298,6 +305,7 @@ extension Terra {
     }
   }
 
+  @available(*, deprecated, message: "Use Terra.agent(...).run { ... }")
   @discardableResult
   package static func agent<R>(
     name: String,
@@ -312,6 +320,7 @@ extension Terra {
     return try await call.execute(body)
   }
 
+  @available(*, deprecated, message: "Use Terra.tool(...).run { ... }")
   @discardableResult
   package static func tool<R>(
     name: String,
@@ -332,6 +341,7 @@ extension Terra {
     }
   }
 
+  @available(*, deprecated, message: "Use Terra.tool(...).run { ... }")
   @discardableResult
   package static func tool<R>(
     name: String,
@@ -347,6 +357,7 @@ extension Terra {
     return try await call.execute(body)
   }
 
+  @available(*, deprecated, message: "Use Terra.safety(...).run { ... }")
   @discardableResult
   package static func safetyCheck<R>(
     name: String,
@@ -365,6 +376,7 @@ extension Terra {
     }
   }
 
+  @available(*, deprecated, message: "Use Terra.safety(...).run { ... }")
   @discardableResult
   package static func safetyCheck<R>(
     name: String,

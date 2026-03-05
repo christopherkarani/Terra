@@ -540,3 +540,38 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
   - strict concurrency one-liner output: `STRICT_ERRORS=0`.
   - required grep checks completed; expected zero-match checks returned exit 1 as pass condition.
   - command logs: `/tmp/terra-rc-phase9-20260304-013833`.
+
+## API DX Uplift Sprint (2026-03-05)
+
+- [x] Phase A: Canonical-only surface pass.
+  - [x] Keep canonical composable API (`infer/stream/embed/agent/tool/safety` + `.run`) as primary.
+  - [x] Move closure-first legacy entrypoints behind `@available(*, deprecated)` messaging.
+  - [x] Ensure no canonical docs/examples use deprecated closure-first names.
+  - [x] TDD: add/adjust tests asserting canonical type-first paths remain stable.
+
+- [ ] Phase B: Macro fix-it diagnostics.
+  - [ ] TDD: add macro diagnostics tests for raw string args in typed slots.
+  - [ ] Add diagnostics + fix-its for `model/provider/runtime/callID` raw string literals.
+  - [ ] Keep expansions canonical after fix-it implementation.
+
+- [ ] Phase C: Human quickstart upgrade.
+  - [ ] Add a 90-second quickstart path to canonical docs.
+  - [ ] Add three compile-safe recipe snippets (infer/tool/agent) mirrored under `Examples/**`.
+  - [ ] TDD/verification: compile-check examples/snippets with zero local edits.
+
+- [ ] Phase D: Error UX docs pass.
+  - [ ] Add deterministic `TerraError.code -> cause -> action` table.
+  - [ ] Add remediation hints for each lifecycle-facing public error code.
+  - [ ] Keep migration and front-facing docs aligned.
+
+- [ ] Validation + commits.
+  - [ ] Commit per phase with focused tests.
+  - [ ] Run `swift build`.
+  - [ ] Run `swift test`.
+  - [ ] Run `bash Scripts/validate_no_legacy_refs.sh`.
+
+## Review (API DX Uplift Sprint)
+
+- [ ] Summary of shipped changes.
+- [ ] Verification evidence.
+- [ ] Remaining risks and next cuts.
