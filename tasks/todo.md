@@ -668,3 +668,22 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
   - `swift build` ✅
   - legacy seam-name grep in DocC content: zero matches ✅
   - `swift package generate-documentation` unavailable in this toolchain (`Unknown subcommand or plugin name 'generate-documentation'`).
+
+## Website Docs Refresh (2026-03-05)
+
+- [x] Audit website landing-page documentation/snippet accuracy.
+- [x] Update website docs links to canonical docs targets.
+- [x] Align hero/code snippets with current canonical API (typed IDs + composable calls).
+- [x] Validate docs references and website build.
+
+## Review (Website Docs Refresh)
+
+- [x] Summary of website doc changes.
+- [x] Validation evidence.
+
+- Updated website navigation/footer doc links to real canonical docs URLs (no placeholder anchors).
+- Refined messaging from “3-tier API” to a simpler beginner-first “Step 1/2/3” flow aligned with current API direction.
+- Replaced macro-focused landing code sample with a canonical composable typed-ID recipe (`infer + run`) for immediate copy/paste value.
+- Validation:
+  - `bash Scripts/validate_no_legacy_refs.sh` ✅
+  - `cd website && npm run build` ✅

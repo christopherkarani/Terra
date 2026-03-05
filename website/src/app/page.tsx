@@ -17,9 +17,9 @@ export default function LandingPage() {
           <span className="text-xl font-extrabold tracking-tighter">Terra</span>
         </div>
         <div className="hidden md:flex gap-8 text-sm font-medium text-gray-400">
-          <a href="#" className="hover:text-cyan-400 transition-colors">Documentation</a>
+          <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Front_Facing_API.md" className="hover:text-cyan-400 transition-colors">Documentation</a>
           <a href="https://github.com/christopherkarani/Terra" className="hover:text-cyan-400 transition-colors">GitHub</a>
-          <a href="#" className="hover:text-cyan-400 transition-colors">Integrations</a>
+          <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Integrations.md" className="hover:text-cyan-400 transition-colors">Integrations</a>
         </div>
         <div>
           <a href="https://github.com/christopherkarani/Terra" className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-xs font-bold hover:bg-white/10 transition-all uppercase tracking-widest mono">Star on GitHub</a>
@@ -40,9 +40,9 @@ export default function LandingPage() {
             Built on OpenTelemetry, giving you production-grade tracing for inference, embeddings, and agents.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 mb-16">
-            <button className="px-8 py-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all glow-indigo shadow-lg shadow-indigo-500/20">
+            <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Front_Facing_API.md#0-90-second-quickstart--copy-ready-recipes" className="px-8 py-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all glow-indigo shadow-lg shadow-indigo-500/20">
               Get Started
-            </button>
+            </a>
             <div className="flex items-center gap-3 px-6 py-4 rounded-xl bg-white/5 border border-white/10 mono text-sm group cursor-pointer hover:bg-white/10 transition-all">
               <span className="text-gray-500">$</span>
               <span className="text-cyan-400 font-medium">swift package</span> add terra
@@ -78,20 +78,20 @@ export default function LandingPage() {
           <div className="space-y-6">
             <h2 className="text-4xl font-black">Instrumentation in seconds.</h2>
             <p className="text-gray-500 leading-relaxed">
-              Whether you need automated capture or fine-grained control, Terra provides a flexible 3-tier API designed for Swift developers.
+              Start with one-line setup, then compose typed infer/stream/embed/agent/tool/safety calls as your app grows.
             </p>
             <ul className="space-y-4">
               <li className="flex gap-3 text-sm text-gray-400">
                 <span className="text-emerald-500 font-black">✓</span> 
-                <strong>Tier 1:</strong> One call with <code>try await Terra.start()</code> for global coverage.
+                <strong>Step 1:</strong> One call with <code>try await Terra.start(.init(preset: .quickstart))</code>.
               </li>
               <li className="flex gap-3 text-sm text-gray-400">
                 <span className="text-emerald-500 font-black">✓</span> 
-                <strong>Tier 2:</strong> @Traced macros for zero-overhead function wrapping.
+                <strong>Step 2:</strong> Canonical composable API: <code>infer/stream/embed/agent/tool/safety + run</code>.
               </li>
               <li className="flex gap-3 text-sm text-gray-400">
                 <span className="text-emerald-500 font-black">✓</span> 
-                <strong>Tier 3:</strong> Composable infer/stream/embed/agent/tool/safety calls.
+                <strong>Step 3:</strong> Add macros and advanced seams only when you need them.
               </li>
             </ul>
           </div>
@@ -111,15 +111,20 @@ export default function LandingPage() {
 	}`}
             />
              <CodeBlock 
-              title="Summarizer.swift"
+              title="Recipe.swift"
               code={`import Terra
-import TerraTracedMacro
 
-@Traced(model: Terra.ModelID("llama-3.2-1B"))
-func summarize(prompt: String) async throws -> String {
-    // Automatically wrapped in an inference span
-    return try await model.generate(prompt)
-}`}
+let answer = try await Terra
+    .infer(
+        Terra.ModelID("gpt-4o-mini"),
+        prompt: "Summarize yesterday's changes",
+        provider: Terra.ProviderID("openai"),
+        runtime: Terra.RuntimeID("http_api")
+    )
+    .run { trace in
+        trace.tokens(input: 42, output: 18)
+        return "stubbed-response"
+    }`}
             />
           </div>
         </div>
@@ -157,9 +162,9 @@ func summarize(prompt: String) async throws -> String {
         <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white font-black text-lg mx-auto mb-8">T</div>
         <p className="text-gray-600 text-sm mb-4">© 2026 Christopher Karani. Apache-2.0 License.</p>
         <div className="flex justify-center gap-8 text-xs font-bold text-gray-500 uppercase tracking-widest mono">
-          <a href="#" className="hover:text-white transition-colors">Docs</a>
+          <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Front_Facing_API.md" className="hover:text-white transition-colors">Docs</a>
           <a href="https://github.com/christopherkarani/Terra" className="hover:text-white transition-colors">GitHub</a>
-          <a href="#" className="hover:text-white transition-colors">Privacy</a>
+          <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Front_Facing_API.md#privacy" className="hover:text-white transition-colors">Privacy</a>
         </div>
       </footer>
     </div>
