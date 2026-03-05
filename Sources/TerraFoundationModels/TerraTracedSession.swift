@@ -173,14 +173,14 @@ public final class TerraTracedSession {
   public init(
     model: SystemLanguageModel = .default,
     instructions: String? = nil,
-    modelIdentifier: Terra.ModelID = "apple/foundation-model"
+    modelIdentifier: Terra.ModelID = Terra.ModelID("apple/foundation-model")
   ) {
     self.modelIdentifier = modelIdentifier
     self.backend = FoundationModelsBackend(model: model, instructions: instructions)
   }
 
   internal init(
-    modelIdentifier: Terra.ModelID = "apple/foundation-model",
+    modelIdentifier: Terra.ModelID = Terra.ModelID("apple/foundation-model"),
     backend: any TerraTracedSessionBackend
   ) {
     self.modelIdentifier = modelIdentifier

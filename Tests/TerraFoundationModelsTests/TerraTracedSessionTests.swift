@@ -124,7 +124,7 @@ func tracedSessionInitializesWithDefaultIdentifier() {
   defer { Terra.unlockTestingIsolation() }
 
   let session = TerraTracedSession()
-  let defaultModelID: Terra.ModelID = "apple/foundation-model"
+  let defaultModelID = Terra.ModelID("apple/foundation-model")
   #expect(session.modelIdentifier == defaultModelID)
 }
 

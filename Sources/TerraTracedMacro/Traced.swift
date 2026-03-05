@@ -9,7 +9,7 @@ import TerraCore
 ///
 /// Usage:
 /// ```swift
-/// @Traced(model: "llama-3.2-1B", provider: "mlx")
+/// @Traced(model: Terra.ModelID("llama-3.2-1B"), provider: Terra.ProviderID("mlx"))
 /// func generate(prompt: String, maxTokens: Int = 512) async throws -> String {
 ///   try await container.generate(prompt: prompt, maxTokens: maxTokens)
 /// }

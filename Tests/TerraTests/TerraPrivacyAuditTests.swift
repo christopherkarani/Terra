@@ -69,7 +69,7 @@ struct TerraPrivacyAuditTests {
 
     let span = try await captureSpan(privacy: privacy) {
       _ = try await Terra
-        .infer("audit-model", prompt: secret)
+        .infer(Terra.ModelID("audit-model"), prompt: secret)
         .capture(.includeContent)
         .run { "ok" }
     }

@@ -3,7 +3,7 @@ import TerraCore
 import TerraTracedMacro
 
 private struct MinimalImportSmokeType {
-  @Traced(model: "smoke-model")
+  @Traced(model: Terra.ModelID("smoke-model"))
   func generate(prompt: String) async throws -> String {
     return prompt
   }

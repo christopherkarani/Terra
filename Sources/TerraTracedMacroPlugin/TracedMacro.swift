@@ -246,9 +246,15 @@ public struct TracedMacro: BodyMacro {
         ?? detected.maxOutputTokens
 
       temperature = TracedMacro.argument(named: "temperature", in: arguments) ?? detected.temperature
-      provider = TracedMacro.argument(named: "provider", in: arguments) ?? detected.provider
-      runtime = TracedMacro.argument(named: "runtime", in: arguments) ?? detected.runtime
-      toolCallID = TracedMacro.argument(named: "callID", in: arguments) ?? detected.toolCallID
+      provider =
+        TracedMacro.argument(named: "provider", in: arguments)
+        ?? detected.provider
+      runtime =
+        TracedMacro.argument(named: "runtime", in: arguments)
+        ?? detected.runtime
+      toolCallID =
+        TracedMacro.argument(named: "callID", in: arguments)
+        ?? detected.toolCallID
 
       embeddingInputCount =
         TracedMacro.argument(named: "inputCount", in: arguments)
