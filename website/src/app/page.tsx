@@ -17,7 +17,7 @@ export default function LandingPage() {
           <span className="text-xl font-extrabold tracking-tighter">Terra</span>
         </div>
         <div className="hidden md:flex gap-8 text-sm font-medium text-gray-400">
-          <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Front_Facing_API.md" className="hover:text-cyan-400 transition-colors">Documentation</a>
+          <a href="#documentation" className="hover:text-cyan-400 transition-colors">Documentation</a>
           <a href="https://github.com/christopherkarani/Terra" className="hover:text-cyan-400 transition-colors">GitHub</a>
           <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Integrations.md" className="hover:text-cyan-400 transition-colors">Integrations</a>
         </div>
@@ -55,7 +55,7 @@ export default function LandingPage() {
       </section>
 
       {/* Feature Showcase */}
-      <section className="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
+      <section id="documentation" className="max-w-6xl mx-auto px-6 py-24 border-t border-white/5">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
           <FeatureCard 
             title="Zero-Code Auto-Instrumentation" 

@@ -687,3 +687,17 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 - Validation:
   - `bash Scripts/validate_no_legacy_refs.sh` ✅
   - `cd website && npm run build` ✅
+
+## Website Header Docs Link Fix (2026-03-05)
+
+- [x] Reproduce header Documentation link behavior.
+- [x] Route header Documentation link to in-page docs section (no GitHub redirect).
+- [x] Rebuild static website output.
+- [x] Republish GitHub Pages manually.
+
+## Review (Website Header Docs Link Fix)
+
+- Header `Documentation` now targets `#documentation` and lands in the website docs section.
+- Validation:
+  - `cd website && npm run build:pages` ✅
+  - Static output includes `href="#documentation"` and `id="documentation"` ✅
