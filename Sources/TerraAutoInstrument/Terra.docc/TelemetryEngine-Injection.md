@@ -1,15 +1,15 @@
 # Protocol Seams
 
-Use ``TerraCore/Terra/TelemetryEngine`` to inject deterministic execution for tests or custom runtimes.
+Use ``Terra/TelemetryEngine`` to inject deterministic execution for tests or custom runtimes.
 
 ## Core Seam Types
 
-- ``TerraCore/Terra/TelemetryEngine``
-- ``TerraCore/Terra/TelemetryContext``
-- ``TerraCore/Terra/TraceHandle``
+- ``Terra/TelemetryEngine``
+- ``Terra/TelemetryContext``
+- ``Terra/TraceHandle``
 
-The seam entry point is ``TerraCore/Terra/Call/run(using:_:)``.
-Engine implementers handle ``TerraCore/Terra/TelemetryEngine/run(context:attributes:_:)``.
+The seam entry point is ``Terra/Call/run(using:_:)``.
+Engine implementers handle ``Terra/TelemetryEngine/run(context:attributes:_:)``.
 
 ## Minimal Mock Engine
 

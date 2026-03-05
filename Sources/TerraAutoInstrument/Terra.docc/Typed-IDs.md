@@ -4,10 +4,10 @@ Use Terra's typed identifiers instead of raw strings when building calls.
 
 ## Types
 
-- ``TerraCore/Terra/ModelID``
-- ``TerraCore/Terra/ProviderID``
-- ``TerraCore/Terra/RuntimeID``
-- ``TerraCore/Terra/ToolCallID``
+- ``Terra/ModelID``
+- ``Terra/ProviderID``
+- ``Terra/RuntimeID``
+- ``Terra/ToolCallID``
 
 ## Why This Matters
 

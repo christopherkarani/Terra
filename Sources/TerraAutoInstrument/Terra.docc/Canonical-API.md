@@ -4,30 +4,30 @@ Use the composable call API as the canonical path.
 
 ## Operation Factories
 
-- ``TerraCore/Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``
-- ``TerraCore/Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``
-- ``TerraCore/Terra/embed(_:inputCount:provider:runtime:)``
-- ``TerraCore/Terra/agent(_:id:provider:runtime:)``
-- ``TerraCore/Terra/tool(_:callID:type:provider:runtime:)``
-- ``TerraCore/Terra/safety(_:subject:provider:runtime:)``
+- ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``
+- ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``
+- ``Terra/embed(_:inputCount:provider:runtime:)``
+- ``Terra/agent(_:id:provider:runtime:)``
+- ``Terra/tool(_:callID:type:provider:runtime:)``
+- ``Terra/safety(_:subject:provider:runtime:)``
 
 ## Shared Call Pipeline
 
-All factories return ``TerraCore/Terra/Call``.
+All factories return ``Terra/Call``.
 
 Common composition methods:
 
-- ``TerraCore/Terra/Call/capture(_:)``
-- ``TerraCore/Terra/Call/attr(_:_:)``
-- ``TerraCore/Terra/Call/metadata(_:)``
-- ``TerraCore/Terra/Call/run(_:)``
-- ``TerraCore/Terra/Call/run(using:_:)``
+- ``Terra/Call/capture(_:)``
+- ``Terra/Call/attr(_:_:)``
+- ``Terra/Call/metadata(_:)``
+- ``Terra/Call/run(_:)``
+- ``Terra/Call/run(using:_:)``
 
 ## Lifecycle Entry Points
 
-- ``TerraCore/Terra/start(_:)``
-- ``TerraCore/Terra/shutdown()``
-- ``TerraCore/Terra/reconfigure(_:)``
+- ``Terra/start(_:)``
+- ``Terra/shutdown()``
+- ``Terra/reconfigure(_:)``
 
 ## Quick Example
 

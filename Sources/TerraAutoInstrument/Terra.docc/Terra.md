@@ -1,12 +1,8 @@
-# Terra
-
-@Metadata {
-  @TechnologyRoot
-}
+# ``Terra``
 
 OpenTelemetry-native observability for on-device GenAI workloads on Apple platforms.
 
-Terra's canonical surface is task-oriented: build an operation with ``TerraCore/Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``, ``TerraCore/Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``, ``TerraCore/Terra/embed(_:inputCount:provider:runtime:)``, ``TerraCore/Terra/agent(_:id:provider:runtime:)``, ``TerraCore/Terra/tool(_:callID:type:provider:runtime:)``, or ``TerraCore/Terra/safety(_:subject:provider:runtime:)``, then execute with ``TerraCore/Terra/Call/run(_:)``.
+Terra's canonical surface is task-oriented: build an operation with ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``, ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``, ``Terra/embed(_:inputCount:provider:runtime:)``, ``Terra/agent(_:id:provider:runtime:)``, ``Terra/tool(_:callID:type:provider:runtime:)``, or ``Terra/safety(_:subject:provider:runtime:)``, then execute with ``Terra/Call/run(_:)``.
 
 ## Start Here
 
@@ -21,10 +17,10 @@ Terra's canonical surface is task-oriented: build an operation with ``TerraCore/
 
 ## Core Symbols
 
-- ``TerraCore/Terra/start(_:)``
-- ``TerraCore/Terra/shutdown()``
-- ``TerraCore/Terra/Call``
-- ``TerraCore/Terra/TraceHandle``
+- ``Terra/start(_:)``
+- ``Terra/shutdown()``
+- ``Terra/Call``
+- ``Terra/TraceHandle``
 
 ## Topics
 

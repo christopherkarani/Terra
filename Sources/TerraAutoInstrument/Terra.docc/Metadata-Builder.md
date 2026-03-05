@@ -1,6 +1,6 @@
 # Metadata Builder
 
-Use ``TerraCore/Terra/Call/metadata(_:)`` to build structured events and attributes with ``TerraCore/Terra/MetadataBuilder``.
+Use ``Terra/Call/metadata(_:)`` to build structured events and attributes with ``Terra/MetadataBuilder``.
 
 ## Call-Level Metadata
 
@@ -24,7 +24,7 @@ _ = try await Terra
 
 ## Trace-Level Metadata
 
-Inside ``TerraCore/Terra/Call/run(_:)``, use ``TerraCore/Terra/TraceHandle/metadata(_:)`` for incremental updates:
+Inside ``Terra/Call/run(_:)``, use ``Terra/TraceHandle/metadata(_:)`` for incremental updates:
 
 ```swift
 import Terra

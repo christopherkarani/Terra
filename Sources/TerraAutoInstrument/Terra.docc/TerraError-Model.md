@@ -1,15 +1,15 @@
 # TerraError Model
 
-Lifecycle/configuration failures use ``TerraCore/Terra/TerraError``.
+Lifecycle/configuration failures use ``Terra/TerraError``.
 
 ## Stable Error Codes
 
-- ``TerraCore/Terra/TerraError/Code/invalid_endpoint``
-- ``TerraCore/Terra/TerraError/Code/persistence_setup_failed``
-- ``TerraCore/Terra/TerraError/Code/already_started``
-- ``TerraCore/Terra/TerraError/Code/invalid_lifecycle_state``
-- ``TerraCore/Terra/TerraError/Code/start_failed``
-- ``TerraCore/Terra/TerraError/Code/reconfigure_failed``
+- ``Terra/TerraError/Code/invalid_endpoint``
+- ``Terra/TerraError/Code/persistence_setup_failed``
+- ``Terra/TerraError/Code/already_started``
+- ``Terra/TerraError/Code/invalid_lifecycle_state``
+- ``Terra/TerraError/Code/start_failed``
+- ``Terra/TerraError/Code/reconfigure_failed``
 
 ## Handling Pattern
 
@@ -30,5 +30,5 @@ do {
 }
 ```
 
-Use ``TerraCore/Terra/TerraError/code`` as the branching key.
-Use ``TerraCore/Terra/TerraError/context`` and ``TerraCore/Terra/TerraError/underlying`` for diagnostics.
+Use ``Terra/TerraError/code`` as the branching key.
+Use ``Terra/TerraError/context`` and ``Terra/TerraError/underlying`` for diagnostics.

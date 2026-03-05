@@ -4,7 +4,7 @@ This path gets one traced call running with current canonical APIs.
 
 ## 1) Start Terra
 
-Initialize once with ``TerraCore/Terra/start(_:)``.
+Initialize once with ``Terra/start(_:)``.
 
 ```swift
 import Terra
@@ -39,7 +39,7 @@ let answer = try await Terra
 
 ## 3) Shutdown Cleanly
 
-Flush and teardown with ``TerraCore/Terra/shutdown()``.
+Flush and teardown with ``Terra/shutdown()``.
 
 ```swift
 await Terra.shutdown()
@@ -47,8 +47,8 @@ await Terra.shutdown()
 
 ## What You Just Used
 
-- Setup: ``TerraCore/Terra/start(_:)`` and ``TerraCore/Terra/shutdown()``
-- Factory + execution: ``TerraCore/Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)`` and ``TerraCore/Terra/Call/run(_:)``
-- Metadata APIs: ``TerraCore/Terra/event(_:)``, ``TerraCore/Terra/attr(_:_:)``, and ``TerraCore/Terra/Call/metadata(_:)``
+- Setup: ``Terra/start(_:)`` and ``Terra/shutdown()``
+- Factory + execution: ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)`` and ``Terra/Call/run(_:)``
+- Metadata APIs: ``Terra/event(_:)``, ``Terra/attr(_:_:)``, and ``Terra/Call/metadata(_:)``
 
 For deeper patterns, continue with <doc:Canonical-API>.
