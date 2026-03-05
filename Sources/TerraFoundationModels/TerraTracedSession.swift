@@ -168,19 +168,19 @@ internal final class FoundationModelsBackend: TerraTracedSessionBackend, @unchec
 @available(macOS 26.0, iOS 26.0, *)
 public final class TerraTracedSession {
   private let backend: any TerraTracedSessionBackend
-  public let modelIdentifier: String
+  public let modelIdentifier: Terra.ModelID
 
   public init(
     model: SystemLanguageModel = .default,
     instructions: String? = nil,
-    modelIdentifier: String = "apple/foundation-model"
+    modelIdentifier: Terra.ModelID = "apple/foundation-model"
   ) {
     self.modelIdentifier = modelIdentifier
     self.backend = FoundationModelsBackend(model: model, instructions: instructions)
   }
 
   internal init(
-    modelIdentifier: String = "apple/foundation-model",
+    modelIdentifier: Terra.ModelID = "apple/foundation-model",
     backend: any TerraTracedSessionBackend
   ) {
     self.modelIdentifier = modelIdentifier
@@ -263,7 +263,7 @@ public final class TerraTracedSession {
   /// Stream a response with auto-tracing.
   public func streamResponse(to prompt: String, promptCapture: Terra.CapturePolicy = .default) -> AsyncThrowingStream<String, Error> {
     let request = Terra.StreamingRequest(
-      model: modelIdentifier,
+      model: modelIdentifier.rawValue,
       prompt: prompt,
       includeContent: promptCapture == .includeContent,
     )
@@ -300,7 +300,7 @@ public final class TerraTracedSession {
 
   private func makeInferenceCall(prompt: String, promptCapture: Terra.CapturePolicy) -> Terra.InferenceCall {
     var call = Terra
-      .inference(model: modelIdentifier, prompt: prompt)
+      .inference(model: modelIdentifier.rawValue, prompt: prompt)
       .provider("apple/foundation-model")
       .runtime("foundation_models")
       .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)

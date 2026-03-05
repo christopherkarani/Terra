@@ -12,6 +12,7 @@ This document lists the canonical public API for SDK consumers.
 - `Terra.shutdown() async`
 - `Terra.reset() async`
 - `Terra.reconfigure(_ config: Terra.Configuration) async throws`
+- `Terra.TerraError`
 
 ### Canonical operation factories
 
@@ -34,7 +35,7 @@ This document lists the canonical public API for SDK consumers.
 - `.event(_:)`
 - `.attr(_:_:)`
 - `.tokens(input:output:)`
-- `.responseModel(_:)`
+- `.responseModel(_ value: Terra.ModelID)`
 - `.chunk(_:)`
 - `.outputTokens(_:)`
 - `.firstToken()`
@@ -53,6 +54,11 @@ This document lists the canonical public API for SDK consumers.
 - `Terra.ProviderID`
 - `Terra.RuntimeID`
 - `Terra.ToolCallID`
+
+### Error model
+
+- `Terra.TerraError`
+- `Terra.TerraError.Code` (`invalid_endpoint`, `persistence_setup_failed`, `already_started`, `invalid_lifecycle_state`, ...)
 
 ### Privacy
 
@@ -74,11 +80,11 @@ This document lists the canonical public API for SDK consumers.
 
 Attached body macros:
 
-- `@Traced(model:prompt:provider:temperature:maxTokens:maxOutputTokens:streaming:)`
-- `@Traced(agent:id:)`
-- `@Traced(tool:callID:type:)`
-- `@Traced(embedding:count:inputCount:)`
-- `@Traced(safety:subject:)`
+- `@Traced(model:prompt:provider:runtime:temperature:maxTokens:maxOutputTokens:streaming:)`
+- `@Traced(agent:id:runtime:)`
+- `@Traced(tool:callID:type:runtime:)`
+- `@Traced(embedding:count:inputCount:runtime:)`
+- `@Traced(safety:subject:runtime:)`
 
 ## 3) Integrations
 

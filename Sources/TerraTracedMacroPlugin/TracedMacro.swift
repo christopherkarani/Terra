@@ -16,6 +16,7 @@ public struct TracedMacro: BodyMacro {
   static let maxTokensParamNames: Set<String> = ["maxTokens", "maxOutputTokens", "max_tokens"]
   static let toolCallIDParamNames: Set<String> = ["callID", "callId", "toolCallID", "toolCallId"]
   static let embeddingCountParamNames: Set<String> = ["count", "inputCount"]
+  static let runtimeParamNames: Set<String> = ["runtime", "runtimeID", "runtimeId"]
 
   public static func expansion(
     of node: AttributeSyntax,
@@ -44,6 +45,7 @@ public struct TracedMacro: BodyMacro {
       maxOutputTokens: params.first { matches($0, names: maxTokensParamNames) }.map(parameterName),
       temperature: params.first { matches($0, names: ["temperature"]) }.map(parameterName),
       provider: params.first { matches($0, names: ["provider"]) }.map(providerExpression),
+      runtime: params.first { matches($0, names: runtimeParamNames) }.map(runtimeExpression),
       toolCallID: params.first { matches($0, names: toolCallIDParamNames) }.map(toolCallIDExpression),
       embeddingInputCount: params.first { matches($0, names: embeddingCountParamNames) }.map(parameterName),
       safetySubject: params.first { matches($0, names: safetySubjectParamNames) }.map(parameterName)
@@ -129,6 +131,7 @@ public struct TracedMacro: BodyMacro {
         modelExpr: modelExpr,
         promptExpr: resolved.prompt,
         providerExpr: resolved.provider,
+        runtimeExpr: resolved.runtime,
         temperatureExpr: resolved.temperature,
         maxTokensExpr: resolved.maxOutputTokens
       )
@@ -137,6 +140,7 @@ public struct TracedMacro: BodyMacro {
         modelExpr: modelExpr,
         promptExpr: resolved.prompt,
         providerExpr: resolved.provider,
+        runtimeExpr: resolved.runtime,
         temperatureExpr: resolved.temperature,
         maxTokensExpr: resolved.maxOutputTokens
       )
@@ -150,7 +154,7 @@ public struct TracedMacro: BodyMacro {
       let idExpr = argument(named: "id", in: arguments)
       return buildCall(
         "Terra.agent(\(agentExpr)",
-        labeledArguments: [("id", idExpr), ("provider", resolved.provider)]
+        labeledArguments: [("id", idExpr), ("provider", resolved.provider), ("runtime", resolved.runtime)]
       )
 
     case .tool:
@@ -159,21 +163,21 @@ public struct TracedMacro: BodyMacro {
       let typeExpr = argument(named: "type", in: arguments)
       return buildCall(
         "Terra.tool(\(toolExpr)",
-        labeledArguments: [("callID", callIDExpr), ("type", typeExpr), ("provider", resolved.provider)]
+        labeledArguments: [("callID", callIDExpr), ("type", typeExpr), ("provider", resolved.provider), ("runtime", resolved.runtime)]
       )
 
     case .embedding:
       let embeddingExpr = try requiredArg(named: "embedding", in: arguments)
       return buildCall(
         "Terra.embed(\(embeddingExpr)",
-        labeledArguments: [("inputCount", resolved.embeddingInputCount), ("provider", resolved.provider)]
+        labeledArguments: [("inputCount", resolved.embeddingInputCount), ("provider", resolved.provider), ("runtime", resolved.runtime)]
       )
 
     case .safety:
       let safetyExpr = try requiredArg(named: "safety", in: arguments)
       return buildCall(
         "Terra.safety(\(safetyExpr)",
-        labeledArguments: [("subject", resolved.safetySubject), ("provider", resolved.provider)]
+        labeledArguments: [("subject", resolved.safetySubject), ("provider", resolved.provider), ("runtime", resolved.runtime)]
       )
     }
   }
@@ -183,6 +187,7 @@ public struct TracedMacro: BodyMacro {
     modelExpr: String,
     promptExpr: String?,
     providerExpr: String?,
+    runtimeExpr: String?,
     temperatureExpr: String?,
     maxTokensExpr: String?
   ) -> String {
@@ -191,6 +196,7 @@ public struct TracedMacro: BodyMacro {
       labeledArguments: [
         ("prompt", promptExpr),
         ("provider", providerExpr),
+        ("runtime", runtimeExpr),
         ("temperature", temperatureExpr),
         ("maxTokens", maxTokensExpr),
       ]
@@ -214,6 +220,7 @@ public struct TracedMacro: BodyMacro {
     let maxOutputTokens: String?
     let temperature: String?
     let provider: String?
+    let runtime: String?
     let toolCallID: String?
     let embeddingInputCount: String?
     let safetySubject: String?
@@ -224,6 +231,7 @@ public struct TracedMacro: BodyMacro {
     let maxOutputTokens: String?
     let temperature: String?
     let provider: String?
+    let runtime: String?
     let toolCallID: String?
     let embeddingInputCount: String?
     let safetySubject: String?
@@ -239,6 +247,7 @@ public struct TracedMacro: BodyMacro {
 
       temperature = TracedMacro.argument(named: "temperature", in: arguments) ?? detected.temperature
       provider = TracedMacro.argument(named: "provider", in: arguments) ?? detected.provider
+      runtime = TracedMacro.argument(named: "runtime", in: arguments) ?? detected.runtime
       toolCallID = TracedMacro.argument(named: "callID", in: arguments) ?? detected.toolCallID
 
       embeddingInputCount =
@@ -297,6 +306,22 @@ public struct TracedMacro: BodyMacro {
       return name
     case ("ToolCallID", true), ("Terra.ToolCallID", true):
       return "(\(name) ?? Terra.ToolCallID())"
+    default:
+      return name
+    }
+  }
+
+  private static func runtimeExpression(_ param: FunctionParameterSyntax) -> String {
+    let name = parameterName(param)
+    let type = normalizedTypeName(param.type)
+
+    switch type {
+    case ("String", false):
+      return "Terra.RuntimeID(\(name))"
+    case ("String", true):
+      return "\(name).map { Terra.RuntimeID($0) }"
+    case ("RuntimeID", _), ("Terra.RuntimeID", _):
+      return name
     default:
       return name
     }

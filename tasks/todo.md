@@ -69,7 +69,7 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 
 ### Phase 3 — Type system hardening
 
-- [ ] Add typed IDs (`ModelID`, `ProviderID`, `RuntimeID`, `ToolCallID`) and migrate public signatures.
+- [x] Add typed IDs (`ModelID`, `ProviderID`, `RuntimeID`, `ToolCallID`) and migrate public signatures.
 - [x] Remove public `OperationKind`; make `Terra.Call` non-generic.
 - [x] Add stable public `TerraError` and map lifecycle/config failures:
   - [x] Inventory internal start/reconfigure throw sources.
@@ -93,9 +93,9 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 - [ ] Update `@Traced` macro expansion to use canonical public API only (`infer/stream/embed/agent/tool/safety + run`).
 - [ ] Migrate `@Traced` expansion to typed IDs:
   - [ ] Use `Terra.tool("name")` when no `callID` is present (rely on `callID: Terra.ToolCallID = .init()` default).
-  - [ ] Wrap auto-detected `provider`/`runtime` *String* params as `Terra.ProviderID(provider)` / `Terra.RuntimeID(runtime)` (pass through when already typed).
+  - [x] Wrap auto-detected `provider`/`runtime` *String* params as `Terra.ProviderID(provider)` / `Terra.RuntimeID(runtime)` (pass through when already typed).
   - [ ] Wrap auto-detected tool `callID` *String* params as `Terra.ToolCallID(callID)` (pass through when already typed).
-  - [ ] Add optional `runtime:` support (explicit macro arg + auto-detected function param).
+  - [x] Add optional `runtime:` support (explicit macro arg + auto-detected function param).
 - [ ] Update macro expansion tests for typed IDs + `tool` defaults:
   - [ ] Update tool macro default callID expectation (remove `UUID().uuidString`).
   - [ ] Add test: tool macro wraps `callID: String` parameter.

@@ -59,6 +59,7 @@ struct TerraComposableAPITests {
       .run { trace in
         trace.attr(.init("terra.trace.string"), "trace-value")
         trace.tokens(input: 3, output: 4)
+        trace.responseModel(Terra.ModelID("trace-model"))
         return "ok"
       }
 
@@ -70,6 +71,7 @@ struct TerraComposableAPITests {
     #expect(span.attributes["terra.custom.double"]?.description == "0.5")
     #expect(span.attributes["terra.custom.bool"]?.description == "true")
     #expect(span.attributes["terra.trace.string"]?.description == "trace-value")
+    #expect(span.attributes[Terra.Keys.GenAI.responseModel]?.description == "trace-model")
     #expect(span.attributes[Terra.Keys.GenAI.usageInputTokens]?.description == "3")
     #expect(span.attributes[Terra.Keys.GenAI.usageOutputTokens]?.description == "4")
   }

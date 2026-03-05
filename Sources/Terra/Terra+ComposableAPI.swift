@@ -40,7 +40,7 @@ extension Terra {
     private let onAttribute: @Sendable (String, TraceScalar) -> Void
     private let onError: @Sendable (any Error) -> Void
     private let onTokens: @Sendable (Int?, Int?) -> Void
-    private let onResponseModel: @Sendable (String) -> Void
+    private let onResponseModel: @Sendable (ModelID) -> Void
     private let onChunk: @Sendable (Int) -> Void
     private let onOutputTokens: @Sendable (Int) -> Void
     private let onFirstToken: @Sendable () -> Void
@@ -50,7 +50,7 @@ extension Terra {
       onAttribute: @escaping @Sendable (String, TraceScalar) -> Void,
       onError: @escaping @Sendable (any Error) -> Void,
       onTokens: @escaping @Sendable (Int?, Int?) -> Void = { _, _ in },
-      onResponseModel: @escaping @Sendable (String) -> Void = { _ in },
+      onResponseModel: @escaping @Sendable (ModelID) -> Void = { _ in },
       onChunk: @escaping @Sendable (Int) -> Void = { _ in },
       onOutputTokens: @escaping @Sendable (Int) -> Void = { _ in },
       onFirstToken: @escaping @Sendable () -> Void = {}
@@ -84,7 +84,7 @@ extension Terra {
     }
 
     @discardableResult
-    public func responseModel(_ value: String) -> Self {
+    public func responseModel(_ value: ModelID) -> Self {
       onResponseModel(value)
       return self
     }
@@ -361,7 +361,7 @@ private extension Terra {
           onAttribute: { _recordAttribute($0, $1, on: trace) },
           onError: { trace.recordError($0) },
           onTokens: { _ = trace.tokens(input: $0, output: $1) },
-          onResponseModel: { _ = trace.responseModel($0) }
+          onResponseModel: { _ = trace.responseModel($0.rawValue) }
         )
         return try await body(handle)
       }

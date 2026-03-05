@@ -39,17 +39,17 @@ import Terra
 
 let response = try await Terra
   .infer(
-    "gpt-4o-mini",
+    Terra.ModelID("gpt-4o-mini"),
     prompt: "Summarize the release notes",
-    provider: "openai",
-    runtime: "http_api",
+    provider: Terra.ProviderID("openai"),
+    runtime: Terra.RuntimeID("http_api"),
     temperature: 0.2,
     maxTokens: 300
   )
   .run { trace in
     trace.event("request.start")
     trace.tokens(input: 120, output: 70)
-    trace.responseModel("gpt-4o-mini")
+    trace.responseModel(Terra.ModelID("gpt-4o-mini"))
     return "Summary text"
   }
 ```
@@ -60,7 +60,7 @@ let response = try await Terra
 import Terra
 
 let finalText = try await Terra
-  .stream("gpt-4o-mini", prompt: "Stream a short response")
+  .stream(Terra.ModelID("gpt-4o-mini"), prompt: "Stream a short response")
   .run { trace in
     trace.chunk(5)
     trace.chunk(7)
@@ -74,11 +74,11 @@ let finalText = try await Terra
 import Terra
 
 let plan = try await Terra.agent("planner", id: "agent-42").run {
-  let docs = try await Terra.tool("web_search", callID: UUID().uuidString, type: "function").run {
+  let docs = try await Terra.tool("web_search", callID: Terra.ToolCallID(), type: "function").run {
     "search results"
   }
 
-  let embedding = try await Terra.embed("text-embedding-3-small", inputCount: 1).run {
+  let embedding = try await Terra.embed(Terra.ModelID("text-embedding-3-small"), inputCount: 1).run {
     [[0.11, 0.22, 0.33]]
   }
 
@@ -95,7 +95,12 @@ _ = plan
 import Terra
 
 let result = try await Terra
-  .infer("gpt-4o-mini", prompt: "Hello", provider: "openai", runtime: "http_api")
+  .infer(
+    Terra.ModelID("gpt-4o-mini"),
+    prompt: "Hello",
+    provider: Terra.ProviderID("openai"),
+    runtime: Terra.RuntimeID("http_api")
+  )
   .capture(.includeContent)
   .attr(.init("app.request_id"), UUID().uuidString)
   .attr(.init("app.user_tier"), "pro")
@@ -115,7 +120,7 @@ import Terra
 
 enum APIError: Error { case upstream }
 
-_ = try await Terra.infer("gpt-4o-mini", prompt: "Test").run { trace in
+_ = try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: "Test").run { trace in
   trace.event("guardrail.decision")
   do {
     throw APIError.upstream
@@ -129,9 +134,10 @@ _ = try await Terra.infer("gpt-4o-mini", prompt: "Test").run { trace in
 ## 8) `@Traced` Macro
 
 ```swift
+import Terra
 import TerraTracedMacro
 
-@Traced(model: "gpt-4o-mini", provider: "openai")
+@Traced(model: Terra.ModelID("gpt-4o-mini"), provider: Terra.ProviderID("openai"))
 func generate(prompt: String) async throws -> String {
   "response: \(prompt)"
 }
@@ -162,7 +168,7 @@ func runFoundationModels() async throws {
 import TerraMLX
 
 let text = try await TerraMLX.traced(
-  model: "mlx-community/Llama-3.2-1B",
+  model: Terra.ModelID("mlx-community/Llama-3.2-1B"),
   maxTokens: 256,
   temperature: 0.7,
   device: "ane",

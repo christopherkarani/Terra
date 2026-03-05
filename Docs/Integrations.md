@@ -16,7 +16,11 @@ import TerraCoreML
 import Terra
 
 let result = await Terra
-  .infer("coreml/com.yourorg.model@v3", runtime: "coreml", provider: "coreml")
+  .infer(
+    Terra.ModelID("coreml/com.yourorg.model@v3"),
+    runtime: Terra.RuntimeID("coreml"),
+    provider: Terra.ProviderID("coreml")
+  )
   .attr(.init("terra.coreml.compute_units"), "all")
   .run {
     let config = MLModelConfiguration()
@@ -40,7 +44,11 @@ Capture bounded runtime labels:
 import Terra
 
 let result = await Terra
-  .infer("mlx/local/llama-3.2-1b", runtime: "mlx", provider: "mlx")
+  .infer(
+    Terra.ModelID("mlx/local/llama-3.2-1b"),
+    runtime: Terra.RuntimeID("mlx"),
+    provider: Terra.ProviderID("mlx")
+  )
   .attr(.init("terra.mlx.device"), "gpu")
   .attr(.init("terra.mlx.quantization"), "q4")
   .run {

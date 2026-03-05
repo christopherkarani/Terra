@@ -9,7 +9,7 @@ import Terra
 
 try await Terra.start()
 
-let answer = try await Terra.infer("gpt-4o-mini", prompt: prompt).run {
+let answer = try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt).run {
   try await llm.generate(prompt)
 }
 ```
@@ -19,7 +19,7 @@ let answer = try await Terra.infer("gpt-4o-mini", prompt: prompt).run {
 ```swift
 import Terra
 
-let output = try await Terra.stream("gpt-4o-mini", prompt: prompt).run { trace in
+let output = try await Terra.stream(Terra.ModelID("gpt-4o-mini"), prompt: prompt).run { trace in
   trace.chunk(12)
   trace.chunk(18)
   return "final text"
@@ -32,8 +32,8 @@ let output = try await Terra.stream("gpt-4o-mini", prompt: prompt).run { trace i
 import Terra
 
 let plan = try await Terra.agent("trip-planner", id: "agent-42").run {
-  let docs = try await Terra.tool("web-search", callID: UUID().uuidString).run { "search results" }
-  return try await Terra.infer("gpt-4o-mini", prompt: docs).run { "itinerary" }
+  let docs = try await Terra.tool("web-search", callID: Terra.ToolCallID()).run { "search results" }
+  return try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: docs).run { "itinerary" }
 }
 ```
 
@@ -43,7 +43,7 @@ let plan = try await Terra.agent("trip-planner", id: "agent-42").run {
 import Terra
 
 let safe = try await Terra.safety("input-moderation", subject: userText).run { true }
-let answer = try await Terra.infer("gpt-4o-mini", prompt: userText).run { "response" }
+let answer = try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: userText).run { "response" }
 let passed = try await Terra.safety("output-moderation", subject: answer).run { safe }
 ```
 
@@ -68,7 +68,12 @@ func ask(_ prompt: String) async throws -> String {
 import Terra
 
 let result = try await Terra
-  .infer(modelName, prompt: prompt, provider: providerName, runtime: runtimeName)
+  .infer(
+    Terra.ModelID(modelName),
+    prompt: prompt,
+    provider: Terra.ProviderID(providerName),
+    runtime: Terra.RuntimeID(runtimeName)
+  )
   .attr(.init("app.experiment"), experimentID)
   .attr(.init("app.retry"), false)
   .run { trace in
@@ -87,7 +92,7 @@ config.privacy = .redacted
 try await Terra.start(config)
 
 let debug = try await Terra
-  .infer("gpt-4o-mini", prompt: prompt)
+  .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
   .capture(.includeContent)
   .run { try await llm.generate(prompt) }
 ```
@@ -95,9 +100,10 @@ let debug = try await Terra
 ## 8) Macro-Based Instrumentation
 
 ```swift
+import Terra
 import TerraTracedMacro
 
-@Traced(model: "gpt-4o-mini")
+@Traced(model: Terra.ModelID("gpt-4o-mini"))
 func summarize(prompt: String) async throws -> String {
   try await llm.generate(prompt)
 }

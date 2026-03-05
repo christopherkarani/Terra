@@ -11,7 +11,7 @@ Instrument inference, streaming, agents, tools, embeddings, and safety checks wi
 import Terra
 
 try await Terra.start()
-let result = try await Terra.infer("gpt-4o-mini", prompt: "Say hello").run { "Hello" }
+let result = try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: "Say hello").run { "Hello" }
 ```
 
 [![CI](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml)
@@ -26,7 +26,12 @@ import Terra
 try await Terra.start()
 
 let answer = try await Terra
-  .infer("gpt-4o-mini", prompt: userPrompt, provider: "openai", runtime: "http_api")
+  .infer(
+    Terra.ModelID("gpt-4o-mini"),
+    prompt: userPrompt,
+    provider: Terra.ProviderID("openai"),
+    runtime: Terra.RuntimeID("http_api")
+  )
   .run { trace in
     trace.event("request.start")
     trace.tokens(input: 120, output: 70)
@@ -46,11 +51,11 @@ let answer = try await Terra
 
 | Span type | Factory | Example |
 | --- | --- | --- |
-| Inference | `Terra.infer(_:prompt:provider:runtime:temperature:maxTokens:)` | `try await Terra.infer("gpt-4o-mini", prompt: prompt).run { "ok" }` |
-| Streaming | `Terra.stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)` | `try await Terra.stream("gpt-4o-mini").run { trace in trace.chunk(tokens: 8); return "ok" }` |
+| Inference | `Terra.infer(_:prompt:provider:runtime:temperature:maxTokens:)` | `try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt).run { "ok" }` |
+| Streaming | `Terra.stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)` | `try await Terra.stream(Terra.ModelID("gpt-4o-mini")).run { trace in trace.chunk(tokens: 8); return "ok" }` |
 | Agent | `Terra.agent(_:id:provider:runtime:)` | `try await Terra.agent("planner").run { "done" }` |
-| Tool | `Terra.tool(_:callID:type:provider:runtime:)` | `try await Terra.tool("search", callID: UUID().uuidString).run { "result" }` |
-| Embedding | `Terra.embed(_:inputCount:provider:runtime:)` | `try await Terra.embed("text-embedding-3-small", inputCount: 3).run { vectors }` |
+| Tool | `Terra.tool(_:callID:type:provider:runtime:)` | `try await Terra.tool("search", callID: Terra.ToolCallID()).run { "result" }` |
+| Embedding | `Terra.embed(_:inputCount:provider:runtime:)` | `try await Terra.embed(Terra.ModelID("text-embedding-3-small"), inputCount: 3).run { vectors }` |
 | Safety check | `Terra.safety(_:subject:provider:runtime:)` | `try await Terra.safety("toxicity", subject: text).run { true }` |
 
 ## Privacy Policies
@@ -68,12 +73,17 @@ Use call composition when metadata is dynamic at runtime:
 
 ```swift
 let result = try await Terra
-  .infer(modelName, prompt: prompt, provider: providerName, runtime: runtimeName)
+  .infer(
+    Terra.ModelID(modelName),
+    prompt: prompt,
+    provider: Terra.ProviderID(providerName),
+    runtime: Terra.RuntimeID(runtimeName)
+  )
   .capture(.includeContent)
   .attr(.init("app.user_tier"), userTier)
   .attr(.init("app.retry"), false)
   .run { trace in
-    trace.responseModel(modelName)
+    trace.responseModel(Terra.ModelID(modelName))
     trace.tokens(input: 128, output: 64)
     return try await llm.generate(prompt)
   }
@@ -90,12 +100,13 @@ try await Terra.start(config)
 ## Macros (`@Traced`)
 
 ```swift
+import Terra
 import TerraTracedMacro
 
-@Traced(model: "gpt-4o-mini")
+@Traced(model: Terra.ModelID("gpt-4o-mini"))
 func infer(prompt: String) async throws -> String { try await llm.generate(prompt) }
 
-@Traced(model: "gpt-4o-mini", streaming: true)
+@Traced(model: Terra.ModelID("gpt-4o-mini"), streaming: true)
 func stream(prompt: String) async throws -> String { try await llm.generate(prompt) }
 
 @Traced(agent: "planner")
@@ -104,7 +115,7 @@ func agentStep() async throws -> String { "ok" }
 @Traced(tool: "search")
 func runTool(query: String) async throws -> String { "ok" }
 
-@Traced(embedding: "text-embedding-3-small")
+@Traced(embedding: Terra.ModelID("text-embedding-3-small"))
 func embed(text: String) async throws -> [Float] { [0.1, 0.2] }
 
 @Traced(safety: "toxicity")

@@ -10,14 +10,14 @@ public enum TerraMLX {
   ///
   /// Usage:
   /// ```swift
-  /// let result = try await TerraMLX.traced(model: "mlx-community/Llama-3.2-1B", maxTokens: 256) {
+  /// let result = try await TerraMLX.traced(model: Terra.ModelID("mlx-community/Llama-3.2-1B"), maxTokens: 256) {
   ///   // Your mlx-swift generation code here
   ///   return resultString
   /// }
   /// ```
   @discardableResult
   public static func traced<R>(
-    model: String,
+    model: Terra.ModelID,
     maxTokens: Int? = nil,
     temperature: Double? = nil,
     device: String? = nil,
@@ -26,7 +26,7 @@ public enum TerraMLX {
     _ body: @Sendable () async throws -> R
   ) async throws -> R {
     let request = Terra.InferenceRequest(
-      model: model,
+      model: model.rawValue,
       maxOutputTokens: maxTokens,
       temperature: temperature
     )

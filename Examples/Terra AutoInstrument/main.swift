@@ -40,7 +40,7 @@ struct TerraAutoInstrumentExample {
 // Tier 2: @Traced Annotation (import TerraTracedMacro)
 // ──────────────────────────────────────────────
 
-// @Traced(model: "llama-3.2-1B")
+// @Traced(model: Terra.ModelID("llama-3.2-1B"))
 // func summarize(prompt: String, maxTokens: Int = 512) async throws -> String {
 //   try await mlxContainer.generate(prompt: prompt, maxTokens: maxTokens)
 // }
@@ -51,7 +51,7 @@ struct TerraAutoInstrumentExample {
 // Tier 3: TerraMLX Closure (import TerraMLX)
 // ──────────────────────────────────────────────
 
-// let result = try await TerraMLX.traced(model: "mlx-community/Llama-3.2-1B") {
+// let result = try await TerraMLX.traced(model: Terra.ModelID("mlx-community/Llama-3.2-1B")) {
 //   try await container.perform { context in
 //     var firstToken = true
 //     let output = try MLXLMCommon.generate(

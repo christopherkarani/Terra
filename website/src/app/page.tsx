@@ -112,9 +112,10 @@ export default function LandingPage() {
             />
              <CodeBlock 
               title="Summarizer.swift"
-              code={`import TerraTracedMacro
+              code={`import Terra
+import TerraTracedMacro
 
-@Traced(model: "llama-3.2-1B")
+@Traced(model: Terra.ModelID("llama-3.2-1B"))
 func summarize(prompt: String) async throws -> String {
     // Automatically wrapped in an inference span
     return try await model.generate(prompt)

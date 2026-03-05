@@ -448,6 +448,69 @@ func explicitMetadataOverridesDetectedParams() {
   )
 }
 
+@Test("Model macro wraps runtime String parameter into RuntimeID")
+func modelMacroWrapsRuntimeStringParameter() {
+  assertMacroExpansion(
+    """
+    @Traced(model: "gpt-4")
+    func generate(prompt: String, runtime: String) async throws -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    expandedSource: """
+    func generate(prompt: String, runtime: String) async throws -> String {
+      return try await Terra.infer("gpt-4", prompt: prompt, runtime: Terra.RuntimeID(runtime)).run { trace in
+        _ = trace
+        try await doGenerate(prompt)
+      }
+    }
+    """,
+    macros: testMacros
+  )
+}
+
+@Test("Explicit runtime macro arg overrides detected runtime parameter")
+func explicitRuntimeOverridesDetectedParam() {
+  assertMacroExpansion(
+    """
+    @Traced(model: "gpt-4", runtime: "mlx")
+    func generate(prompt: String, runtime: String) async throws -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    expandedSource: """
+    func generate(prompt: String, runtime: String) async throws -> String {
+      return try await Terra.infer("gpt-4", prompt: prompt, runtime: "mlx").run { trace in
+        _ = trace
+        try await doGenerate(prompt)
+      }
+    }
+    """,
+    macros: testMacros
+  )
+}
+
+@Test("Tool macro wraps runtime String parameter into RuntimeID")
+func toolMacroWrapsRuntimeStringParameter() {
+  assertMacroExpansion(
+    """
+    @Traced(tool: "search")
+    func search(query: String, runtime: String) async throws -> [Result] {
+      try await doSearch(query)
+    }
+    """,
+    expandedSource: """
+    func search(query: String, runtime: String) async throws -> [Result] {
+      return try await Terra.tool("search", callID: Terra.ToolCallID(), runtime: Terra.RuntimeID(runtime)).run { trace in
+        _ = trace
+        try await doSearch(query)
+      }
+    }
+    """,
+    macros: testMacros
+  )
+}
+
 @Test("Macro requires async function")
 func macroRequiresAsyncFunction() {
   assertMacroExpansion(
