@@ -116,14 +116,27 @@ fi
 
 if [[ "$BUILD_DOCC" -eq 1 ]]; then
   log "Generating symbol graphs for DocC..."
-  (
+  symbolgraph_log="${TMP_DIR}/symbolgraph.log"
+  if ! (
     cd "$ROOT_DIR"
     swift package dump-symbol-graph --skip-synthesized-members
-  )
+  ) >"$symbolgraph_log" 2>&1; then
+    if grep -q "Failed to emit symbol graph for 'TerraPackageTests'" "$symbolgraph_log"; then
+      log "Proceeding despite TerraPackageTests symbol graph failure (non-DocC test target)."
+    else
+      cat "$symbolgraph_log" >&2
+      exit 1
+    fi
+  fi
 
   symbolgraph_dir="$(find "$ROOT_DIR/.build" -type d -name symbolgraph | sort | tail -n 1)"
   if [[ -z "$symbolgraph_dir" ]]; then
     echo "Unable to locate symbolgraph directory under .build" >&2
+    exit 1
+  fi
+  if [[ ! -f "$symbolgraph_dir/TerraCore.symbols.json" ]] || [[ ! -f "$symbolgraph_dir/Terra@TerraCore.symbols.json" ]]; then
+    echo "Required Terra symbol graphs missing in $symbolgraph_dir" >&2
+    cat "$symbolgraph_log" >&2
     exit 1
   fi
 
