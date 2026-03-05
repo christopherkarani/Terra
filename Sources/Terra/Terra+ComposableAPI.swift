@@ -38,10 +38,6 @@ extension Terra {
   public enum Metadata: Sendable, Hashable {
     case event(String)
     case attribute(TraceAttribute)
-
-    public static func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Self {
-      .attribute(.init(name: key.name, value: value.traceScalar))
-    }
   }
 
   @resultBuilder
@@ -90,26 +86,16 @@ extension Terra {
     }
 
     public let kind: Kind
-    public var model: ModelID?
-    public var name: String?
-    public var id: String?
-    public var callID: ToolCallID?
-    public var type: String?
-    public var prompt: String?
-    public var subject: String?
+    public let model: ModelID?
+    public let name: String?
     public var provider: ProviderID?
     public var runtime: RuntimeID?
-    public var capturePolicy: CapturePolicy
+    public let capturePolicy: CapturePolicy
 
     public init(
       kind: Kind,
       model: ModelID? = nil,
       name: String? = nil,
-      id: String? = nil,
-      callID: ToolCallID? = nil,
-      type: String? = nil,
-      prompt: String? = nil,
-      subject: String? = nil,
       provider: ProviderID? = nil,
       runtime: RuntimeID? = nil,
       capturePolicy: CapturePolicy = .default
@@ -117,11 +103,6 @@ extension Terra {
       self.kind = kind
       self.model = model
       self.name = name
-      self.id = id
-      self.callID = callID
-      self.type = type
-      self.prompt = prompt
-      self.subject = subject
       self.provider = provider
       self.runtime = runtime
       self.capturePolicy = capturePolicy
@@ -150,7 +131,7 @@ extension Terra {
   }
 
   public static func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Metadata {
-    .attr(key, value)
+    .attribute(.init(name: key.name, value: value.traceScalar))
   }
 
   package enum TraceKeys {
@@ -301,44 +282,6 @@ extension Terra {
     }
 
     @discardableResult
-    public func run<R: Sendable, Runtime: RuntimeSeam>(
-      using runtime: Runtime,
-      _ body: @escaping @Sendable () async throws -> R
-    ) async throws -> R {
-      try await run(using: runtime) { _ in
-        try await body()
-      }
-    }
-
-    @discardableResult
-    public func run<R: Sendable, Runtime: RuntimeSeam>(
-      using runtime: Runtime,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async throws -> R {
-      try await run(using: runtime, provider: _DefaultProviderSeam(), executor: _DefaultExecutorSeam(), body)
-    }
-
-    @discardableResult
-    public func run<R: Sendable, Runtime: RuntimeSeam, Provider: ProviderSeam>(
-      using runtime: Runtime,
-      provider: Provider,
-      _ body: @escaping @Sendable () async throws -> R
-    ) async throws -> R {
-      try await run(using: runtime, provider: provider) { _ in
-        try await body()
-      }
-    }
-
-    @discardableResult
-    public func run<R: Sendable, Runtime: RuntimeSeam, Provider: ProviderSeam>(
-      using runtime: Runtime,
-      provider: Provider,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async throws -> R {
-      try await run(using: runtime, provider: provider, executor: _DefaultExecutorSeam(), body)
-    }
-
-    @discardableResult
     public func run<R: Sendable, Runtime: RuntimeSeam, Provider: ProviderSeam, Executor: ExecutorSeam>(
       using runtime: Runtime,
       provider: Provider,
@@ -404,7 +347,6 @@ extension Terra {
         .init(
           kind: .inference,
           model: operation.model,
-          prompt: operation.prompt,
           provider: operation.provider,
           runtime: operation.runtime,
           capturePolicy: capturePolicy
@@ -413,7 +355,6 @@ extension Terra {
         .init(
           kind: .streaming,
           model: operation.model,
-          prompt: operation.prompt,
           provider: operation.provider,
           runtime: operation.runtime,
           capturePolicy: capturePolicy
@@ -430,7 +371,6 @@ extension Terra {
         .init(
           kind: .agent,
           name: operation.name,
-          id: operation.id,
           provider: operation.provider,
           runtime: operation.runtime,
           capturePolicy: capturePolicy
@@ -439,8 +379,6 @@ extension Terra {
         .init(
           kind: .tool,
           name: operation.name,
-          callID: operation.callID,
-          type: operation.type,
           provider: operation.provider,
           runtime: operation.runtime,
           capturePolicy: capturePolicy
@@ -449,7 +387,6 @@ extension Terra {
         .init(
           kind: .safety,
           name: operation.name,
-          subject: operation.subject,
           provider: operation.provider,
           runtime: operation.runtime,
           capturePolicy: capturePolicy
@@ -536,18 +473,6 @@ extension Terra {
     runtime: RuntimeID? = nil
   ) -> Call {
     Call(operation: .safety(.init(name: name, subject: subject, provider: provider, runtime: runtime)))
-  }
-}
-
-private struct _DefaultProviderSeam: Terra.ProviderSeam {
-  func resolve(_ descriptor: Terra.CallDescriptor) -> Terra.CallDescriptor {
-    descriptor
-  }
-}
-
-private struct _DefaultExecutorSeam: Terra.ExecutorSeam {
-  func execute<R: Sendable>(_ operation: @escaping @Sendable () async throws -> R) async throws -> R {
-    try await operation()
   }
 }
 
