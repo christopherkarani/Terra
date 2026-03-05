@@ -15,12 +15,12 @@ This document lists the canonical public API for SDK consumers.
 
 ### Canonical operation factories
 
-- `Terra.infer(_:prompt:provider:runtime:temperature:maxTokens:) -> Terra.Call<some Terra.OperationKind>`
-- `Terra.stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:) -> Terra.Call<some Terra.OperationKind>`
-- `Terra.embed(_:inputCount:provider:runtime:) -> Terra.Call<some Terra.OperationKind>`
-- `Terra.agent(_:id:provider:runtime:) -> Terra.Call<some Terra.OperationKind>`
-- `Terra.tool(_:callID:type:provider:runtime:) -> Terra.Call<some Terra.OperationKind>`
-- `Terra.safety(_:subject:provider:runtime:) -> Terra.Call<some Terra.OperationKind>`
+- `Terra.infer(_:prompt:provider:runtime:temperature:maxTokens:) -> Terra.Call`
+- `Terra.stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:) -> Terra.Call`
+- `Terra.embed(_:inputCount:provider:runtime:) -> Terra.Call`
+- `Terra.agent(_:id:provider:runtime:) -> Terra.Call`
+- `Terra.tool(_:callID:type:provider:runtime:) -> Terra.Call`
+- `Terra.safety(_:subject:provider:runtime:) -> Terra.Call`
 
 ### Shared call composition (`Terra.Call`)
 
@@ -42,11 +42,17 @@ This document lists the canonical public API for SDK consumers.
 
 ### Scalar/key model
 
-- `Terra.OperationKind`
 - `Terra.ScalarValue`
 - `Terra.TraceScalar`
 - `Terra.TraceKey<Value>`
-- `Terra.Call<Op>`
+- `Terra.Call`
+
+### Typed identifiers
+
+- `Terra.ModelID`
+- `Terra.ProviderID`
+- `Terra.RuntimeID`
+- `Terra.ToolCallID`
 
 ### Privacy
 

@@ -3,14 +3,46 @@ import Testing
 
 @Suite("Composable API", .serialized)
 struct TerraComposableAPITests {
-  @Test("Factory methods return typed operation markers")
-  func typedFactoryReturnMarkers() {
-    expectComposableCall(Terra.infer("model"))
-    expectComposableCall(Terra.stream("model"))
-    expectComposableCall(Terra.embed("model"))
-    expectComposableCall(Terra.agent("planner"))
-    expectComposableCall(Terra.tool("search", callID: "call-1"))
-    expectComposableCall(Terra.safety("toxicity"))
+  @Test("Factory methods return a uniform call type")
+  func factoryMethodsReturnUniformCallType() {
+    let calls: [Terra.Call] = [
+      Terra.infer("model"),
+      Terra.stream("model"),
+      Terra.embed("model"),
+      Terra.agent("planner"),
+      Terra.tool("search", callID: "call-1"),
+      Terra.safety("toxicity"),
+    ]
+    #expect(calls.count == 6)
+  }
+
+  @Test("Uniform call type supports collection transforms")
+  func uniformCallTypeSupportsCollectionTransforms() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    let transformedCalls: [Terra.Call] = [
+      Terra.infer("model-a", prompt: "hello"),
+      Terra.stream("model-b", prompt: "world"),
+    ]
+      .enumerated()
+      .map { index, call in
+        call
+          .capture(index == 0 ? .includeContent : .default)
+          .attr(.init("terra.collection.index"), index)
+      }
+
+    for call in transformedCalls {
+      _ = try await call.run { "ok" }
+    }
+
+    let spans = support.finishedSpans().filter { span in
+      Terra.SpanNames.isTerraSpanName(span.name)
+        && span.attributes["terra.collection.index"] != nil
+    }
+    #expect(spans.count == 2)
+    let indices = Set(spans.compactMap { $0.attributes["terra.collection.index"]?.description })
+    #expect(indices == ["0", "1"])
   }
 
   @Test("Scalar-based attr API records call and trace attributes")
@@ -42,5 +74,3 @@ struct TerraComposableAPITests {
     #expect(span.attributes[Terra.Keys.GenAI.usageOutputTokens]?.description == "4")
   }
 }
-
-private func expectComposableCall<Op: Terra.OperationKind>(_ value: Terra.Call<Op>) { _ = value }

@@ -112,15 +112,7 @@ extension Terra {
     }
   }
 
-  public protocol OperationKind: Sendable {}
-  package enum InferOp: OperationKind {}
-  package enum StreamOp: OperationKind {}
-  package enum EmbedOp: OperationKind {}
-  package enum AgentOp: OperationKind {}
-  package enum ToolOp: OperationKind {}
-  package enum SafetyOp: OperationKind {}
-
-  public struct Call<Op: OperationKind>: Sendable {
+  public struct Call: Sendable {
     private var operation: _Operation
     private var capturePolicy: CapturePolicy = .default
     private var attributes: [_TraceAttribute] = []
@@ -161,8 +153,8 @@ extension Terra {
     runtime: RuntimeID? = nil,
     temperature: Double? = nil,
     maxTokens: Int? = nil
-  ) -> Call<some OperationKind> {
-    Call<InferOp>(operation: .infer(.init(
+  ) -> Call {
+    Call(operation: .infer(.init(
       model: model,
       prompt: prompt,
       provider: provider,
@@ -180,8 +172,8 @@ extension Terra {
     temperature: Double? = nil,
     maxTokens: Int? = nil,
     expectedTokens: Int? = nil
-  ) -> Call<some OperationKind> {
-    Call<StreamOp>(operation: .stream(.init(
+  ) -> Call {
+    Call(operation: .stream(.init(
       model: model,
       prompt: prompt,
       provider: provider,
@@ -197,8 +189,8 @@ extension Terra {
     inputCount: Int? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
-  ) -> Call<some OperationKind> {
-    Call<EmbedOp>(operation: .embed(.init(
+  ) -> Call {
+    Call(operation: .embed(.init(
       model: model,
       inputCount: inputCount,
       provider: provider,
@@ -211,8 +203,8 @@ extension Terra {
     id: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
-  ) -> Call<some OperationKind> {
-    Call<AgentOp>(operation: .agent(.init(name: name, id: id, provider: provider, runtime: runtime)))
+  ) -> Call {
+    Call(operation: .agent(.init(name: name, id: id, provider: provider, runtime: runtime)))
   }
 
   public static func tool(
@@ -221,8 +213,8 @@ extension Terra {
     type: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
-  ) -> Call<some OperationKind> {
-    Call<ToolOp>(operation: .tool(.init(name: name, callID: callID, type: type, provider: provider, runtime: runtime)))
+  ) -> Call {
+    Call(operation: .tool(.init(name: name, callID: callID, type: type, provider: provider, runtime: runtime)))
   }
 
   public static func safety(
@@ -230,8 +222,8 @@ extension Terra {
     subject: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
-  ) -> Call<some OperationKind> {
-    Call<SafetyOp>(operation: .safety(.init(name: name, subject: subject, provider: provider, runtime: runtime)))
+  ) -> Call {
+    Call(operation: .safety(.init(name: name, subject: subject, provider: provider, runtime: runtime)))
   }
 }
 
