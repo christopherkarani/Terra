@@ -1,16 +1,16 @@
-# TelemetryEngine Injection
+# Protocol Seams
 
-Use ``Terra/TelemetryEngine`` when you need deterministic injection/mocking in tests or custom execution boundaries.
+Use ``TerraCore/Terra/TelemetryEngine`` to inject deterministic execution for tests or custom runtimes.
 
-## Engine Protocol
+## Core Seam Types
 
-The engine receives:
+- ``TerraCore/Terra/TelemetryEngine``
+- ``TerraCore/Terra/TelemetryContext``
+- ``TerraCore/Terra/TraceHandle``
 
-- ``Terra/TelemetryContext`` (operation, model/name, provider/runtime, capture policy)
-- Precomputed call attributes
-- A ``Terra/TraceHandle`` body closure
+The seam entry point is ``TerraCore/Terra/Call/run(using:_:)``.
 
-## Example
+## Minimal Mock Engine
 
 ```swift
 import Terra
@@ -30,12 +30,12 @@ struct MockEngine: Terra.TelemetryEngine {
   }
 }
 
-let result = try await Terra
+let value = try await Terra
   .tool("search", callID: Terra.ToolCallID("call-1"))
   .run(using: MockEngine()) { trace in
     trace.event("tool.mocked")
-    return "stubbed-result"
+    return "stubbed"
   }
 ```
 
-`run(using:)` keeps the canonical call construction unchanged while allowing controlled execution in tests.
+This keeps canonical call construction unchanged while swapping execution behavior.
