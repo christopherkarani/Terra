@@ -25,6 +25,82 @@ extension Terra {
     }
   }
 
+  public struct TraceAttribute: Sendable, Hashable {
+    public let name: String
+    public let value: TraceScalar
+
+    public init(name: String, value: TraceScalar) {
+      self.name = name
+      self.value = value
+    }
+  }
+
+  public struct CallDescriptor: Sendable, Hashable {
+    public enum Kind: String, Sendable, Hashable {
+      case inference
+      case streaming
+      case embedding
+      case agent
+      case tool
+      case safety
+    }
+
+    public let kind: Kind
+    public var model: ModelID?
+    public var name: String?
+    public var id: String?
+    public var callID: ToolCallID?
+    public var type: String?
+    public var prompt: String?
+    public var subject: String?
+    public var provider: ProviderID?
+    public var runtime: RuntimeID?
+    public var capturePolicy: CapturePolicy
+
+    public init(
+      kind: Kind,
+      model: ModelID? = nil,
+      name: String? = nil,
+      id: String? = nil,
+      callID: ToolCallID? = nil,
+      type: String? = nil,
+      prompt: String? = nil,
+      subject: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      capturePolicy: CapturePolicy = .default
+    ) {
+      self.kind = kind
+      self.model = model
+      self.name = name
+      self.id = id
+      self.callID = callID
+      self.type = type
+      self.prompt = prompt
+      self.subject = subject
+      self.provider = provider
+      self.runtime = runtime
+      self.capturePolicy = capturePolicy
+    }
+  }
+
+  public protocol ProviderSeam: Sendable {
+    func resolve(_ descriptor: CallDescriptor) -> CallDescriptor
+  }
+
+  public protocol ExecutorSeam: Sendable {
+    func execute<R: Sendable>(_ operation: @escaping @Sendable () async throws -> R) async throws -> R
+  }
+
+  public protocol RuntimeSeam: Sendable {
+    func run<R: Sendable>(
+      descriptor: CallDescriptor,
+      attributes: [TraceAttribute],
+      executor: any ExecutorSeam,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async throws -> R
+  }
+
   package enum TraceKeys {
     static let runtime = TraceKey<RuntimeID>("terra.runtime")
     static let provider = TraceKey<ProviderID>("gen_ai.provider.name")
@@ -45,7 +121,7 @@ extension Terra {
     private let onOutputTokens: @Sendable (Int) -> Void
     private let onFirstToken: @Sendable () -> Void
 
-    fileprivate init(
+    public init(
       onEvent: @escaping @Sendable (String) -> Void,
       onAttribute: @escaping @Sendable (String, TraceScalar) -> Void,
       onError: @escaping @Sendable (any Error) -> Void,
@@ -144,6 +220,140 @@ extension Terra {
     public func run<R: Sendable>(_ body: @escaping @Sendable (TraceHandle) async throws -> R) async rethrows -> R {
       try await _run(operation: operation, capturePolicy: capturePolicy, attributes: attributes, body)
     }
+
+    @discardableResult
+    public func run<R: Sendable, Runtime: RuntimeSeam>(
+      using runtime: Runtime,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async throws -> R {
+      try await run(using: runtime) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func run<R: Sendable, Runtime: RuntimeSeam>(
+      using runtime: Runtime,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async throws -> R {
+      try await run(using: runtime, provider: _DefaultProviderSeam(), executor: _DefaultExecutorSeam(), body)
+    }
+
+    @discardableResult
+    public func run<R: Sendable, Runtime: RuntimeSeam, Provider: ProviderSeam>(
+      using runtime: Runtime,
+      provider: Provider,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async throws -> R {
+      try await run(using: runtime, provider: provider) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func run<R: Sendable, Runtime: RuntimeSeam, Provider: ProviderSeam>(
+      using runtime: Runtime,
+      provider: Provider,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async throws -> R {
+      try await run(using: runtime, provider: provider, executor: _DefaultExecutorSeam(), body)
+    }
+
+    @discardableResult
+    public func run<R: Sendable, Runtime: RuntimeSeam, Provider: ProviderSeam, Executor: ExecutorSeam>(
+      using runtime: Runtime,
+      provider: Provider,
+      executor: Executor,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async throws -> R {
+      try await run(using: runtime, provider: provider, executor: executor) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func run<R: Sendable, Runtime: RuntimeSeam, Provider: ProviderSeam, Executor: ExecutorSeam>(
+      using runtime: Runtime,
+      provider: Provider,
+      executor: Executor,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async throws -> R {
+      var descriptor = _descriptor(capturePolicy: capturePolicy)
+      descriptor = provider.resolve(descriptor)
+
+      var seamAttributes = attributes.map { TraceAttribute(name: $0.name, value: $0.value) }
+      if let provider = descriptor.provider {
+        seamAttributes.append(.init(name: TraceKeys.provider.name, value: provider.traceScalar))
+      }
+      if let runtime = descriptor.runtime {
+        seamAttributes.append(.init(name: TraceKeys.runtime.name, value: runtime.traceScalar))
+      }
+      return try await runtime.run(
+        descriptor: descriptor,
+        attributes: seamAttributes,
+        executor: executor,
+        body
+      )
+    }
+
+    private func _descriptor(capturePolicy: CapturePolicy) -> CallDescriptor {
+      switch operation {
+      case .infer(let operation):
+        .init(
+          kind: .inference,
+          model: operation.model,
+          prompt: operation.prompt,
+          provider: operation.provider,
+          runtime: operation.runtime,
+          capturePolicy: capturePolicy
+        )
+      case .stream(let operation):
+        .init(
+          kind: .streaming,
+          model: operation.model,
+          prompt: operation.prompt,
+          provider: operation.provider,
+          runtime: operation.runtime,
+          capturePolicy: capturePolicy
+        )
+      case .embed(let operation):
+        .init(
+          kind: .embedding,
+          model: operation.model,
+          provider: operation.provider,
+          runtime: operation.runtime,
+          capturePolicy: capturePolicy
+        )
+      case .agent(let operation):
+        .init(
+          kind: .agent,
+          name: operation.name,
+          id: operation.id,
+          provider: operation.provider,
+          runtime: operation.runtime,
+          capturePolicy: capturePolicy
+        )
+      case .tool(let operation):
+        .init(
+          kind: .tool,
+          name: operation.name,
+          callID: operation.callID,
+          type: operation.type,
+          provider: operation.provider,
+          runtime: operation.runtime,
+          capturePolicy: capturePolicy
+        )
+      case .safety(let operation):
+        .init(
+          kind: .safety,
+          name: operation.name,
+          subject: operation.subject,
+          provider: operation.provider,
+          runtime: operation.runtime,
+          capturePolicy: capturePolicy
+        )
+      }
+    }
   }
 
   public static func infer(
@@ -224,6 +434,18 @@ extension Terra {
     runtime: RuntimeID? = nil
   ) -> Call {
     Call(operation: .safety(.init(name: name, subject: subject, provider: provider, runtime: runtime)))
+  }
+}
+
+private struct _DefaultProviderSeam: Terra.ProviderSeam {
+  func resolve(_ descriptor: Terra.CallDescriptor) -> Terra.CallDescriptor {
+    descriptor
+  }
+}
+
+private struct _DefaultExecutorSeam: Terra.ExecutorSeam {
+  func execute<R: Sendable>(_ operation: @escaping @Sendable () async throws -> R) async throws -> R {
+    try await operation()
   }
 }
 

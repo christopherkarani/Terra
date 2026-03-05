@@ -80,8 +80,8 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 
 ### Phase 4 — Extensibility/testability seams
 
-- [ ] Add public protocol seams for injection/mocking (runtime/provider/executor abstractions).
-- [ ] Add mock-based tests validating deterministic instrumentation behavior.
+- [x] Add public protocol seams for injection/mocking (runtime/provider/executor abstractions).
+- [x] Add mock-based tests validating deterministic instrumentation behavior.
 
 ### Phase 5 — Ergonomics
 

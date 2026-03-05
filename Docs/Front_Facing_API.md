@@ -46,7 +46,9 @@ This document lists the canonical public API for SDK consumers.
 - `Terra.ScalarValue`
 - `Terra.TraceScalar`
 - `Terra.TraceKey<Value>`
+- `Terra.TraceAttribute`
 - `Terra.Call`
+- `Terra.CallDescriptor`
 
 ### Typed identifiers
 
@@ -54,6 +56,12 @@ This document lists the canonical public API for SDK consumers.
 - `Terra.ProviderID`
 - `Terra.RuntimeID`
 - `Terra.ToolCallID`
+
+### Injection seams
+
+- `Terra.ProviderSeam`
+- `Terra.ExecutorSeam`
+- `Terra.RuntimeSeam`
 
 ### Error model
 
