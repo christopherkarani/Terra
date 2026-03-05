@@ -35,6 +35,50 @@ extension Terra {
     }
   }
 
+  public enum Metadata: Sendable, Hashable {
+    case event(String)
+    case attribute(TraceAttribute)
+
+    public static func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Self {
+      .attribute(.init(name: key.name, value: value.traceScalar))
+    }
+  }
+
+  @resultBuilder
+  public enum MetadataBuilder {
+    public static func buildBlock(_ components: [Metadata]...) -> [Metadata] {
+      components.flatMap { $0 }
+    }
+
+    public static func buildExpression(_ expression: Metadata) -> [Metadata] {
+      [expression]
+    }
+
+    public static func buildExpression(_ expression: [Metadata]) -> [Metadata] {
+      expression
+    }
+
+    public static func buildOptional(_ component: [Metadata]?) -> [Metadata] {
+      component ?? []
+    }
+
+    public static func buildEither(first component: [Metadata]) -> [Metadata] {
+      component
+    }
+
+    public static func buildEither(second component: [Metadata]) -> [Metadata] {
+      component
+    }
+
+    public static func buildArray(_ components: [[Metadata]]) -> [Metadata] {
+      components.flatMap { $0 }
+    }
+
+    public static func buildLimitedAvailability(_ component: [Metadata]) -> [Metadata] {
+      component
+    }
+  }
+
   public struct CallDescriptor: Sendable, Hashable {
     public enum Kind: String, Sendable, Hashable {
       case inference
@@ -101,6 +145,14 @@ extension Terra {
     ) async throws -> R
   }
 
+  public static func event(_ name: String) -> Metadata {
+    .event(name)
+  }
+
+  public static func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Metadata {
+    .attr(key, value)
+  }
+
   package enum TraceKeys {
     static let runtime = TraceKey<RuntimeID>("terra.runtime")
     static let provider = TraceKey<ProviderID>("gen_ai.provider.name")
@@ -154,6 +206,19 @@ extension Terra {
     }
 
     @discardableResult
+    public func metadata(@MetadataBuilder _ build: () -> [Metadata]) -> Self {
+      for item in build() {
+        switch item {
+        case .event(let name):
+          onEvent(name)
+        case .attribute(let attribute):
+          onAttribute(attribute.name, attribute.value)
+        }
+      }
+      return self
+    }
+
+    @discardableResult
     public func tokens(input: Int? = nil, output: Int? = nil) -> Self {
       onTokens(input, output)
       return self
@@ -192,6 +257,7 @@ extension Terra {
     private var operation: _Operation
     private var capturePolicy: CapturePolicy = .default
     private var attributes: [_TraceAttribute] = []
+    private var metadataEntries: [Metadata] = []
 
     fileprivate init(operation: _Operation) {
       self.operation = operation
@@ -209,6 +275,12 @@ extension Terra {
       return copy
     }
 
+    public func metadata(@MetadataBuilder _ build: () -> [Metadata]) -> Self {
+      var copy = self
+      copy.metadataEntries.append(contentsOf: build())
+      return copy
+    }
+
     @discardableResult
     public func run<R: Sendable>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await run { _ in
@@ -218,7 +290,14 @@ extension Terra {
 
     @discardableResult
     public func run<R: Sendable>(_ body: @escaping @Sendable (TraceHandle) async throws -> R) async rethrows -> R {
-      try await _run(operation: operation, capturePolicy: capturePolicy, attributes: attributes, body)
+      let attributes = _mergedAttributes()
+      let events = _metadataEvents()
+      return try await _run(operation: operation, capturePolicy: capturePolicy, attributes: attributes) { handle in
+        for event in events {
+          _ = handle.event(event)
+        }
+        return try await body(handle)
+      }
     }
 
     @discardableResult
@@ -281,19 +360,42 @@ extension Terra {
       var descriptor = _descriptor(capturePolicy: capturePolicy)
       descriptor = provider.resolve(descriptor)
 
-      var seamAttributes = attributes.map { TraceAttribute(name: $0.name, value: $0.value) }
+      var seamAttributes = _mergedAttributes().map { TraceAttribute(name: $0.name, value: $0.value) }
       if let provider = descriptor.provider {
         seamAttributes.append(.init(name: TraceKeys.provider.name, value: provider.traceScalar))
       }
       if let runtime = descriptor.runtime {
         seamAttributes.append(.init(name: TraceKeys.runtime.name, value: runtime.traceScalar))
       }
+      let events = _metadataEvents()
       return try await runtime.run(
         descriptor: descriptor,
         attributes: seamAttributes,
         executor: executor,
-        body
+        { handle in
+          for event in events {
+            _ = handle.event(event)
+          }
+          return try await body(handle)
+        }
       )
+    }
+
+    private func _mergedAttributes() -> [_TraceAttribute] {
+      var merged = attributes
+      for item in metadataEntries {
+        if case .attribute(let attribute) = item {
+          merged.append(.init(name: attribute.name, value: attribute.value))
+        }
+      }
+      return merged
+    }
+
+    private func _metadataEvents() -> [String] {
+      metadataEntries.compactMap {
+        guard case .event(let name) = $0 else { return nil }
+        return name
+      }
     }
 
     private func _descriptor(capturePolicy: CapturePolicy) -> CallDescriptor {

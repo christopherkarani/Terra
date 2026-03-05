@@ -27,6 +27,7 @@ This document lists the canonical public API for SDK consumers.
 
 - `.capture(_ policy: Terra.CapturePolicy)`
 - `.attr(_ key: Terra.TraceKey<Value>, _ value: Value) where Value: Terra.ScalarValue`
+- `.metadata { ... }` (`@Terra.MetadataBuilder`)
 - `.run { ... }`
 - `.run { trace in ... }`
 
@@ -34,6 +35,7 @@ This document lists the canonical public API for SDK consumers.
 
 - `.event(_:)`
 - `.attr(_:_:)`
+- `.metadata { ... }` (`@Terra.MetadataBuilder`)
 - `.tokens(input:output:)`
 - `.responseModel(_ value: Terra.ModelID)`
 - `.chunk(_:)`
@@ -47,6 +49,10 @@ This document lists the canonical public API for SDK consumers.
 - `Terra.TraceScalar`
 - `Terra.TraceKey<Value>`
 - `Terra.TraceAttribute`
+- `Terra.Metadata`
+- `Terra.MetadataBuilder`
+- `Terra.event(_:)`
+- `Terra.attr(_:_:)`
 - `Terra.Call`
 - `Terra.CallDescriptor`
 

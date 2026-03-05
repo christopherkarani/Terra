@@ -85,8 +85,8 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 
 ### Phase 5 — Ergonomics
 
-- [ ] Add `@resultBuilder` metadata composition for attrs/events.
-- [ ] Add tests for builder semantics (conditionals, ordering, composition).
+- [x] Add `@resultBuilder` metadata composition for attrs/events.
+- [x] Add tests for builder semantics (conditionals, ordering, composition).
 
 ### Phase 6 — Macro + docs alignment
 

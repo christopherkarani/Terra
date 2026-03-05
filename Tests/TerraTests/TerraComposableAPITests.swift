@@ -75,4 +75,70 @@ struct TerraComposableAPITests {
     #expect(span.attributes[Terra.Keys.GenAI.usageInputTokens]?.description == "3")
     #expect(span.attributes[Terra.Keys.GenAI.usageOutputTokens]?.description == "4")
   }
+
+  @Test("Call metadata builder supports conditionals and loops")
+  func callMetadataBuilderSupportsConditionalsAndLoops() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    let includeFlag = true
+    let phases = ["prepare", "dispatch"]
+
+    _ = try await Terra
+      .infer("builder/model", prompt: "hello")
+      .metadata {
+        Terra.attr(.init("builder.attr.base"), "base")
+        if includeFlag {
+          Terra.attr(.init("builder.attr.conditional"), 1)
+        }
+        for phase in phases {
+          Terra.event("builder.event.\(phase)")
+        }
+      }
+      .run { "ok" }
+
+    let span = try #require(support.finishedSpans().first(where: { $0.name == Terra.SpanNames.inference }))
+    #expect(span.attributes["builder.attr.base"]?.description == "base")
+    #expect(span.attributes["builder.attr.conditional"]?.description == "1")
+    #expect(span.events.map(\.name) == ["builder.event.prepare", "builder.event.dispatch"])
+  }
+
+  @Test("Trace metadata builder preserves ordering")
+  func traceMetadataBuilderPreservesOrdering() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    _ = try await Terra
+      .infer("builder/model", prompt: "hello")
+      .run { trace in
+        trace.metadata {
+          Terra.event("trace.event.1")
+          Terra.attr(.init("trace.attr.1"), "v1")
+          Terra.event("trace.event.2")
+        }
+        return "ok"
+      }
+
+    let span = try #require(support.finishedSpans().first(where: { $0.name == Terra.SpanNames.inference }))
+    #expect(span.events.map(\.name) == ["trace.event.1", "trace.event.2"])
+    #expect(span.attributes["trace.attr.1"]?.description == "v1")
+  }
+
+  @Test("Metadata builder empty closures are no-op")
+  func metadataBuilderEmptyClosuresAreNoOp() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    _ = try await Terra
+      .infer("builder/model", prompt: "hello")
+      .metadata { }
+      .run { trace in
+        trace.metadata { }
+        return "ok"
+      }
+
+    let span = try #require(support.finishedSpans().first(where: { $0.name == Terra.SpanNames.inference }))
+    #expect(span.attributes["builder.attr.base"] == nil)
+    #expect(span.events.isEmpty)
+  }
 }
