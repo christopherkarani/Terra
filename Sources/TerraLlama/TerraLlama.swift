@@ -1,13 +1,13 @@
 import Foundation
 import TerraCore
 
-public enum TerraLlama {
-  public struct DecodeStats: Sendable {
-    public var tokensPerSecond: Double?
-    public var timeToFirstTokenMS: Double?
-    public var kvCacheUsagePercent: Double?
+package enum TerraLlama {
+  package struct DecodeStats: Sendable {
+    package var tokensPerSecond: Double?
+    package var timeToFirstTokenMS: Double?
+    package var kvCacheUsagePercent: Double?
 
-    public init(
+    package init(
       tokensPerSecond: Double? = nil,
       timeToFirstTokenMS: Double? = nil,
       kvCacheUsagePercent: Double? = nil
@@ -18,12 +18,12 @@ public enum TerraLlama {
     }
   }
 
-  public struct LayerMetric: Sendable {
-    public var layerName: String
-    public var durationMS: Double
-    public var memoryMB: Double?
+  package struct LayerMetric: Sendable {
+    package var layerName: String
+    package var durationMS: Double
+    package var memoryMB: Double?
 
-    public init(layerName: String, durationMS: Double, memoryMB: Double? = nil) {
+    package init(layerName: String, durationMS: Double, memoryMB: Double? = nil) {
       self.layerName = layerName
       self.durationMS = durationMS
       self.memoryMB = memoryMB
@@ -31,7 +31,7 @@ public enum TerraLlama {
   }
 
   @discardableResult
-  public static func traced<R>(
+  package static func traced<R>(
     model: String,
     prompt: String? = nil,
     _ body: @Sendable (Terra.StreamingTrace) async throws -> R
@@ -47,7 +47,7 @@ public enum TerraLlama {
       }
   }
 
-  public static func applyDecodeStats(
+  package static func applyDecodeStats(
     _ stats: DecodeStats,
     to scope: Terra.StreamingTrace
   ) {
@@ -62,7 +62,7 @@ public enum TerraLlama {
     }
   }
 
-  public static func recordLayerMetrics(
+  package static func recordLayerMetrics(
     _ metrics: [LayerMetric],
     to scope: Terra.StreamingTrace
   ) {

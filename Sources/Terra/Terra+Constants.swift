@@ -31,81 +31,81 @@ extension Terra {
     case safetyCheck = "safety_check"
   }
 
-  public enum Keys {
-    public enum GenAI {
-      public static let operationName = "gen_ai.operation.name"
+  package enum Keys {
+    package enum GenAI {
+      package static let operationName = "gen_ai.operation.name"
 
       /// OTel standard key for the requested model.
-      public static let requestModel = "gen_ai.request.model"
+      package static let requestModel = "gen_ai.request.model"
 
       /// Legacy alias — use `requestModel` for new code.
       @available(*, deprecated, renamed: "requestModel")
-      public static let model = "gen_ai.model"
+      package static let model = "gen_ai.model"
 
       // MARK: Request attributes
-      public static let requestMaxTokens = "gen_ai.request.max_tokens"
-      public static let requestTemperature = "gen_ai.request.temperature"
-      public static let requestStream = "gen_ai.request.stream"
+      package static let requestMaxTokens = "gen_ai.request.max_tokens"
+      package static let requestTemperature = "gen_ai.request.temperature"
+      package static let requestStream = "gen_ai.request.stream"
 
       // MARK: Response / usage attributes (OTel standard)
-      public static let usageInputTokens = "gen_ai.usage.input_tokens"
-      public static let usageOutputTokens = "gen_ai.usage.output_tokens"
-      public static let responseModel = "gen_ai.response.model"
+      package static let usageInputTokens = "gen_ai.usage.input_tokens"
+      package static let usageOutputTokens = "gen_ai.usage.output_tokens"
+      package static let responseModel = "gen_ai.response.model"
 
       // MARK: Provider
-      public static let providerName = "gen_ai.provider.name"
+      package static let providerName = "gen_ai.provider.name"
 
       // MARK: Agent attributes
-      public static let agentName = "gen_ai.agent.name"
-      public static let agentID = "gen_ai.agent.id"
+      package static let agentName = "gen_ai.agent.name"
+      package static let agentID = "gen_ai.agent.id"
 
       // MARK: Tool attributes
-      public static let toolName = "gen_ai.tool.name"
-      public static let toolType = "gen_ai.tool.type"
-      public static let toolCallID = "gen_ai.tool.call.id"
+      package static let toolName = "gen_ai.tool.name"
+      package static let toolType = "gen_ai.tool.type"
+      package static let toolCallID = "gen_ai.tool.call.id"
     }
 
-    public enum Terra {
-      public static let contentPolicy = "terra.privacy.content_policy"
-      public static let contentRedaction = "terra.privacy.content_redaction"
+    package enum Terra {
+      package static let contentPolicy = "terra.privacy.content_policy"
+      package static let contentRedaction = "terra.privacy.content_redaction"
 
-      public static let promptLength = "terra.prompt.length"
-      public static let promptHMACSHA256 = "terra.prompt.hmac_sha256"
+      package static let promptLength = "terra.prompt.length"
+      package static let promptHMACSHA256 = "terra.prompt.hmac_sha256"
       /// Legacy compatibility attribute during migration to keyed digests.
-      public static let promptSHA256 = "terra.prompt.sha256"
+      package static let promptSHA256 = "terra.prompt.sha256"
 
-      public static let embeddingInputCount = "terra.embeddings.input.count"
+      package static let embeddingInputCount = "terra.embeddings.input.count"
 
-      public static let safetyCheckName = "terra.safety.check.name"
-      public static let safetySubjectLength = "terra.safety.subject.length"
-      public static let safetySubjectHMACSHA256 = "terra.safety.subject.hmac_sha256"
+      package static let safetyCheckName = "terra.safety.check.name"
+      package static let safetySubjectLength = "terra.safety.subject.length"
+      package static let safetySubjectHMACSHA256 = "terra.safety.subject.hmac_sha256"
       /// Legacy compatibility attribute during migration to keyed digests.
-      public static let safetySubjectSHA256 = "terra.safety.subject.sha256"
-      public static let anonymizationKeyID = "terra.anonymization.key_id"
+      package static let safetySubjectSHA256 = "terra.safety.subject.sha256"
+      package static let anonymizationKeyID = "terra.anonymization.key_id"
 
       /// Marks spans created by auto-instrumentation (vs. manual `withInferenceSpan`).
-      public static let autoInstrumented = "terra.auto_instrumented"
+      package static let autoInstrumented = "terra.auto_instrumented"
 
       /// Runtime that produced the span (e.g. "coreml", "foundation_models", "mlx", "http_api").
-      public static let runtime = "terra.runtime"
+      package static let runtime = "terra.runtime"
 
       /// True when a span came through the OpenClaw gateway integration path.
-      public static let openClawGateway = "terra.openclaw.gateway"
+      package static let openClawGateway = "terra.openclaw.gateway"
 
       /// OpenClaw integration mode used when the span was recorded.
-      public static let openClawMode = "terra.openclaw.mode"
+      package static let openClawMode = "terra.openclaw.mode"
 
       // MARK: Streaming inference attributes
-      public static let streamTimeToFirstTokenMs = "terra.stream.time_to_first_token_ms"
-      public static let streamTokensPerSecond = "terra.stream.tokens_per_second"
-      public static let streamOutputTokens = "terra.stream.output_tokens"
-      public static let streamChunkCount = "terra.stream.chunk_count"
-      public static let streamFirstTokenEvent = "terra.first_token"
+      package static let streamTimeToFirstTokenMs = "terra.stream.time_to_first_token_ms"
+      package static let streamTokensPerSecond = "terra.stream.tokens_per_second"
+      package static let streamOutputTokens = "terra.stream.output_tokens"
+      package static let streamChunkCount = "terra.stream.chunk_count"
+      package static let streamFirstTokenEvent = "terra.first_token"
 
       // MARK: Runtime diagnostics
-      public static let thermalState = "terra.process.thermal_state"
-      public static let processMemoryResidentDeltaMB = "process.memory.resident_delta_mb"
-      public static let processMemoryPeakMB = "process.memory.peak_mb"
+      package static let thermalState = "terra.process.thermal_state"
+      package static let processMemoryResidentDeltaMB = "process.memory.resident_delta_mb"
+      package static let processMemoryPeakMB = "process.memory.peak_mb"
     }
   }
 }

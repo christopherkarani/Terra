@@ -153,7 +153,7 @@ func transcriptDiffEmitsToolEvents() async throws {
     ]
   )
   let session = TerraTracedSession(backend: backend)
-  _ = try await session.respond(to: "Find swift docs", promptCapture: .optIn)
+  _ = try await session.respond(to: "Find swift docs", promptCapture: .includeContent)
 
   let span = try #require(harness.finishedSpans().first(where: { $0.name == "gen_ai.inference" }))
   #expect(span.events.contains { $0.name == "tool_call" })

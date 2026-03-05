@@ -1,14 +1,14 @@
 extension Terra {
-  public protocol TerraTraceable {
+  package protocol TerraTraceable {
     var terraTokenUsage: TokenUsage? { get }
     var terraResponseModel: String? { get }
   }
 
-  public struct TokenUsage: Sendable {
-    public var input: Int?
-    public var output: Int?
+  package struct TokenUsage: Sendable {
+    package var input: Int?
+    package var output: Int?
 
-    public init(input: Int? = nil, output: Int? = nil) {
+    package init(input: Int? = nil, output: Int? = nil) {
       self.input = input
       self.output = output
     }

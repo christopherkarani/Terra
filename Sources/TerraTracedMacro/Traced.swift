@@ -1,4 +1,4 @@
-/// Wraps the function body in a traced Terra operation using `.execute { ... }`.
+/// Wraps the function body in a traced Terra operation using `.run { ... }`.
 ///
 /// The macro supports explicit metadata arguments and auto-detects common parameter names:
 /// - prompt aliases: `prompt`/`input`/`query`/`text`/`message`/`subject`

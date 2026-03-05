@@ -25,7 +25,7 @@ public enum TerraCoreML {
   }
 }
 
-public extension Terra.InferenceTrace {
+package extension Terra.InferenceTrace {
   @discardableResult
   func coreML(computeUnits: MLComputeUnits) -> Self {
     attribute(.init(TerraCoreML.Keys.runtime), "coreml")

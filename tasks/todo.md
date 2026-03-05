@@ -1,3 +1,151 @@
+## API Hardening Follow-Up (2026-03-05)
+
+- [x] Promote lifecycle surface to public (`Terra.LifecycleState`, `Terra.lifecycleState`, `Terra.isRunning`, `Terra.shutdown()`).
+- [x] Promote streaming completeness controls on composable trace handle (`TraceHandle.outputTokens(_:)`, `TraceHandle.firstToken()`).
+- [x] Canonicalize `@Traced` macro expansion to composable entry points (`infer/stream/embed/agent/tool/safety`) and `.run`.
+- [x] Unify FoundationModels public capture signatures to `Terra.CapturePolicy`.
+- [x] Remove leaked public `Terra.CaptureIntent` from front-facing surface (now package-only internals).
+- [x] Update API docs/catalog snapshots for lifecycle/capture/macro naming alignment.
+- [x] Validate with focused + full suite (`swift build`, `swift test --filter TracedMacroExpansionTests`, `swift test --filter TerraTracedSessionTests`, `swift test`).
+
+## Review
+
+- Public API fixes landed for lifecycle visibility, streaming trace completeness, canonical macro call-shapes, and capture-model unification.
+- `@Traced` now emits clean public call-sites and no longer relies on deprecated names/terminal.
+- FoundationModels now accepts `CapturePolicy` publicly while preserving previous behavior via an internal mapping.
+- Verification passed: full package build + full tests green (`swift test` 169/169); focused suites for macro and FoundationModels also passed.
+- Residual warnings are external dependency/plugin deprecations from `grpc-swift` and `swift-protobuf` plugin code.
+
+## API vNext Hard Improvements (2026-03-05)
+
+Goal: finish highest-complexity public API improvements end-to-end (lifecycle, capture unification, OperationKind boundary, typed IDs, TerraError, protocol seams, metadata builder, macro + docs alignment).
+
+### Phase 0 — Baseline + tooling
+
+- [x] Record baseline `swift build` / `swift test` status and public symbol counts (Terra/TerraCore).
+- [x] Add `Scripts/public_symbol_count.py` (symbolgraph-based counts + % change).
+- [x] Add `Scripts/validate_no_legacy_refs.sh` (canonical-doc stale-reference gate).
+- [x] Produce DX rating “before” report (`swift-front-api-rater` rubric).
+
+### Phase 1 — Public lifecycle API
+
+- [ ] Implement public lifecycle API (`start/shutdown/reset/reconfigure`) with linearizable actor state machine.
+- [ ] Make `Terra.start` async and update all call sites/docs/examples accordingly.
+- [ ] Refactor auto-instrumentations to be reconfigurable (dynamic config store; no “install-once freezes config”).
+- [ ] Add concurrency-safe lifecycle tests (parallel start/stop/reconfigure; no hangs).
+
+### Phase 2 — Capture model unification
+
+- [ ] Delete public `Terra.CaptureIntent`; keep single per-call capture model.
+- [ ] Refactor internal privacy gating + request structs to use `includeContent: Bool`.
+- [ ] Migrate public integrations (FoundationModels) away from `CaptureIntent`.
+- [ ] Add/adjust privacy tests for silent/capturing/lengthOnly edge cases.
+
+### Phase 3 — Type system hardening
+
+- [ ] Add typed IDs (`ModelID`, `ProviderID`, `RuntimeID`, `ToolCallID`) and migrate public signatures.
+- [ ] Remove public `OperationKind`; make `Terra.Call` non-generic.
+- [ ] Add stable public `TerraError` and map lifecycle/config failures.
+- [ ] Update tests to new canonical API (no legacy names).
+
+### Phase 4 — Extensibility/testability seams
+
+- [ ] Add public protocol seams for injection/mocking (runtime/provider/executor abstractions).
+- [ ] Add mock-based tests validating deterministic instrumentation behavior.
+
+### Phase 5 — Ergonomics
+
+- [ ] Add `@resultBuilder` metadata composition for attrs/events.
+- [ ] Add tests for builder semantics (conditionals, ordering, composition).
+
+### Phase 6 — Macro + docs alignment
+
+- [ ] Update `@Traced` macro expansion to use canonical public API only (`infer/stream/embed/agent/tool/safety + run`).
+- [ ] Migrate macro signatures/expansion to typed IDs (string-literal ergonomic).
+- [ ] Update docs/examples/website snippets to final API; remove legacy names from canonical docs.
+- [ ] Add and run stale-reference sweep gate for canonical docs/snippets.
+
+### Validation gates (must pass)
+
+- [ ] `swift build`
+- [ ] `swift test` (full suite)
+- [ ] `Scripts/validate_no_legacy_refs.sh`
+- [ ] Report final public symbol counts + % change
+- [ ] Produce DX rating “after” report (`swift-front-api-rater` rubric)
+
+### Review (fill in at end)
+
+- Baseline: `swift build` ✅, `swift test` ✅ (169 tests); public symbols (unique): `Terra`=92, `TerraCore`=48.
+- What changed:
+- Tradeoffs:
+- Verification:
+- Residual risks:
+
+## Documentation Refresh (2026-03-05)
+
+- [x] Update `README.md` to current canonical API (`infer/stream/embed/agent/tool/safety` + `.run` + `.attr` + `.capture`).
+- [x] Rewrite front-facing docs and examples to remove outdated legacy call names and removed builder methods.
+- [x] Update integration and cookbook docs to current public surface.
+- [x] Update website code snippets that referenced removed public APIs.
+- [x] Mark historical v2/reference/plan docs as legacy snapshots and point to canonical docs.
+- [x] Run a stale-reference sweep for old front-facing names in active docs.
+
+## Review
+
+- Updated primary docs: `README.md`, `Docs/Front_Facing_API.md`, `Docs/Front_Facing_API_Examples.md`, `Docs/API_Cookbook.md`, `Docs/Integrations.md`, `Docs/Migration_Guide.md`.
+- Updated website snippet docs in `website/src/app/page.tsx` to remove `installOpenTelemetry` and old API usage.
+- Added legacy/disclaimer banners to historical docs:
+- `Docs/API_V2_FLUENT_CALLSITE_SPEC.md`
+- `Docs/Migration_v1_to_v2.md`
+- `Docs/reference/api-surface-catalog.md`
+- `Docs/reference/api-improvement-report.md`
+- `Docs/plans/2026-03-01-api-v3-design.md`
+- `Docs/plans/2026-03-01-api-v3-implementation.md`
+- `Docs/plans/terra-remaining-work-prompt.md`
+- Verification:
+- Performed `rg` stale-reference sweeps across active docs (`README.md`, `Docs/*` excluding legacy snapshots, `website/src/*`) to confirm current canonical names are now primary.
+
+## Composable API Clean Break (2026-03-05)
+
+- [x] Define a minimal composable public API (`TerraCall`, `TerraOperation`, `TerraRuntime`, pipeline builder).
+- [x] Implement the new composable façade in `Sources/Terra` with protocol/generic-based execution.
+- [x] Demote legacy high-volume front-facing Terra symbols to `package` to reduce API surface.
+- [x] Update dependent modules/tests to compile against the clean-break surface.
+- [x] Measure public API count reduction and verify target trend toward 90%.
+- [x] Run `swift build` and targeted `swift test` for regression validation.
+- [x] Add review notes with remaining gaps and next hard-break cuts.
+
+## Review
+
+- Added clean-break façade `Sources/Terra/Terra+ComposableAPI.swift` with compact call-entrypoints (`infer/stream/embed/agent/tool/safety`) and shared generic `Call` pipeline terminal.
+- Refined composable façade with generic `Call<Op: OperationKind>`, `Call<some OperationKind>` factory returns, and scalar protocol-based single `attr` API (removed scalar overload duplication).
+- Demoted high-volume legacy V2/V3 front-facing Terra APIs to `package` across fluent/request/key/privacy/runtime/open-telemetry layers to collapse surface area.
+- Added a public `Terra.Configuration.Persistence` wrapper in `Sources/TerraAutoInstrument/Terra+Start.swift` so public configuration no longer leaks package-only `PersistenceConfiguration` while retaining full persistence tuning controls.
+- Validation:
+- `swift build` passes.
+- `swift test --filter TerraAutoInstrumentTests` passes (37 tests).
+- `swift test` passes (169 tests).
+- Surface count:
+- `Sources/Terra` public declarations reduced to `34` (from baseline `331`, ~89.7% reduction; effectively 90% target).
+
+## Swift API Sculptor Audit (2026-03-05)
+
+- [x] Confirm API audit scope and locked API docs for Terra package products.
+- [x] Build a complete public/open symbol catalog with signatures and file:line grounding.
+- [x] Score API categories for human DX and agent DX, then flag low-scoring areas.
+- [x] Produce actionable improvement findings (3A-3I) with concrete Swift 6.2-oriented proposals.
+- [x] Generate `docs/reference/api-surface-catalog.md` and `docs/reference/api-improvement-report.md`.
+- [x] Ensure both analysis artifacts are gitignored.
+- [x] Add review notes and verification summary.
+
+## Review
+
+- Audited all library product modules declared in `Package.swift` and grounded findings to `file:line`.
+- Generated complete machine-readable symbol inventory at `docs/reference/api-surface-catalog.md` (687 public/open declarations including public-extension members).
+- Generated scored recommendation report at `docs/reference/api-improvement-report.md` with 8 ranked findings mapped to categories 3A-3I and migration/breaking assessments.
+- Added both generated artifacts to `.gitignore`.
+- Validation run: static audit/document generation only; no source-code behavioral changes or test execution required for this task.
+
 # TraceMacApp Extraction Verification
 
 - [x] Baseline current repo state and identify remaining TraceMacApp coupling.

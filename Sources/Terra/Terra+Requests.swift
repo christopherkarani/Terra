@@ -11,15 +11,15 @@ extension Terra {
 
   // MARK: - Requests
 
-  public struct InferenceRequest: Sendable, Hashable {
-    public var model: String
-    public var prompt: String?
-    public var promptCapture: CaptureIntent
+  package struct InferenceRequest: Sendable, Hashable {
+    package var model: String
+    package var prompt: String?
+    package var promptCapture: CaptureIntent
 
-    public var maxOutputTokens: Int?
-    public var temperature: Double?
+    package var maxOutputTokens: Int?
+    package var temperature: Double?
 
-    public init(
+    package init(
       model: String,
       prompt: String? = nil,
       promptCapture: CaptureIntent = .default,
@@ -33,32 +33,32 @@ extension Terra {
       self.temperature = temperature
     }
 
-    public static func chat(model: String, prompt: String? = nil) -> Self {
+    package static func chat(model: String, prompt: String? = nil) -> Self {
       .init(model: model, prompt: prompt)
     }
 
-    public func maxOutputTokens(_ value: Int) -> Self {
+    package func maxOutputTokens(_ value: Int) -> Self {
       var copy = self
       copy.maxOutputTokens = value
       return copy
     }
 
-    public func temperature(_ value: Double) -> Self {
+    package func temperature(_ value: Double) -> Self {
       var copy = self
       copy.temperature = value
       return copy
     }
   }
 
-  public struct StreamingRequest: Sendable, Hashable {
-    public var model: String
-    public var prompt: String?
-    public var promptCapture: CaptureIntent
-    public var maxOutputTokens: Int?
-    public var temperature: Double?
-    public var expectedOutputTokens: Int?
+  package struct StreamingRequest: Sendable, Hashable {
+    package var model: String
+    package var prompt: String?
+    package var promptCapture: CaptureIntent
+    package var maxOutputTokens: Int?
+    package var temperature: Double?
+    package var expectedOutputTokens: Int?
 
-    public init(
+    package init(
       model: String,
       prompt: String? = nil,
       promptCapture: CaptureIntent = .default,
@@ -74,67 +74,67 @@ extension Terra {
       self.expectedOutputTokens = expectedOutputTokens
     }
 
-    public static func chat(model: String, prompt: String? = nil) -> Self {
+    package static func chat(model: String, prompt: String? = nil) -> Self {
       .init(model: model, prompt: prompt)
     }
 
-    public func maxOutputTokens(_ value: Int) -> Self {
+    package func maxOutputTokens(_ value: Int) -> Self {
       var copy = self
       copy.maxOutputTokens = value
       return copy
     }
 
-    public func temperature(_ value: Double) -> Self {
+    package func temperature(_ value: Double) -> Self {
       var copy = self
       copy.temperature = value
       return copy
     }
 
-    public func expectedOutputTokens(_ value: Int) -> Self {
+    package func expectedOutputTokens(_ value: Int) -> Self {
       var copy = self
       copy.expectedOutputTokens = value
       return copy
     }
   }
 
-  public struct EmbeddingRequest: Sendable, Hashable {
-    public var model: String
-    public var inputCount: Int?
+  package struct EmbeddingRequest: Sendable, Hashable {
+    package var model: String
+    package var inputCount: Int?
 
-    public init(model: String, inputCount: Int? = nil) {
+    package init(model: String, inputCount: Int? = nil) {
       self.model = model
       self.inputCount = inputCount
     }
   }
 
-  public struct AgentRequest: Sendable, Hashable {
-    public var name: String
-    public var id: String?
+  package struct AgentRequest: Sendable, Hashable {
+    package var name: String
+    package var id: String?
 
-    public init(name: String, id: String? = nil) {
+    package init(name: String, id: String? = nil) {
       self.name = name
       self.id = id
     }
   }
 
-  public struct ToolRequest: Sendable, Hashable {
-    public var name: String
-    public var callID: String
-    public var type: String?
+  package struct ToolRequest: Sendable, Hashable {
+    package var name: String
+    package var callID: String
+    package var type: String?
 
-    public init(name: String, callID: String, type: String? = nil) {
+    package init(name: String, callID: String, type: String? = nil) {
       self.name = name
       self.callID = callID
       self.type = type
     }
   }
 
-  public struct SafetyCheckRequest: Sendable, Hashable {
-    public var name: String
-    public var subject: String?
-    public var subjectCapture: CaptureIntent
+  package struct SafetyCheckRequest: Sendable, Hashable {
+    package var name: String
+    package var subject: String?
+    package var subjectCapture: CaptureIntent
 
-    public init(name: String, subject: String? = nil, subjectCapture: CaptureIntent = .default) {
+    package init(name: String, subject: String? = nil, subjectCapture: CaptureIntent = .default) {
       self.name = name
       self.subject = subject
       self.subjectCapture = subjectCapture

@@ -1,4 +1,7 @@
-# Terra V2 Fluent Call-Site Spec
+# Terra V2 Fluent Call-Site Spec (Legacy Snapshot)
+
+> Historical reference only. For the canonical current API see [`Docs/Front_Facing_API.md`](./Front_Facing_API.md).
+> Current public operation entry points are `Terra.infer`, `Terra.stream`, `Terra.embed`, `Terra.agent`, `Terra.tool`, and `Terra.safety`.
 
 Terra v2 uses fluent operation builders that end with `.run { ... }`.
 

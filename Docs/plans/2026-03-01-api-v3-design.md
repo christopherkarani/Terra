@@ -722,3 +722,7 @@ ERRORS
 | "Add Foundation Models tracing" | `Terra.Session(...)` drop-in |
 | "Dynamic metadata needed" | Builder: `Terra.inference(model:).provider(x).execute { }` |
 | "Metrics without span overhead" | `#instrument("label") { }` |
+# Historical Plan Note
+
+This planning document captures a superseded design phase. Names and examples in this file may reference legacy APIs that are no longer canonical.
+For the current public API, use `Docs/Front_Facing_API.md` and `Docs/Migration_Guide.md`.

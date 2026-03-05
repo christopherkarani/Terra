@@ -4,14 +4,14 @@
 
 # Terra
 
-Terra is the OpenTelemetry-native observability SDK for on-device GenAI on Apple platforms.
+Terra is an OpenTelemetry-native observability SDK for on-device GenAI on Apple platforms.
 Instrument inference, streaming, agents, tools, embeddings, and safety checks with privacy-safe defaults.
 
 ```swift
 import Terra
 
 try Terra.start()
-let result = try await Terra.inference(model: "gpt-4o-mini", prompt: "Say hello") { "Hello" }
+let result = try await Terra.infer("gpt-4o-mini", prompt: "Say hello").run { "Hello" }
 ```
 
 [![CI](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml)
@@ -25,9 +25,13 @@ import Terra
 
 try Terra.start()
 
-let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: userPrompt) {
-  try await llm.generate(userPrompt)
-}
+let answer = try await Terra
+  .infer("gpt-4o-mini", prompt: userPrompt, provider: "openai", runtime: "http_api")
+  .run { trace in
+    trace.event("request.start")
+    trace.tokens(input: 120, output: 70)
+    return try await llm.generate(userPrompt)
+  }
 ```
 
 ## Setup Presets
@@ -42,12 +46,12 @@ let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: userPrompt)
 
 | Span type | Factory | Example |
 | --- | --- | --- |
-| Inference | `Terra.inference(model:prompt:)` | `try await Terra.inference(model: "gpt-4o-mini") { "ok" }` |
-| Streaming | `Terra.stream(model:prompt:)` | `try await Terra.stream(model: "gpt-4o-mini") { trace in trace.chunk(tokens: 8); return "ok" }` |
-| Agent | `Terra.agent(name:id:)` | `try await Terra.agent(name: "planner") { "done" }` |
-| Tool | `Terra.tool(name:callID:type:)` | `try await Terra.tool(name: "search", callID: UUID().uuidString) { "result" }` |
-| Embedding | `Terra.embedding(model:inputCount:)` | `try await Terra.embedding(model: "text-embedding-3-small", inputCount: 3) { vectors }` |
-| Safety check | `Terra.safetyCheck(name:subject:)` | `try await Terra.safetyCheck(name: "toxicity", subject: text) { true }` |
+| Inference | `Terra.infer(_:prompt:provider:runtime:temperature:maxTokens:)` | `try await Terra.infer("gpt-4o-mini", prompt: prompt).run { "ok" }` |
+| Streaming | `Terra.stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)` | `try await Terra.stream("gpt-4o-mini").run { trace in trace.chunk(tokens: 8); return "ok" }` |
+| Agent | `Terra.agent(_:id:provider:runtime:)` | `try await Terra.agent("planner").run { "done" }` |
+| Tool | `Terra.tool(_:callID:type:provider:runtime:)` | `try await Terra.tool("search", callID: UUID().uuidString).run { "result" }` |
+| Embedding | `Terra.embed(_:inputCount:provider:runtime:)` | `try await Terra.embed("text-embedding-3-small", inputCount: 3).run { vectors }` |
+| Safety check | `Terra.safety(_:subject:provider:runtime:)` | `try await Terra.safety("toxicity", subject: text).run { true }` |
 
 ## Privacy Policies
 
@@ -57,6 +61,31 @@ let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: userPrompt)
 | `.lengthOnly` | Captures only content lengths (no raw content) | You need shape/size signals only |
 | `.capturing` | Allows content capture when opted in per call | Controlled debugging environments |
 | `.silent` | Drops content-related telemetry | Strictest privacy mode |
+
+## Composable Call API
+
+Use call composition when metadata is dynamic at runtime:
+
+```swift
+let result = try await Terra
+  .infer(modelName, prompt: prompt, provider: providerName, runtime: runtimeName)
+  .capture(.includeContent)
+  .attr(.init("app.user_tier"), userTier)
+  .attr(.init("app.retry"), false)
+  .run { trace in
+    trace.responseModel(modelName)
+    trace.tokens(input: 128, output: 64)
+    return try await llm.generate(prompt)
+  }
+```
+
+## Configuration Persistence
+
+```swift
+var config = Terra.Configuration(preset: .production)
+config.persistence = .defaults()
+try Terra.start(config)
+```
 
 ## Macros (`@Traced`)
 
@@ -91,28 +120,10 @@ import TerraFoundationModels
 
 @available(macOS 26.0, iOS 26.0, *)
 func runFoundationModels(prompt: String) async throws -> String {
-  // Drop-in traced wrapper around LanguageModelSession
   let session = Terra.TracedSession(model: .default)
   return try await session.respond(to: prompt)
 }
 #endif
-```
-
-## Builder API (Escape Hatch)
-
-Use builders when metadata is dynamic at runtime:
-
-```swift
-let result = try await Terra
-  .inference(model: modelName, prompt: prompt)
-  .provider(providerName)
-  .runtime(runtimeName)
-  .attribute(.init("app.user_tier"), userTier)
-  .includeContent()
-  .execute { trace in
-    trace.tokens(input: 128, output: 64)
-    return try await llm.generate(prompt)
-  }
 ```
 
 ## Advanced

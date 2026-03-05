@@ -1,4 +1,7 @@
-# Terra Migration: v1 to v2
+# Terra Migration: v1 to v2 (Legacy Snapshot)
+
+> Historical reference only. The canonical current migration path is documented in [`Docs/Migration_Guide.md`](./Migration_Guide.md).
+> Current public API uses `Terra.infer/stream/embed/agent/tool/safety` + `.run`.
 
 ## Core call-site mapping
 

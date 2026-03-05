@@ -12,7 +12,7 @@ extension Terra {
       return includeContent || self == .capturing
     }
 
-    public var redactionStrategy: RedactionStrategy {
+    package var redactionStrategy: RedactionStrategy {
       switch self {
       case .redacted:
         return .hashHMACSHA256

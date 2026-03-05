@@ -55,16 +55,6 @@ public struct TracedMacro: BodyMacro {
       resolved: resolved
     )
 
-    if let maxOutputTokens = resolved.maxOutputTokens, operation == .model {
-      callExpression += ".maxOutputTokens(\(maxOutputTokens))"
-    }
-    if let temperature = resolved.temperature, operation == .model {
-      callExpression += ".temperature(\(temperature))"
-    }
-    if let provider = resolved.provider {
-      callExpression += ".provider(\(provider))"
-    }
-
     let returnTypeText = funcDecl.signature.returnClause?.type.description
       .trimmingCharacters(in: .whitespacesAndNewlines)
     let hasNonVoidReturn = {
@@ -79,14 +69,14 @@ public struct TracedMacro: BodyMacro {
     let wrappedCode: CodeBlockItemSyntax
     if hasNonVoidReturn {
       wrappedCode = """
-        return \(raw: tryKeyword)\(raw: awaitKeyword)\(raw: callExpression).execute { trace in
+        return \(raw: tryKeyword)\(raw: awaitKeyword)\(raw: callExpression).run { trace in
           _ = trace
           \(raw: originalStatements)
         }
         """
     } else {
       wrappedCode = """
-        \(raw: tryKeyword)\(raw: awaitKeyword)\(raw: callExpression).execute { trace in
+        \(raw: tryKeyword)\(raw: awaitKeyword)\(raw: callExpression).run { trace in
           _ = trace
           \(raw: originalStatements)
         }
@@ -133,8 +123,22 @@ public struct TracedMacro: BodyMacro {
       let modelExpr = try requiredArg(named: "model", in: arguments)
       let streamingArg = argument(named: "streaming", in: arguments)
       let forceStreaming = streamingArg == "true"
-      let inference = buildModelCall(kind: "inference", modelExpr: modelExpr, promptExpr: resolved.prompt)
-      let stream = buildModelCall(kind: "stream", modelExpr: modelExpr, promptExpr: resolved.prompt)
+      let inference = buildModelCall(
+        kind: "infer",
+        modelExpr: modelExpr,
+        promptExpr: resolved.prompt,
+        providerExpr: resolved.provider,
+        temperatureExpr: resolved.temperature,
+        maxTokensExpr: resolved.maxOutputTokens
+      )
+      let stream = buildModelCall(
+        kind: "stream",
+        modelExpr: modelExpr,
+        promptExpr: resolved.prompt,
+        providerExpr: resolved.provider,
+        temperatureExpr: resolved.temperature,
+        maxTokensExpr: resolved.maxOutputTokens
+      )
       if forceStreaming {
         return stream
       }
@@ -143,43 +147,65 @@ public struct TracedMacro: BodyMacro {
     case .agent:
       let agentExpr = try requiredArg(named: "agent", in: arguments)
       let idExpr = argument(named: "id", in: arguments)
-      if let idExpr {
-        return "Terra.agent(name: \(agentExpr), id: \(idExpr))"
-      }
-      return "Terra.agent(name: \(agentExpr))"
+      return buildCall(
+        "Terra.agent(\(agentExpr)",
+        labeledArguments: [("id", idExpr), ("provider", resolved.provider)]
+      )
 
     case .tool:
       let toolExpr = try requiredArg(named: "tool", in: arguments)
       let callIDExpr = resolved.toolCallID ?? "UUID().uuidString"
       let typeExpr = argument(named: "type", in: arguments)
-      if let typeExpr {
-        return "Terra.tool(name: \(toolExpr), callID: \(callIDExpr), type: \(typeExpr))"
-      }
-      return "Terra.tool(name: \(toolExpr), callID: \(callIDExpr))"
+      return buildCall(
+        "Terra.tool(\(toolExpr)",
+        labeledArguments: [("callID", callIDExpr), ("type", typeExpr), ("provider", resolved.provider)]
+      )
 
     case .embedding:
       let embeddingExpr = try requiredArg(named: "embedding", in: arguments)
-      if let inputCount = resolved.embeddingInputCount {
-        return "Terra.embedding(model: \(embeddingExpr), inputCount: \(inputCount))"
-      }
-      return "Terra.embedding(model: \(embeddingExpr))"
+      return buildCall(
+        "Terra.embed(\(embeddingExpr)",
+        labeledArguments: [("inputCount", resolved.embeddingInputCount), ("provider", resolved.provider)]
+      )
 
     case .safety:
       let safetyExpr = try requiredArg(named: "safety", in: arguments)
-      if let subject = resolved.safetySubject {
-        return "Terra.safetyCheck(name: \(safetyExpr), subject: \(subject))"
-      }
-      return "Terra.safetyCheck(name: \(safetyExpr))"
+      return buildCall(
+        "Terra.safety(\(safetyExpr)",
+        labeledArguments: [("subject", resolved.safetySubject), ("provider", resolved.provider)]
+      )
     }
   }
 
-  private static func buildModelCall(kind: String, modelExpr: String, promptExpr: String?) -> String {
-    var call = "Terra.\(kind)(model: \(modelExpr)"
-    if let promptExpr {
-      call += ", prompt: \(promptExpr)"
+  private static func buildModelCall(
+    kind: String,
+    modelExpr: String,
+    promptExpr: String?,
+    providerExpr: String?,
+    temperatureExpr: String?,
+    maxTokensExpr: String?
+  ) -> String {
+    buildCall(
+      "Terra.\(kind)(\(modelExpr)",
+      labeledArguments: [
+        ("prompt", promptExpr),
+        ("provider", providerExpr),
+        ("temperature", temperatureExpr),
+        ("maxTokens", maxTokensExpr),
+      ]
+    )
+  }
+
+  private static func buildCall(
+    _ prefix: String,
+    labeledArguments: [(label: String, value: String?)]
+  ) -> String {
+    let rendered = labeledArguments.compactMap { pair -> String? in
+      guard let value = pair.value else { return nil }
+      return "\(pair.label): \(value)"
     }
-    call += ")"
-    return call
+    guard !rendered.isEmpty else { return "\(prefix))" }
+    return "\(prefix), \(rendered.joined(separator: ", ")))"
   }
 
   private struct DetectedParameters {

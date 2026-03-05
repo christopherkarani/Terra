@@ -1,18 +1,18 @@
 import Foundation
 
 extension Terra {
-  public enum ContentPolicy: Sendable, Hashable {
+  package enum ContentPolicy: Sendable, Hashable {
     case never
     case optIn
     case always
   }
 
-  public enum CaptureIntent: Sendable, Hashable {
+  package enum CaptureIntent: Sendable, Hashable {
     case `default`
     case optIn
   }
 
-  public enum RedactionStrategy: Sendable, Hashable {
+  package enum RedactionStrategy: Sendable, Hashable {
     case drop
     case lengthOnly
     case hashHMACSHA256
@@ -20,13 +20,13 @@ extension Terra {
     case hashSHA256
   }
 
-  public struct Privacy: Sendable, Hashable {
-    public var contentPolicy: ContentPolicy
-    public var redaction: RedactionStrategy
-    public var anonymizationKey: Data?
-    public var emitLegacySHA256Attributes: Bool
+  package struct Privacy: Sendable, Hashable {
+    package var contentPolicy: ContentPolicy
+    package var redaction: RedactionStrategy
+    package var anonymizationKey: Data?
+    package var emitLegacySHA256Attributes: Bool
 
-    public init(
+    package init(
       contentPolicy: ContentPolicy = .never,
       redaction: RedactionStrategy = .hashHMACSHA256,
       anonymizationKey: Data? = nil,
@@ -38,7 +38,7 @@ extension Terra {
       self.emitLegacySHA256Attributes = emitLegacySHA256Attributes
     }
 
-    public static let `default` = Privacy()
+    package static let `default` = Privacy()
 
     func shouldCapture(promptCapture: CaptureIntent) -> Bool {
       switch (contentPolicy, promptCapture) {

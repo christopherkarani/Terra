@@ -188,7 +188,7 @@ public final class TerraTracedSession: @unchecked Sendable {
   }
 
   /// Respond to a prompt with auto-tracing.
-  public func respond(to prompt: String, promptCapture: Terra.CaptureIntent = .default) async throws -> String {
+  public func respond(to prompt: String, promptCapture: Terra.CapturePolicy = .default) async throws -> String {
     var call = makeInferenceCall(prompt: prompt, promptCapture: promptCapture)
     call = call.attributes { attributes in
       applyGenerationAttributes(from: backend.generationOptionsAttributes(), to: &attributes)
@@ -199,7 +199,7 @@ public final class TerraTracedSession: @unchecked Sendable {
       do {
         let response = try await backend.respond(to: prompt)
         let diff = Self.inspectTranscriptDiff(before: before, after: backend.transcriptEntries())
-        applyToolDiff(diff, captureContent: promptCapture == .optIn, to: trace)
+        applyToolDiff(diff, captureContent: promptCapture == .includeContent, to: trace)
         if let violation = diff.guardrailViolationType {
           await emitGuardrailSpan(
             violationType: violation,
@@ -225,7 +225,7 @@ public final class TerraTracedSession: @unchecked Sendable {
   public func respond<T: Generable>(
     to prompt: String,
     generating type: T.Type,
-    promptCapture: Terra.CaptureIntent = .default
+    promptCapture: Terra.CapturePolicy = .default
   ) async throws -> T {
     var call = makeInferenceCall(prompt: prompt, promptCapture: promptCapture)
       .attribute(.init("terra.foundation_models.response_type"), String(describing: T.self))
@@ -238,7 +238,7 @@ public final class TerraTracedSession: @unchecked Sendable {
       do {
         let response = try await backend.respond(to: prompt, generating: type)
         let diff = Self.inspectTranscriptDiff(before: before, after: backend.transcriptEntries())
-        applyToolDiff(diff, captureContent: promptCapture == .optIn, to: trace)
+        applyToolDiff(diff, captureContent: promptCapture == .includeContent, to: trace)
         if let violation = diff.guardrailViolationType {
           await emitGuardrailSpan(
             violationType: violation,
@@ -261,11 +261,11 @@ public final class TerraTracedSession: @unchecked Sendable {
   }
 
   /// Stream a response with auto-tracing.
-  public func streamResponse(to prompt: String, promptCapture: Terra.CaptureIntent = .default) -> AsyncThrowingStream<String, Error> {
+  public func streamResponse(to prompt: String, promptCapture: Terra.CapturePolicy = .default) -> AsyncThrowingStream<String, Error> {
     let request = Terra.StreamingRequest(
       model: modelIdentifier,
       prompt: prompt,
-      promptCapture: promptCapture,
+      promptCapture: promptCapture.legacyCaptureIntent,
     )
 
     return AsyncThrowingStream { continuation in
@@ -298,13 +298,13 @@ public final class TerraTracedSession: @unchecked Sendable {
     }
   }
 
-  private func makeInferenceCall(prompt: String, promptCapture: Terra.CaptureIntent) -> Terra.InferenceCall {
+  private func makeInferenceCall(prompt: String, promptCapture: Terra.CapturePolicy) -> Terra.InferenceCall {
     var call = Terra
       .inference(model: modelIdentifier, prompt: prompt)
       .provider("apple/foundation-model")
       .runtime("foundation_models")
       .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)
-    if promptCapture == .optIn {
+    if promptCapture == .includeContent {
       call = call.includeContent()
     }
     return call
@@ -313,7 +313,7 @@ public final class TerraTracedSession: @unchecked Sendable {
   private func emitGuardrailSpan(
     violationType: String,
     prompt: String,
-    promptCapture: Terra.CaptureIntent
+    promptCapture: Terra.CapturePolicy
   ) async {
     var call = Terra
       .safetyCheck(name: "foundation-model-guardrail", subject: prompt)
@@ -321,7 +321,7 @@ public final class TerraTracedSession: @unchecked Sendable {
       .runtime("foundation_models")
       .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)
       .attribute(.init("terra.fm.guardrail.violation_type"), violationType)
-    if promptCapture == .optIn {
+    if promptCapture == .includeContent {
       call = call.includeContent()
     }
     _ = await call.execute { () }
@@ -519,6 +519,18 @@ public final class TerraTracedSession: @unchecked Sendable {
       if let result {
         attributes.set(.init("terra.fm.tool.result"), result)
       }
+    }
+  }
+}
+
+@available(macOS 26.0, iOS 26.0, *)
+private extension Terra.CapturePolicy {
+  var legacyCaptureIntent: Terra.CaptureIntent {
+    switch self {
+    case .default:
+      return .default
+    case .includeContent:
+      return .optIn
     }
   }
 }

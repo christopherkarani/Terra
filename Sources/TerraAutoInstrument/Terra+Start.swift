@@ -22,7 +22,7 @@ extension Terra {
     public var serviceVersion: String? = nil
     public var anonymizationKey: Data? = nil
     public var samplingRatio: Double? = nil
-    public var persistence: PersistenceConfiguration? = nil
+    public var persistence: Persistence? = nil
     public var metricsInterval: TimeInterval = 60
     public var enableSignposts: Bool = true
     public var enableSessions: Bool = true
@@ -42,12 +42,12 @@ extension Terra {
       case .production:
         persistence = .init(
           storageURL: Terra.defaultPersistenceStorageURL(),
-          performancePreset: .default
+          performance: .balanced
         )
       case .diagnostics:
         persistence = .init(
           storageURL: Terra.defaultPersistenceStorageURL(),
-          performancePreset: .default
+          performance: .balanced
         )
         instrumentations.insert(.openClawDiagnostics)
         enableSignposts = true
@@ -90,7 +90,7 @@ extension Terra {
           otlpMetricsEndpoint: endpoint.appendingPathComponent("v1/metrics"),
           otlpLogsEndpoint: endpoint.appendingPathComponent("v1/logs"),
           metricsExportInterval: metricsInterval,
-          persistence: persistence,
+          persistence: persistence.map(\.asInternalConfiguration),
           serviceName: serviceName,
           serviceVersion: serviceVersion,
           resourceAttributes: openTelemetryAttributes,
@@ -103,6 +103,137 @@ extension Terra {
         excludedCoreMLModels: excludedCoreMLModels,
         profiling: profiling
       )
+    }
+
+    public struct Persistence: Equatable, Sendable {
+      public struct Performance: Equatable, Sendable {
+        public var maxFileSize: UInt64
+        public var maxDirectorySize: UInt64
+        public var maxFileAgeForWrite: TimeInterval
+        public var minFileAgeForRead: TimeInterval
+        public var maxFileAgeForRead: TimeInterval
+        public var maxObjectsInFile: Int
+        public var maxObjectSize: UInt64
+        public var synchronousWrite: Bool
+
+        public var initialExportDelay: TimeInterval
+        public var defaultExportDelay: TimeInterval
+        public var minExportDelay: TimeInterval
+        public var maxExportDelay: TimeInterval
+        public var exportDelayChangeRate: Double
+
+        public init(
+          maxFileSize: UInt64,
+          maxDirectorySize: UInt64,
+          maxFileAgeForWrite: TimeInterval,
+          minFileAgeForRead: TimeInterval,
+          maxFileAgeForRead: TimeInterval,
+          maxObjectsInFile: Int,
+          maxObjectSize: UInt64,
+          synchronousWrite: Bool,
+          initialExportDelay: TimeInterval,
+          defaultExportDelay: TimeInterval,
+          minExportDelay: TimeInterval,
+          maxExportDelay: TimeInterval,
+          exportDelayChangeRate: Double
+        ) {
+          self.maxFileSize = maxFileSize
+          self.maxDirectorySize = maxDirectorySize
+          self.maxFileAgeForWrite = maxFileAgeForWrite
+          self.minFileAgeForRead = minFileAgeForRead
+          self.maxFileAgeForRead = maxFileAgeForRead
+          self.maxObjectsInFile = maxObjectsInFile
+          self.maxObjectSize = maxObjectSize
+          self.synchronousWrite = synchronousWrite
+          self.initialExportDelay = initialExportDelay
+          self.defaultExportDelay = defaultExportDelay
+          self.minExportDelay = minExportDelay
+          self.maxExportDelay = maxExportDelay
+          self.exportDelayChangeRate = exportDelayChangeRate
+        }
+
+        public static let balanced = Performance(
+          maxFileSize: 4 * 1_024 * 1_024,
+          maxDirectorySize: 512 * 1_024 * 1_024,
+          maxFileAgeForWrite: 4.75,
+          minFileAgeForRead: 5.25,
+          maxFileAgeForRead: 18 * 60 * 60,
+          maxObjectsInFile: 500,
+          maxObjectSize: 256 * 1_024,
+          synchronousWrite: false,
+          initialExportDelay: 5,
+          defaultExportDelay: 5,
+          minExportDelay: 1,
+          maxExportDelay: 20,
+          exportDelayChangeRate: 0.1
+        )
+
+        public static let lowRuntimeImpact = balanced
+
+        public static let instantDelivery = Performance(
+          maxFileSize: 4 * 1_024 * 1_024,
+          maxDirectorySize: 512 * 1_024 * 1_024,
+          maxFileAgeForWrite: 2.75,
+          minFileAgeForRead: 3.25,
+          maxFileAgeForRead: 18 * 60 * 60,
+          maxObjectsInFile: 500,
+          maxObjectSize: 256 * 1_024,
+          synchronousWrite: true,
+          initialExportDelay: 0.5,
+          defaultExportDelay: 3,
+          minExportDelay: 1,
+          maxExportDelay: 5,
+          exportDelayChangeRate: 0.5
+        )
+      }
+
+      public var storageURL: URL
+      public var performance: Performance
+
+      public init(
+        storageURL: URL,
+        performance: Performance = .balanced
+      ) {
+        self.storageURL = storageURL
+        self.performance = performance
+      }
+
+      public static func defaults() -> Self {
+        .init(storageURL: defaultStorageURL(), performance: .balanced)
+      }
+
+      public static func defaults(storageURL: URL) -> Self {
+        .init(storageURL: storageURL, performance: .balanced)
+      }
+
+      fileprivate var asInternalConfiguration: PersistenceConfiguration {
+        .init(
+          storageURL: storageURL,
+          performancePreset: .init(
+            maxFileSize: performance.maxFileSize,
+            maxDirectorySize: performance.maxDirectorySize,
+            maxFileAgeForWrite: performance.maxFileAgeForWrite,
+            minFileAgeForRead: performance.minFileAgeForRead,
+            maxFileAgeForRead: performance.maxFileAgeForRead,
+            maxObjectsInFile: performance.maxObjectsInFile,
+            maxObjectSize: performance.maxObjectSize,
+            synchronousWrite: performance.synchronousWrite,
+            initialExportDelay: performance.initialExportDelay,
+            defaultExportDelay: performance.defaultExportDelay,
+            minExportDelay: performance.minExportDelay,
+            maxExportDelay: performance.maxExportDelay,
+            exportDelayChangeRate: performance.exportDelayChangeRate
+          )
+        )
+      }
+
+      private static func defaultStorageURL() -> URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+          ?? FileManager.default.temporaryDirectory
+        return base
+          .appendingPathComponent("opentelemetry", isDirectory: true)
+          .appendingPathComponent("terra", isDirectory: true)
+      }
     }
   }
 

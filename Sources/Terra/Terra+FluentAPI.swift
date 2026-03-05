@@ -2,57 +2,57 @@ import Foundation
 import OpenTelemetryApi
 
 extension Terra {
-  public enum TelemetryAttributeValue: Sendable, Hashable {
+  package enum TelemetryAttributeValue: Sendable, Hashable {
     case string(String)
     case int(Int)
     case double(Double)
     case bool(Bool)
   }
 
-  public protocol TelemetryValue: Sendable {
+  package protocol TelemetryValue: Sendable {
     var telemetryAttributeValue: TelemetryAttributeValue { get }
   }
 
-  public struct AttributeKey<Value: TelemetryValue>: Sendable, Hashable {
-    public let name: String
+  package struct AttributeKey<Value: TelemetryValue>: Sendable, Hashable {
+    package let name: String
 
-    public init(_ name: String) {
+    package init(_ name: String) {
       self.name = name
     }
   }
 
-  public struct AttributeBag: Sendable, Hashable {
+  package struct AttributeBag: Sendable, Hashable {
     var values: [String: TelemetryAttributeValue]
 
-    public init() {
+    package init() {
       values = [:]
     }
 
-    public mutating func set<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) {
+    package mutating func set<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) {
       values[key.name] = value.telemetryAttributeValue
     }
   }
 
-  public protocol TerraEvent: Sendable {
+  package protocol TerraEvent: Sendable {
     static var name: StaticString { get }
     func encode(into attributes: inout AttributeBag)
   }
 }
 
 extension String: Terra.TelemetryValue {
-  public var telemetryAttributeValue: Terra.TelemetryAttributeValue { .string(self) }
+  package var telemetryAttributeValue: Terra.TelemetryAttributeValue { .string(self) }
 }
 
 extension Int: Terra.TelemetryValue {
-  public var telemetryAttributeValue: Terra.TelemetryAttributeValue { .int(self) }
+  package var telemetryAttributeValue: Terra.TelemetryAttributeValue { .int(self) }
 }
 
 extension Double: Terra.TelemetryValue {
-  public var telemetryAttributeValue: Terra.TelemetryAttributeValue { .double(self) }
+  package var telemetryAttributeValue: Terra.TelemetryAttributeValue { .double(self) }
 }
 
 extension Bool: Terra.TelemetryValue {
-  public var telemetryAttributeValue: Terra.TelemetryAttributeValue { .bool(self) }
+  package var telemetryAttributeValue: Terra.TelemetryAttributeValue { .bool(self) }
 }
 
 extension Terra.AttributeBag {
@@ -114,62 +114,62 @@ extension Terra {
   }
 
   @available(*, deprecated, message: "Use Terra.inference(model:) { } or Terra.Session() directly.")
-  public static func shared() async -> Session {
+  package static func shared() async -> Session {
     await _sharedSession()
   }
 
-  public static func inference(model: String, prompt: String? = nil) -> InferenceCall {
+  package static func inference(model: String, prompt: String? = nil) -> InferenceCall {
     inference(.chat(model: model, prompt: prompt))
   }
 
-  public static func inference(_ request: InferenceRequest) -> InferenceCall {
+  package static func inference(_ request: InferenceRequest) -> InferenceCall {
     InferenceCall(runtime: .shared, request: request)
   }
 
-  public static func stream(model: String, prompt: String? = nil) -> StreamingCall {
+  package static func stream(model: String, prompt: String? = nil) -> StreamingCall {
     stream(.chat(model: model, prompt: prompt))
   }
 
-  public static func stream(_ request: StreamingRequest) -> StreamingCall {
+  package static func stream(_ request: StreamingRequest) -> StreamingCall {
     StreamingCall(runtime: .shared, request: request)
   }
 
-  public static func embedding(model: String, inputCount: Int? = nil) -> EmbeddingCall {
+  package static func embedding(model: String, inputCount: Int? = nil) -> EmbeddingCall {
     embedding(.init(model: model, inputCount: inputCount))
   }
 
-  public static func embedding(_ request: EmbeddingRequest) -> EmbeddingCall {
+  package static func embedding(_ request: EmbeddingRequest) -> EmbeddingCall {
     EmbeddingCall(runtime: .shared, request: request)
   }
 
-  public static func agent(name: String, id: String? = nil) -> AgentCall {
+  package static func agent(name: String, id: String? = nil) -> AgentCall {
     agent(.init(name: name, id: id))
   }
 
-  public static func agent(_ request: AgentRequest) -> AgentCall {
+  package static func agent(_ request: AgentRequest) -> AgentCall {
     AgentCall(runtime: .shared, request: request)
   }
 
-  public static func tool(name: String, callID: String, type: String? = nil) -> ToolCall {
+  package static func tool(name: String, callID: String, type: String? = nil) -> ToolCall {
     tool(.init(name: name, callID: callID, type: type))
   }
 
-  public static func tool(_ request: ToolRequest) -> ToolCall {
+  package static func tool(_ request: ToolRequest) -> ToolCall {
     ToolCall(runtime: .shared, request: request)
   }
 
-  public static func safetyCheck(name: String, subject: String? = nil) -> SafetyCheckCall {
+  package static func safetyCheck(name: String, subject: String? = nil) -> SafetyCheckCall {
     safetyCheck(.init(name: name, subject: subject))
   }
 
-  public static func safetyCheck(_ request: SafetyCheckRequest) -> SafetyCheckCall {
+  package static func safetyCheck(_ request: SafetyCheckRequest) -> SafetyCheckCall {
     SafetyCheckCall(runtime: .shared, request: request)
   }
 
   // MARK: - Closure-first factories (v3)
 
   @discardableResult
-  public static func inference<R>(
+  package static func inference<R>(
     model: String,
     prompt: String? = nil,
     provider: String? = nil,
@@ -191,7 +191,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func inference<R>(
+  package static func inference<R>(
     model: String,
     prompt: String? = nil,
     provider: String? = nil,
@@ -209,7 +209,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func stream<R>(
+  package static func stream<R>(
     model: String,
     prompt: String? = nil,
     provider: String? = nil,
@@ -231,7 +231,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func stream<R>(
+  package static func stream<R>(
     model: String,
     prompt: String? = nil,
     provider: String? = nil,
@@ -249,7 +249,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func embedding<R>(
+  package static func embedding<R>(
     model: String,
     inputCount: Int? = nil,
     provider: String? = nil,
@@ -267,7 +267,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func embedding<R>(
+  package static func embedding<R>(
     model: String,
     inputCount: Int? = nil,
     provider: String? = nil,
@@ -281,7 +281,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func agent<R>(
+  package static func agent<R>(
     name: String,
     id: String? = nil,
     provider: String? = nil,
@@ -299,7 +299,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func agent<R>(
+  package static func agent<R>(
     name: String,
     id: String? = nil,
     provider: String? = nil,
@@ -313,7 +313,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func tool<R>(
+  package static func tool<R>(
     name: String,
     callID: String,
     type: String? = nil,
@@ -333,7 +333,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func tool<R>(
+  package static func tool<R>(
     name: String,
     callID: String,
     type: String? = nil,
@@ -348,7 +348,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func safetyCheck<R>(
+  package static func safetyCheck<R>(
     name: String,
     subject: String? = nil,
     provider: String? = nil,
@@ -366,7 +366,7 @@ extension Terra {
   }
 
   @discardableResult
-  public static func safetyCheck<R>(
+  package static func safetyCheck<R>(
     name: String,
     subject: String? = nil,
     provider: String? = nil,
@@ -381,54 +381,54 @@ extension Terra {
 }
 
 extension Terra {
-  public actor Session: Sendable {
-    public init() {}
+  package actor Session: Sendable {
+    package init() {}
 
-    public nonisolated func inference(model: String, prompt: String? = nil) -> InferenceCall {
+    package nonisolated func inference(model: String, prompt: String? = nil) -> InferenceCall {
       inference(.chat(model: model, prompt: prompt))
     }
 
-    public nonisolated func inference(_ request: InferenceRequest) -> InferenceCall {
+    package nonisolated func inference(_ request: InferenceRequest) -> InferenceCall {
       InferenceCall(runtime: .session(self), request: request)
     }
 
-    public nonisolated func stream(model: String, prompt: String? = nil) -> StreamingCall {
+    package nonisolated func stream(model: String, prompt: String? = nil) -> StreamingCall {
       stream(.chat(model: model, prompt: prompt))
     }
 
-    public nonisolated func stream(_ request: StreamingRequest) -> StreamingCall {
+    package nonisolated func stream(_ request: StreamingRequest) -> StreamingCall {
       StreamingCall(runtime: .session(self), request: request)
     }
 
-    public nonisolated func embedding(model: String, inputCount: Int? = nil) -> EmbeddingCall {
+    package nonisolated func embedding(model: String, inputCount: Int? = nil) -> EmbeddingCall {
       embedding(.init(model: model, inputCount: inputCount))
     }
 
-    public nonisolated func embedding(_ request: EmbeddingRequest) -> EmbeddingCall {
+    package nonisolated func embedding(_ request: EmbeddingRequest) -> EmbeddingCall {
       EmbeddingCall(runtime: .session(self), request: request)
     }
 
-    public nonisolated func agent(name: String, id: String? = nil) -> AgentCall {
+    package nonisolated func agent(name: String, id: String? = nil) -> AgentCall {
       agent(.init(name: name, id: id))
     }
 
-    public nonisolated func agent(_ request: AgentRequest) -> AgentCall {
+    package nonisolated func agent(_ request: AgentRequest) -> AgentCall {
       AgentCall(runtime: .session(self), request: request)
     }
 
-    public nonisolated func tool(name: String, callID: String, type: String? = nil) -> ToolCall {
+    package nonisolated func tool(name: String, callID: String, type: String? = nil) -> ToolCall {
       tool(.init(name: name, callID: callID, type: type))
     }
 
-    public nonisolated func tool(_ request: ToolRequest) -> ToolCall {
+    package nonisolated func tool(_ request: ToolRequest) -> ToolCall {
       ToolCall(runtime: .session(self), request: request)
     }
 
-    public nonisolated func safetyCheck(name: String, subject: String? = nil) -> SafetyCheckCall {
+    package nonisolated func safetyCheck(name: String, subject: String? = nil) -> SafetyCheckCall {
       safetyCheck(.init(name: name, subject: subject))
     }
 
-    public nonisolated func safetyCheck(_ request: SafetyCheckRequest) -> SafetyCheckCall {
+    package nonisolated func safetyCheck(_ request: SafetyCheckRequest) -> SafetyCheckCall {
       SafetyCheckCall(runtime: .session(self), request: request)
     }
 
@@ -542,7 +542,7 @@ private struct _CallMetadata: Sendable {
 }
 
 extension Terra {
-  public struct InferenceCall: Sendable {
+  package struct InferenceCall: Sendable {
     private let runtime: _RuntimeTarget
     private var request: InferenceRequest
     private var metadata = _CallMetadata()
@@ -552,14 +552,14 @@ extension Terra {
       self.request = request
     }
 
-    public func includeContent() -> Self {
+    package func includeContent() -> Self {
       var copy = self
       copy.metadata.includeContent = true
       return copy
     }
 
     @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    public func capture(_ intent: CaptureIntent) -> Self {
+    package func capture(_ intent: CaptureIntent) -> Self {
       switch intent {
       case .default:
         return self
@@ -568,19 +568,19 @@ extension Terra {
       }
     }
 
-    public func runtime(_ value: String) -> Self {
+    package func runtime(_ value: String) -> Self {
       attribute(.init(Keys.Terra.runtime), value)
     }
 
-    public func provider(_ value: String) -> Self {
+    package func provider(_ value: String) -> Self {
       attribute(.init(Keys.GenAI.providerName), value)
     }
 
-    public func responseModel(_ value: String) -> Self {
+    package func responseModel(_ value: String) -> Self {
       attribute(.init(Keys.GenAI.responseModel), value)
     }
 
-    public func tokens(input: Int? = nil, output: Int? = nil) -> Self {
+    package func tokens(input: Int? = nil, output: Int? = nil) -> Self {
       var copy = self
       if let input {
         copy = copy.attribute(.init(Keys.GenAI.usageInputTokens), input)
@@ -591,25 +591,25 @@ extension Terra {
       return copy
     }
 
-    public func temperature(_ value: Double) -> Self {
+    package func temperature(_ value: Double) -> Self {
       var copy = self
       copy.request.temperature = value
       return copy
     }
 
-    public func maxOutputTokens(_ value: Int) -> Self {
+    package func maxOutputTokens(_ value: Int) -> Self {
       var copy = self
       copy.request.maxOutputTokens = value
       return copy
     }
 
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       var copy = self
       copy.metadata.attributes.set(key, value)
       return copy
     }
 
-    public func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
+    package func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
       var copy = self
       var bag = copy.metadata.attributes
       block(&bag)
@@ -618,14 +618,14 @@ extension Terra {
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable (InferenceTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable (InferenceTrace) async throws -> R) async rethrows -> R {
       let request: InferenceRequest = {
         var copy = self.request
         if metadata.includeContent {
@@ -640,18 +640,18 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable (InferenceTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable (InferenceTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }
 
-  public struct StreamingCall: Sendable {
+  package struct StreamingCall: Sendable {
     private let runtime: _RuntimeTarget
     private var request: StreamingRequest
     private var metadata = _CallMetadata()
@@ -661,14 +661,14 @@ extension Terra {
       self.request = request
     }
 
-    public func includeContent() -> Self {
+    package func includeContent() -> Self {
       var copy = self
       copy.metadata.includeContent = true
       return copy
     }
 
     @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    public func capture(_ intent: CaptureIntent) -> Self {
+    package func capture(_ intent: CaptureIntent) -> Self {
       switch intent {
       case .default:
         return self
@@ -677,39 +677,39 @@ extension Terra {
       }
     }
 
-    public func runtime(_ value: String) -> Self {
+    package func runtime(_ value: String) -> Self {
       attribute(.init(Keys.Terra.runtime), value)
     }
 
-    public func provider(_ value: String) -> Self {
+    package func provider(_ value: String) -> Self {
       attribute(.init(Keys.GenAI.providerName), value)
     }
 
-    public func temperature(_ value: Double) -> Self {
+    package func temperature(_ value: Double) -> Self {
       var copy = self
       copy.request.temperature = value
       return copy
     }
 
-    public func maxOutputTokens(_ value: Int) -> Self {
+    package func maxOutputTokens(_ value: Int) -> Self {
       var copy = self
       copy.request.maxOutputTokens = value
       return copy
     }
 
-    public func expectedOutputTokens(_ value: Int) -> Self {
+    package func expectedOutputTokens(_ value: Int) -> Self {
       var copy = self
       copy.request.expectedOutputTokens = value
       return copy
     }
 
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       var copy = self
       copy.metadata.attributes.set(key, value)
       return copy
     }
 
-    public func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
+    package func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
       var copy = self
       var bag = copy.metadata.attributes
       block(&bag)
@@ -718,14 +718,14 @@ extension Terra {
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable (StreamingTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable (StreamingTrace) async throws -> R) async rethrows -> R {
       let request: StreamingRequest = {
         var copy = self.request
         if metadata.includeContent {
@@ -740,18 +740,18 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable (StreamingTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable (StreamingTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }
 
-  public struct EmbeddingCall: Sendable {
+  package struct EmbeddingCall: Sendable {
     private let runtime: _RuntimeTarget
     private var request: EmbeddingRequest
     private var metadata = _CallMetadata()
@@ -761,14 +761,14 @@ extension Terra {
       self.request = request
     }
 
-    public func includeContent() -> Self {
+    package func includeContent() -> Self {
       var copy = self
       copy.metadata.includeContent = true
       return copy
     }
 
     @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    public func capture(_ intent: CaptureIntent) -> Self {
+    package func capture(_ intent: CaptureIntent) -> Self {
       switch intent {
       case .default:
         return self
@@ -777,21 +777,21 @@ extension Terra {
       }
     }
 
-    public func runtime(_ value: String) -> Self {
+    package func runtime(_ value: String) -> Self {
       attribute(.init(Keys.Terra.runtime), value)
     }
 
-    public func provider(_ value: String) -> Self {
+    package func provider(_ value: String) -> Self {
       attribute(.init(Keys.GenAI.providerName), value)
     }
 
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       var copy = self
       copy.metadata.attributes.set(key, value)
       return copy
     }
 
-    public func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
+    package func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
       var copy = self
       var bag = copy.metadata.attributes
       block(&bag)
@@ -800,14 +800,14 @@ extension Terra {
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable (EmbeddingTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable (EmbeddingTrace) async throws -> R) async rethrows -> R {
       try await runtime.withSession { session in
         try await session.runEmbedding(request: request, attributes: metadata.attributes, body)
       }
@@ -815,18 +815,18 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable (EmbeddingTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable (EmbeddingTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }
 
-  public struct AgentCall: Sendable {
+  package struct AgentCall: Sendable {
     private let runtime: _RuntimeTarget
     private var request: AgentRequest
     private var metadata = _CallMetadata()
@@ -836,14 +836,14 @@ extension Terra {
       self.request = request
     }
 
-    public func includeContent() -> Self {
+    package func includeContent() -> Self {
       var copy = self
       copy.metadata.includeContent = true
       return copy
     }
 
     @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    public func capture(_ intent: CaptureIntent) -> Self {
+    package func capture(_ intent: CaptureIntent) -> Self {
       switch intent {
       case .default:
         return self
@@ -852,21 +852,21 @@ extension Terra {
       }
     }
 
-    public func runtime(_ value: String) -> Self {
+    package func runtime(_ value: String) -> Self {
       attribute(.init(Keys.Terra.runtime), value)
     }
 
-    public func provider(_ value: String) -> Self {
+    package func provider(_ value: String) -> Self {
       attribute(.init(Keys.GenAI.providerName), value)
     }
 
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       var copy = self
       copy.metadata.attributes.set(key, value)
       return copy
     }
 
-    public func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
+    package func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
       var copy = self
       var bag = copy.metadata.attributes
       block(&bag)
@@ -875,14 +875,14 @@ extension Terra {
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable (AgentTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable (AgentTrace) async throws -> R) async rethrows -> R {
       try await runtime.withSession { session in
         try await session.runAgent(request: request, attributes: metadata.attributes, body)
       }
@@ -890,18 +890,18 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable (AgentTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable (AgentTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }
 
-  public struct ToolCall: Sendable {
+  package struct ToolCall: Sendable {
     private let runtime: _RuntimeTarget
     private var request: ToolRequest
     private var metadata = _CallMetadata()
@@ -911,14 +911,14 @@ extension Terra {
       self.request = request
     }
 
-    public func includeContent() -> Self {
+    package func includeContent() -> Self {
       var copy = self
       copy.metadata.includeContent = true
       return copy
     }
 
     @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    public func capture(_ intent: CaptureIntent) -> Self {
+    package func capture(_ intent: CaptureIntent) -> Self {
       switch intent {
       case .default:
         return self
@@ -927,21 +927,21 @@ extension Terra {
       }
     }
 
-    public func runtime(_ value: String) -> Self {
+    package func runtime(_ value: String) -> Self {
       attribute(.init(Keys.Terra.runtime), value)
     }
 
-    public func provider(_ value: String) -> Self {
+    package func provider(_ value: String) -> Self {
       attribute(.init(Keys.GenAI.providerName), value)
     }
 
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       var copy = self
       copy.metadata.attributes.set(key, value)
       return copy
     }
 
-    public func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
+    package func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
       var copy = self
       var bag = copy.metadata.attributes
       block(&bag)
@@ -950,14 +950,14 @@ extension Terra {
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable (ToolTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable (ToolTrace) async throws -> R) async rethrows -> R {
       try await runtime.withSession { session in
         try await session.runTool(request: request, attributes: metadata.attributes, body)
       }
@@ -965,18 +965,18 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable (ToolTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable (ToolTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }
 
-  public struct SafetyCheckCall: Sendable {
+  package struct SafetyCheckCall: Sendable {
     private let runtime: _RuntimeTarget
     private var request: SafetyCheckRequest
     private var metadata = _CallMetadata()
@@ -986,14 +986,14 @@ extension Terra {
       self.request = request
     }
 
-    public func includeContent() -> Self {
+    package func includeContent() -> Self {
       var copy = self
       copy.metadata.includeContent = true
       return copy
     }
 
     @available(*, deprecated, message: "Use includeContent() for per-call content capture.")
-    public func capture(_ intent: CaptureIntent) -> Self {
+    package func capture(_ intent: CaptureIntent) -> Self {
       switch intent {
       case .default:
         return self
@@ -1002,21 +1002,21 @@ extension Terra {
       }
     }
 
-    public func runtime(_ value: String) -> Self {
+    package func runtime(_ value: String) -> Self {
       attribute(.init(Keys.Terra.runtime), value)
     }
 
-    public func provider(_ value: String) -> Self {
+    package func provider(_ value: String) -> Self {
       attribute(.init(Keys.GenAI.providerName), value)
     }
 
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       var copy = self
       copy.metadata.attributes.set(key, value)
       return copy
     }
 
-    public func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
+    package func attributes(_ block: (inout AttributeBag) -> Void) -> Self {
       var copy = self
       var bag = copy.metadata.attributes
       block(&bag)
@@ -1025,14 +1025,14 @@ extension Terra {
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    public func execute<R>(_ body: @Sendable (SafetyCheckTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @Sendable (SafetyCheckTrace) async throws -> R) async rethrows -> R {
       let request: SafetyCheckRequest = {
         var copy = self.request
         if metadata.includeContent {
@@ -1047,13 +1047,13 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    public func run<R>(_ body: @Sendable (SafetyCheckTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @Sendable (SafetyCheckTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }

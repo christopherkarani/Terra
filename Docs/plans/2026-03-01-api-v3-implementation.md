@@ -780,3 +780,7 @@ These items are designed but deferred from this implementation:
 - `#instrument` metrics-only macro
 - `@TerraTraceable` auto-conformance macro
 - Span links for inference→tool relationships (`.linkedTo()`)
+# Historical Plan Note
+
+This implementation plan is retained for historical context and may reference legacy APIs.
+For the current public API, use `Docs/Front_Facing_API.md` and `Docs/Migration_Guide.md`.

@@ -1,126 +1,47 @@
-# Terra Migration Guide (v1 → v2 → v3)
+# Terra Migration Guide (Legacy -> Current)
 
-This guide moves existing Terra integrations onto the v3 canonical API:
+This guide migrates existing integrations to the canonical composable API:
 
-- Start with `Terra.start()` or `Terra.start(.init(...))`
-- Prefer closure-first factories (`Terra.inference { ... }`)
-- Use builder `.execute { ... }` only when you need dynamic metadata
+- Startup: `Terra.start(...)`
+- Operations: `Terra.infer/stream/embed/agent/tool/safety`
+- Terminal: `.run { ... }`
+- Metadata: `.attr(...)`
+- Per-call content capture: `.capture(.includeContent)`
 
-## v1 → v3 Mapping
+## API Mapping
 
-| v1 API | v3 replacement |
+| Legacy API | Current replacement |
 | --- | --- |
-| `withInferenceSpan(...)` | `try await Terra.inference(model:prompt:) { ... }` |
-| `withStreamingInferenceSpan(...)` | `try await Terra.stream(model:prompt:) { trace in ... }` |
-| `withAgentInvocationSpan(...)` | `try await Terra.agent(name:id:) { ... }` |
-| `withToolExecutionSpan(...)` | `try await Terra.tool(name:callID:type:) { ... }` |
-| `withEmbeddingSpan(...)` | `try await Terra.embedding(model:inputCount:) { ... }` |
-| `withSafetyCheckSpan(...)` | `try await Terra.safetyCheck(name:subject:) { ... }` |
+| `withInferenceSpan(...)` | `Terra.infer(...).run { ... }` |
+| `withStreamingInferenceSpan(...)` | `Terra.stream(...).run { trace in ... }` |
+| `withAgentInvocationSpan(...)` | `Terra.agent(...).run { ... }` |
+| `withToolExecutionSpan(...)` | `Terra.tool(...).run { ... }` |
+| `withEmbeddingSpan(...)` | `Terra.embed(...).run { ... }` |
+| `withSafetyCheckSpan(...)` | `Terra.safety(...).run { ... }` |
+| `.execute { ... }` | `.run { ... }` |
+| `.attribute(...)` | `.attr(...)` |
+| `.includeContent()` | `.capture(.includeContent)` |
+| `Terra.inference(...)` | `Terra.infer(...)` |
+| `Terra.embedding(...)` | `Terra.embed(...)` |
+| `Terra.safetyCheck(...)` | `Terra.safety(...)` |
 
-## v2 → v3 Mapping
+## Startup Migration
 
-| v2 API | v3 replacement |
-| --- | --- |
-| `.run { ... }` | `.execute { ... }` |
-| `.capture(.optIn)` | `.includeContent()` |
-| `Terra.enable(...)` (removed) | `Terra.start(...)` |
-| `Terra.configure(...)` (removed) | `Terra.start(...)` with `Terra.Configuration` |
-| `AutoInstrumentConfiguration` (removed) | `Terra.Configuration` |
-| `StartProfile` (removed) | `Terra.Configuration.Preset` |
-
-## Setup Migration
-
-### Before (v1/v2)
+### Before
 
 ```swift
 try Terra.enable(.quickstart)
 ```
 
-### After (v3)
+### After
 
 ```swift
 try Terra.start()
 ```
 
-### Before (preset setup)
-
-```swift
-try Terra.start(.production) { config in
-  config.enableLogs = true
-}
-```
-
-### After (preset setup)
-
-```swift
-var config = Terra.Configuration(preset: .production)
-config.enableLogs = true
-try Terra.start(config)
-```
-
-## Privacy Migration
-
-v3 consolidates privacy selection into `Terra.PrivacyPolicy`.
-
-| Previous concepts | v3 |
-| --- | --- |
-| `ContentPolicy` + `CaptureIntent` + `RedactionStrategy` composition | `Terra.PrivacyPolicy` |
-| Separate policy + redaction setup in multiple places | One policy in `Terra.Configuration.privacy` |
+## Inference Call Migration
 
 ### Before
-
-```swift
-var config = Terra.Configuration()
-config.privacy.contentPolicy = .optIn
-config.privacy.redaction = .hashSHA256
-try Terra.start(config)
-```
-
-### After
-
-```swift
-var config = Terra.Configuration()
-config.privacy = .capturing
-try Terra.start(config)
-```
-
-## Builder Terminal + Capture Migration
-
-### Before
-
-```swift
-let answer = try await Terra
-  .inference(model: "gpt-4o-mini", prompt: prompt)
-  .capture(.optIn)
-  .run {
-    try await llm.generate(prompt)
-  }
-```
-
-### After
-
-```swift
-let answer = try await Terra
-  .inference(model: "gpt-4o-mini", prompt: prompt)
-  .includeContent()
-  .execute {
-    try await llm.generate(prompt)
-  }
-```
-
-## Closure-First Migration
-
-### Before (builder-only style)
-
-```swift
-let answer = try await Terra
-  .inference(model: "gpt-4o-mini", prompt: prompt)
-  .execute {
-    try await llm.generate(prompt)
-  }
-```
-
-### After (recommended)
 
 ```swift
 let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: prompt) {
@@ -128,19 +49,53 @@ let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: prompt) {
 }
 ```
 
-## Deprecation Timeline
+### After
 
-| API family | Status in v3 | Removal target |
-| --- | --- | --- |
-| v1 span wrappers | Deprecated compatibility path | Next major after deprecation window |
-| v2 `.run` / `.capture` shims | Deprecated with forwarding | Next major after deprecation window |
-| `AutoInstrumentConfiguration` / `StartProfile` | Removed from public API | Removed |
-| `Terra.enable` / `Terra.configure` / legacy `bootstrap` | Removed from public API | Removed |
+```swift
+let answer = try await Terra.infer("gpt-4o-mini", prompt: prompt).run {
+  try await llm.generate(prompt)
+}
+```
+
+## Builder/Metadata Migration
+
+### Before
+
+```swift
+let answer = try await Terra
+  .inference(model: "gpt-4o-mini", prompt: prompt)
+  .attribute(.init("app.user_tier"), "pro")
+  .includeContent()
+  .execute {
+    try await llm.generate(prompt)
+  }
+```
+
+### After
+
+```swift
+let answer = try await Terra
+  .infer("gpt-4o-mini", prompt: prompt)
+  .attr(.init("app.user_tier"), "pro")
+  .capture(.includeContent)
+  .run {
+    try await llm.generate(prompt)
+  }
+```
+
+## Privacy Migration
+
+Use `Terra.PrivacyPolicy` in `Terra.Configuration`:
+
+```swift
+var config = Terra.Configuration()
+config.privacy = .redacted
+try Terra.start(config)
+```
 
 ## Recommended Migration Order
 
 1. Move startup calls to `Terra.start(...)`.
-2. Replace `.run` with `.execute` and `.capture(.optIn)` with `.includeContent()`.
-3. Convert high-volume call sites to closure-first factories.
-4. Collapse legacy privacy wiring into `Terra.PrivacyPolicy`.
-5. Enable `@Traced` macros where function-level instrumentation is cleaner.
+2. Replace operation names (`inference` -> `infer`, `embedding` -> `embed`, `safetyCheck` -> `safety`).
+3. Replace terminals/modifiers (`execute` -> `run`, `attribute` -> `attr`, `includeContent` -> `capture(.includeContent)`).
+4. Validate traces in your OTLP backend after rollout.

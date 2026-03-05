@@ -10,36 +10,36 @@ import Sessions
 #endif
 
 extension Terra {
-  public enum TracerProviderStrategy: Equatable {
+  package enum TracerProviderStrategy: Equatable {
     /// Register new providers globally (recommended for first-time adopters).
     case registerNew
     /// Attempt to augment existing global providers; falls back to `registerNew` when unsupported.
     case augmentExisting
   }
 
-  public struct OpenTelemetryConfiguration: Equatable {
-    public var tracerProviderStrategy: TracerProviderStrategy
+  package struct OpenTelemetryConfiguration: Equatable {
+    package var tracerProviderStrategy: TracerProviderStrategy
 
-    public var enableTraces: Bool
-    public var enableMetrics: Bool
-    public var enableLogs: Bool
+    package var enableTraces: Bool
+    package var enableMetrics: Bool
+    package var enableLogs: Bool
 
-    public var enableSignposts: Bool
-    public var enableSessions: Bool
+    package var enableSignposts: Bool
+    package var enableSessions: Bool
 
-    public var otlpTracesEndpoint: URL
-    public var otlpMetricsEndpoint: URL
-    public var otlpLogsEndpoint: URL
+    package var otlpTracesEndpoint: URL
+    package var otlpMetricsEndpoint: URL
+    package var otlpLogsEndpoint: URL
 
-    public var metricsExportInterval: TimeInterval
+    package var metricsExportInterval: TimeInterval
 
-    public var persistence: PersistenceConfiguration?
-    public var serviceName: String?
-    public var serviceVersion: String?
-    public var resourceAttributes: [String: AttributeValue]
-    public var traceSamplingRatio: Double?
+    package var persistence: PersistenceConfiguration?
+    package var serviceName: String?
+    package var serviceVersion: String?
+    package var resourceAttributes: [String: AttributeValue]
+    package var traceSamplingRatio: Double?
 
-    public init(
+    package init(
       tracerProviderStrategy: TracerProviderStrategy = .registerNew,
       enableTraces: Bool = true,
       enableMetrics: Bool = true,
@@ -74,11 +74,11 @@ extension Terra {
     }
   }
 
-  public struct PersistenceConfiguration: Equatable {
-    public var storageURL: URL
-    public var performancePreset: PersistencePerformancePreset
+  package struct PersistenceConfiguration: Equatable {
+    package var storageURL: URL
+    package var performancePreset: PersistencePerformancePreset
 
-    public init(
+    package init(
       storageURL: URL = Terra.defaultPersistenceStorageURL(),
       performancePreset: PersistencePerformancePreset = .default
     ) {
@@ -86,20 +86,20 @@ extension Terra {
       self.performancePreset = performancePreset
     }
 
-    public var tracesStorageURL: URL {
+    package var tracesStorageURL: URL {
       storageURL.appendingPathComponent("traces", isDirectory: true)
     }
 
-    public var metricsStorageURL: URL {
+    package var metricsStorageURL: URL {
       storageURL.appendingPathComponent("metrics", isDirectory: true)
     }
 
-    public var logsStorageURL: URL {
+    package var logsStorageURL: URL {
       storageURL.appendingPathComponent("logs", isDirectory: true)
     }
   }
 
-  public static func defaultPersistenceStorageURL() -> URL {
+  package static func defaultPersistenceStorageURL() -> URL {
     let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
       ?? FileManager.default.temporaryDirectory
     return base
@@ -107,7 +107,7 @@ extension Terra {
       .appendingPathComponent("terra", isDirectory: true)
   }
 
-  public enum InstallOpenTelemetryError: Error {
+  package enum InstallOpenTelemetryError: Error {
     case alreadyInstalled
   }
 
@@ -127,7 +127,7 @@ extension Terra {
   /// This configures global OpenTelemetry providers and also configures Terra's internal meter usage.
   ///
   /// - Throws: `InstallOpenTelemetryError.alreadyInstalled` if called more than once with a different configuration.
-  public static func installOpenTelemetry(_ configuration: OpenTelemetryConfiguration) throws {
+  package static func installOpenTelemetry(_ configuration: OpenTelemetryConfiguration) throws {
     openTelemetryInstallLock.lock()
     defer { openTelemetryInstallLock.unlock() }
 
@@ -400,11 +400,11 @@ extension Terra {
   // DispatchSemaphore avoids thread-affinity lock ownership issues in that path.
   private static let testingIsolationLock = DispatchSemaphore(value: 1)
 
-  public static func lockTestingIsolation() {
+  package static func lockTestingIsolation() {
     testingIsolationLock.wait()
   }
 
-  public static func unlockTestingIsolation() {
+  package static func unlockTestingIsolation() {
     testingIsolationLock.signal()
   }
 

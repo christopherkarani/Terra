@@ -454,3 +454,7 @@ All of these must be true before this work is considered complete:
 - **Minimal changes:** Only touch what's necessary. Don't refactor adjacent code.
 - **No guessing:** If unclear about existing behavior, read the code and tests first.
 - **Privacy first:** When in doubt, the privacy-safe path is correct.
+# Historical Plan Note
+
+This document is a historical planning prompt and may reference superseded API names.
+For the canonical current API, use `Docs/Front_Facing_API.md` and `Docs/Migration_Guide.md`.

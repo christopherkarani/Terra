@@ -5,11 +5,11 @@ import TerraSystemProfiler
 /// An on-device GenAI observability façade built on OpenTelemetry Swift.
 public enum Terra {
   /// The OpenTelemetry instrumentation scope name for Terra spans and metrics.
-  public static let instrumentationName: String = "io.opentelemetry.terra"
-  public static let instrumentationVersion: String? = nil
+  package static let instrumentationName: String = "io.opentelemetry.terra"
+  package static let instrumentationVersion: String? = nil
 
   /// Installs Terra configuration. If providers are supplied they may be registered globally.
-  public static func install(_ installation: Installation) {
+  package static func install(_ installation: Installation) {
     Runtime.shared.install(installation)
   }
 

@@ -1,14 +1,14 @@
 import OpenTelemetryApi
 
 extension Terra {
-  public protocol Trace: Sendable {
+  package protocol Trace: Sendable {
     @discardableResult func event(_ name: String) -> Self
     @discardableResult func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self
     @discardableResult func emit<E: TerraEvent>(_ event: E) -> Self
     func recordError(_ error: any Error)
   }
 
-  public struct InferenceTrace: Trace, Sendable {
+  package struct InferenceTrace: Trace, Sendable {
     private let scope: Scope<InferenceSpan>
 
     init(scope: Scope<InferenceSpan>) {
@@ -16,31 +16,31 @@ extension Terra {
     }
 
     @discardableResult
-    public func event(_ name: String) -> Self {
+    package func event(_ name: String) -> Self {
       scope.addEvent(name)
       return self
     }
 
     @discardableResult
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       scope.setAttributes([key.name: value.telemetryAttributeValue.openTelemetryValue])
       return self
     }
 
     @discardableResult
-    public func emit<E: TerraEvent>(_ event: E) -> Self {
+    package func emit<E: TerraEvent>(_ event: E) -> Self {
       var bag = AttributeBag()
       event.encode(into: &bag)
       scope.addEvent(String(describing: E.name), attributes: bag.openTelemetryAttributes)
       return self
     }
 
-    public func recordError(_ error: any Error) {
+    package func recordError(_ error: any Error) {
       scope.recordError(error)
     }
 
     @discardableResult
-    public func tokens(input: Int? = nil, output: Int? = nil) -> Self {
+    package func tokens(input: Int? = nil, output: Int? = nil) -> Self {
       var attributes: [String: AttributeValue] = [:]
       if let input {
         attributes[Keys.GenAI.usageInputTokens] = .int(input)
@@ -55,13 +55,13 @@ extension Terra {
     }
 
     @discardableResult
-    public func responseModel(_ value: String) -> Self {
+    package func responseModel(_ value: String) -> Self {
       scope.setAttributes([Keys.GenAI.responseModel: .string(value)])
       return self
     }
   }
 
-  public struct StreamingTrace: Trace, Sendable {
+  package struct StreamingTrace: Trace, Sendable {
     private let scope: StreamingInferenceScope
 
     init(scope: StreamingInferenceScope) {
@@ -69,31 +69,31 @@ extension Terra {
     }
 
     @discardableResult
-    public func event(_ name: String) -> Self {
+    package func event(_ name: String) -> Self {
       scope.addEvent(name)
       return self
     }
 
     @discardableResult
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       scope.setAttributes([key.name: value.telemetryAttributeValue.openTelemetryValue])
       return self
     }
 
     @discardableResult
-    public func emit<E: TerraEvent>(_ event: E) -> Self {
+    package func emit<E: TerraEvent>(_ event: E) -> Self {
       var bag = AttributeBag()
       event.encode(into: &bag)
       scope.addEvent(String(describing: E.name), attributes: bag.openTelemetryAttributes)
       return self
     }
 
-    public func recordError(_ error: any Error) {
+    package func recordError(_ error: any Error) {
       scope.recordError(error)
     }
 
     @discardableResult
-    public func chunk(tokens: Int = 1) -> Self {
+    package func chunk(tokens: Int = 1) -> Self {
       scope.recordChunk()
       if tokens > 0 {
         scope.recordToken(tokens)
@@ -102,19 +102,19 @@ extension Terra {
     }
 
     @discardableResult
-    public func outputTokens(_ total: Int) -> Self {
+    package func outputTokens(_ total: Int) -> Self {
       scope.recordOutputTokenCount(total)
       return self
     }
 
     @discardableResult
-    public func firstToken() -> Self {
+    package func firstToken() -> Self {
       scope.recordFirstToken()
       return self
     }
   }
 
-  public struct EmbeddingTrace: Trace, Sendable {
+  package struct EmbeddingTrace: Trace, Sendable {
     private let scope: Scope<EmbeddingSpan>
 
     init(scope: Scope<EmbeddingSpan>) {
@@ -122,31 +122,31 @@ extension Terra {
     }
 
     @discardableResult
-    public func event(_ name: String) -> Self {
+    package func event(_ name: String) -> Self {
       scope.addEvent(name)
       return self
     }
 
     @discardableResult
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       scope.setAttributes([key.name: value.telemetryAttributeValue.openTelemetryValue])
       return self
     }
 
     @discardableResult
-    public func emit<E: TerraEvent>(_ event: E) -> Self {
+    package func emit<E: TerraEvent>(_ event: E) -> Self {
       var bag = AttributeBag()
       event.encode(into: &bag)
       scope.addEvent(String(describing: E.name), attributes: bag.openTelemetryAttributes)
       return self
     }
 
-    public func recordError(_ error: any Error) {
+    package func recordError(_ error: any Error) {
       scope.recordError(error)
     }
   }
 
-  public struct AgentTrace: Trace, Sendable {
+  package struct AgentTrace: Trace, Sendable {
     private let scope: Scope<AgentInvocationSpan>
 
     init(scope: Scope<AgentInvocationSpan>) {
@@ -154,31 +154,31 @@ extension Terra {
     }
 
     @discardableResult
-    public func event(_ name: String) -> Self {
+    package func event(_ name: String) -> Self {
       scope.addEvent(name)
       return self
     }
 
     @discardableResult
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       scope.setAttributes([key.name: value.telemetryAttributeValue.openTelemetryValue])
       return self
     }
 
     @discardableResult
-    public func emit<E: TerraEvent>(_ event: E) -> Self {
+    package func emit<E: TerraEvent>(_ event: E) -> Self {
       var bag = AttributeBag()
       event.encode(into: &bag)
       scope.addEvent(String(describing: E.name), attributes: bag.openTelemetryAttributes)
       return self
     }
 
-    public func recordError(_ error: any Error) {
+    package func recordError(_ error: any Error) {
       scope.recordError(error)
     }
   }
 
-  public struct ToolTrace: Trace, Sendable {
+  package struct ToolTrace: Trace, Sendable {
     private let scope: Scope<ToolExecutionSpan>
 
     init(scope: Scope<ToolExecutionSpan>) {
@@ -186,31 +186,31 @@ extension Terra {
     }
 
     @discardableResult
-    public func event(_ name: String) -> Self {
+    package func event(_ name: String) -> Self {
       scope.addEvent(name)
       return self
     }
 
     @discardableResult
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       scope.setAttributes([key.name: value.telemetryAttributeValue.openTelemetryValue])
       return self
     }
 
     @discardableResult
-    public func emit<E: TerraEvent>(_ event: E) -> Self {
+    package func emit<E: TerraEvent>(_ event: E) -> Self {
       var bag = AttributeBag()
       event.encode(into: &bag)
       scope.addEvent(String(describing: E.name), attributes: bag.openTelemetryAttributes)
       return self
     }
 
-    public func recordError(_ error: any Error) {
+    package func recordError(_ error: any Error) {
       scope.recordError(error)
     }
   }
 
-  public struct SafetyCheckTrace: Trace, Sendable {
+  package struct SafetyCheckTrace: Trace, Sendable {
     private let scope: Scope<SafetyCheckSpan>
 
     init(scope: Scope<SafetyCheckSpan>) {
@@ -218,26 +218,26 @@ extension Terra {
     }
 
     @discardableResult
-    public func event(_ name: String) -> Self {
+    package func event(_ name: String) -> Self {
       scope.addEvent(name)
       return self
     }
 
     @discardableResult
-    public func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
+    package func attribute<Value: TelemetryValue>(_ key: AttributeKey<Value>, _ value: Value) -> Self {
       scope.setAttributes([key.name: value.telemetryAttributeValue.openTelemetryValue])
       return self
     }
 
     @discardableResult
-    public func emit<E: TerraEvent>(_ event: E) -> Self {
+    package func emit<E: TerraEvent>(_ event: E) -> Self {
       var bag = AttributeBag()
       event.encode(into: &bag)
       scope.addEvent(String(describing: E.name), attributes: bag.openTelemetryAttributes)
       return self
     }
 
-    public func recordError(_ error: any Error) {
+    package func recordError(_ error: any Error) {
       scope.recordError(error)
     }
   }

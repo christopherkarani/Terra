@@ -27,14 +27,14 @@ extension Terra {
 }
 
 extension Terra {
-  public struct Installation {
-    public var privacy: Privacy
-    public var meterProvider: (any MeterProvider)?
-    public var tracerProvider: (any TracerProvider)?
-    public var loggerProvider: (any LoggerProvider)?
-    public var registerProvidersAsGlobal: Bool
+  package struct Installation {
+    package var privacy: Privacy
+    package var meterProvider: (any MeterProvider)?
+    package var tracerProvider: (any TracerProvider)?
+    package var loggerProvider: (any LoggerProvider)?
+    package var registerProvidersAsGlobal: Bool
 
-    public init(
+    package init(
       privacy: Privacy = .default,
       meterProvider: (any MeterProvider)? = nil,
       tracerProvider: (any TracerProvider)? = nil,

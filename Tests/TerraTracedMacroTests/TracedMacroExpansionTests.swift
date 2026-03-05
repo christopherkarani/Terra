@@ -18,7 +18,7 @@ func modelMacroNoMatchingParams() {
     """,
     expandedSource: """
     func generate(topic: String) async throws -> String {
-      return try await Terra.inference(model: "llama").execute { trace in
+      return try await Terra.infer("llama").run { trace in
         _ = trace
         try await doGenerate(topic)
       }
@@ -39,7 +39,7 @@ func modelMacroDetectsPrompt() {
     """,
     expandedSource: """
     func generate(prompt: String) async throws -> String {
-      return try await Terra.inference(model: "llama", prompt: prompt).execute { trace in
+      return try await Terra.infer("llama", prompt: prompt).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -60,7 +60,7 @@ func modelMacroDetectsInputAlias() {
     """,
     expandedSource: """
     func generate(input: String) async throws -> String {
-      return try await Terra.inference(model: "llama", prompt: input).execute { trace in
+      return try await Terra.infer("llama", prompt: input).run { trace in
         _ = trace
         try await doGenerate(input)
       }
@@ -81,7 +81,7 @@ func modelMacroDetectsQueryAlias() {
     """,
     expandedSource: """
     func generate(query: String) async throws -> String {
-      return try await Terra.inference(model: "llama", prompt: query).execute { trace in
+      return try await Terra.infer("llama", prompt: query).run { trace in
         _ = trace
         try await doGenerate(query)
       }
@@ -102,7 +102,7 @@ func modelMacroDetectsTextAlias() {
     """,
     expandedSource: """
     func generate(text: String) async throws -> String {
-      return try await Terra.inference(model: "llama", prompt: text).execute { trace in
+      return try await Terra.infer("llama", prompt: text).run { trace in
         _ = trace
         try await doGenerate(text)
       }
@@ -123,7 +123,7 @@ func modelMacroDetectsMessageAlias() {
     """,
     expandedSource: """
     func generate(message: String) async throws -> String {
-      return try await Terra.inference(model: "llama", prompt: message).execute { trace in
+      return try await Terra.infer("llama", prompt: message).run { trace in
         _ = trace
         try await doGenerate(message)
       }
@@ -144,7 +144,7 @@ func modelMacroDetectsMaxTokens() {
     """,
     expandedSource: """
     func generate(prompt: String, maxTokens: Int) async throws -> String {
-      return try await Terra.inference(model: "llama", prompt: prompt).maxOutputTokens(maxTokens).execute { trace in
+      return try await Terra.infer("llama", prompt: prompt, maxTokens: maxTokens).run { trace in
         _ = trace
         try await doGenerate(prompt, maxTokens: maxTokens)
       }
@@ -165,7 +165,7 @@ func modelMacroDetectsMaxOutputTokens() {
     """,
     expandedSource: """
     func generate(prompt: String, maxOutputTokens: Int) async throws -> String {
-      return try await Terra.inference(model: "llama", prompt: prompt).maxOutputTokens(maxOutputTokens).execute { trace in
+      return try await Terra.infer("llama", prompt: prompt, maxTokens: maxOutputTokens).run { trace in
         _ = trace
         try await doGenerate(prompt, maxTokens: maxOutputTokens)
       }
@@ -186,7 +186,7 @@ func modelMacroDetectsTemperature() {
     """,
     expandedSource: """
     func generate(prompt: String, temperature: Double) async throws -> String {
-      return try await Terra.inference(model: "llama", prompt: prompt).temperature(temperature).execute { trace in
+      return try await Terra.infer("llama", prompt: prompt, temperature: temperature).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -207,7 +207,7 @@ func modelMacroStreamingTrue() {
     """,
     expandedSource: """
     func stream(prompt: String) async throws -> String {
-      return try await Terra.stream(model: "gpt-4", prompt: prompt).execute { trace in
+      return try await Terra.stream("gpt-4", prompt: prompt).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -228,7 +228,7 @@ func agentMacroBasic() {
     """,
     expandedSource: """
     func research(topic: String) async throws -> Report {
-      return try await Terra.agent(name: "ResearchAgent").execute { trace in
+      return try await Terra.agent("ResearchAgent").run { trace in
         _ = trace
         try await doResearch(topic)
       }
@@ -249,7 +249,7 @@ func agentMacroWithID() {
     """,
     expandedSource: """
     func research(topic: String) async throws -> Report {
-      return try await Terra.agent(name: "ResearchAgent", id: "agent-1").execute { trace in
+      return try await Terra.agent("ResearchAgent", id: "agent-1").run { trace in
         _ = trace
         try await doResearch(topic)
       }
@@ -270,7 +270,7 @@ func toolMacroBasic() {
     """,
     expandedSource: """
     func search(query: String) async throws -> [Result] {
-      return try await Terra.tool(name: "search", callID: UUID().uuidString).execute { trace in
+      return try await Terra.tool("search", callID: UUID().uuidString).run { trace in
         _ = trace
         try await doSearch(query)
       }
@@ -291,7 +291,7 @@ func toolMacroUsesFunctionCallID() {
     """,
     expandedSource: """
     func search(query: String, callID: String) async throws -> [Result] {
-      return try await Terra.tool(name: "search", callID: callID).execute { trace in
+      return try await Terra.tool("search", callID: callID).run { trace in
         _ = trace
         try await doSearch(query)
       }
@@ -312,7 +312,7 @@ func embeddingMacroBasic() {
     """,
     expandedSource: """
     func embed(input: String) async throws -> [Float] {
-      return try await Terra.embedding(model: "text-embedding-3-small").execute { trace in
+      return try await Terra.embed("text-embedding-3-small").run { trace in
         _ = trace
         try await doEmbedding(input)
       }
@@ -333,7 +333,7 @@ func embeddingMacroDetectsCount() {
     """,
     expandedSource: """
     func embed(input: String, count: Int) async throws -> [Float] {
-      return try await Terra.embedding(model: "text-embedding-3-small", inputCount: count).execute { trace in
+      return try await Terra.embed("text-embedding-3-small", inputCount: count).run { trace in
         _ = trace
         try await doEmbedding(input)
       }
@@ -354,7 +354,7 @@ func safetyMacroBasic() {
     """,
     expandedSource: """
     func moderate() async throws -> Bool {
-      return try await Terra.safetyCheck(name: "toxicity").execute { trace in
+      return try await Terra.safety("toxicity").run { trace in
         _ = trace
         try await doModeration()
       }
@@ -375,7 +375,7 @@ func safetyMacroDetectsSubject() {
     """,
     expandedSource: """
     func moderate(subject: String) async throws -> Bool {
-      return try await Terra.safetyCheck(name: "toxicity", subject: subject).execute { trace in
+      return try await Terra.safety("toxicity", subject: subject).run { trace in
         _ = trace
         try await doModeration(subject)
       }
@@ -396,7 +396,7 @@ func modelMacroUsesFirstPromptAlias() {
     """,
     expandedSource: """
     func generate(prompt: String, text: String) async throws -> String {
-      return try await Terra.inference(model: "llama", prompt: prompt).execute { trace in
+      return try await Terra.infer("llama", prompt: prompt).run { trace in
         _ = trace
         try await doGenerate(prompt, text: text)
       }
@@ -417,7 +417,7 @@ func explicitModelArgOverridesFunctionParam() {
     """,
     expandedSource: """
     func generate(model: String, prompt: String) async throws -> String {
-      return try await Terra.inference(model: "gpt-4", prompt: prompt).execute { trace in
+      return try await Terra.infer("gpt-4", prompt: prompt).run { trace in
         _ = trace
         try await doGenerate(model, prompt: prompt)
       }
@@ -438,7 +438,7 @@ func explicitMetadataOverridesDetectedParams() {
     """,
     expandedSource: """
     func generate(prompt: String, provider: String, maxTokens: Int, temperature: Double) async throws -> String {
-      return try await Terra.inference(model: "gpt-4", prompt: "fixed").maxOutputTokens(128).temperature(0.2).provider("openai").execute { trace in
+      return try await Terra.infer("gpt-4", prompt: "fixed", provider: "openai", temperature: 0.2, maxTokens: 128).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }

@@ -3,13 +3,13 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 
 /// Span processor that enriches Terra spans with Terra-specific metadata.
-public final class TerraSpanEnrichmentProcessor: SpanProcessor {
-  public var isStartRequired: Bool { true }
-  public var isEndRequired: Bool { false }
+package final class TerraSpanEnrichmentProcessor: SpanProcessor {
+  package var isStartRequired: Bool { true }
+  package var isEndRequired: Bool { false }
 
-  public init() {}
+  package init() {}
 
-  public func onStart(parentContext: SpanContext?, span: ReadableSpan) {
+  package func onStart(parentContext: SpanContext?, span: ReadableSpan) {
     guard Terra.SpanNames.isTerraSpanName(span.name) else { return }
 
     let privacy = Runtime.shared.privacy
@@ -26,9 +26,9 @@ public final class TerraSpanEnrichmentProcessor: SpanProcessor {
     span.setAttribute(key: Terra.Keys.Terra.contentRedaction, value: redactionValue)
   }
 
-  public func onEnd(span: ReadableSpan) {}
-  public func shutdown(explicitTimeout: TimeInterval?) { /* stateless — nothing to flush */ }
-  public func forceFlush(timeout: TimeInterval?) { /* stateless — nothing to flush */ }
+  package func onEnd(span: ReadableSpan) {}
+  package func shutdown(explicitTimeout: TimeInterval?) { /* stateless — nothing to flush */ }
+  package func forceFlush(timeout: TimeInterval?) { /* stateless — nothing to flush */ }
 }
 
 private extension Terra.ContentPolicy {

@@ -64,7 +64,7 @@ export default function LandingPage() {
           />
           <FeatureCard 
             title="Privacy by Design" 
-            description="Content policy defaults to .never. Zero raw data leakage without explicit developer opt-in."
+            description="Redacted privacy is the default. No raw prompt/response capture unless explicitly enabled per call."
             icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>}
           />
           <FeatureCard 
@@ -91,7 +91,7 @@ export default function LandingPage() {
               </li>
               <li className="flex gap-3 text-sm text-gray-400">
                 <span className="text-emerald-500 font-black">✓</span> 
-                <strong>Tier 3:</strong> Custom scopes for complex agent workflows.
+                <strong>Tier 3:</strong> Composable infer/stream/embed/agent/tool/safety calls.
               </li>
             </ul>
           </div>
@@ -131,13 +131,9 @@ func summarize(prompt: String) async throws -> String {
              <div className="order-2 lg:order-1">
                 <CodeBlock 
                   title="Persistence.swift"
-                  code={`try Terra.installOpenTelemetry(
-  .init(
-    persistence: .init(
-      storageURL: Terra.defaultPersistenceStorageURL()
-    )
-  )
-)`}
+                  code={`var config = Terra.Configuration(preset: .production)
+config.persistence = .defaults()
+try Terra.start(config)`}
                 />
              </div>
              <div className="order-1 lg:order-2 space-y-6">
