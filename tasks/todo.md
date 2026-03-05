@@ -70,12 +70,12 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 ### Phase 3 — Type system hardening
 
 - [ ] Add typed IDs (`ModelID`, `ProviderID`, `RuntimeID`, `ToolCallID`) and migrate public signatures.
-- [ ] Remove public `OperationKind`; make `Terra.Call` non-generic.
-- [ ] Add stable public `TerraError` and map lifecycle/config failures:
+- [x] Remove public `OperationKind`; make `Terra.Call` non-generic.
+- [x] Add stable public `TerraError` and map lifecycle/config failures:
   - [x] Inventory internal start/reconfigure throw sources.
-  - [ ] Define stable `TerraError` taxonomy + diagnostics payload.
-  - [ ] Map `Terra.start`/`Terra.reconfigure` throw paths to `TerraError`.
-  - [ ] Add tests validating mapping (invalid OTLP URL, persistence FS failure, already-started conflict).
+  - [x] Define stable `TerraError` taxonomy + diagnostics payload.
+  - [x] Map `Terra.start`/`Terra.reconfigure` throw paths to `TerraError`.
+  - [x] Add tests validating mapping (invalid OTLP URL, persistence FS failure, already-started conflict).
 - [ ] Update tests to new canonical API (no legacy names).
 
 ### Phase 4 — Extensibility/testability seams

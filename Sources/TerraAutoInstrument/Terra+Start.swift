@@ -298,6 +298,10 @@ extension Terra {
   /// config.profiling.enableMemoryProfiler = true
   /// try await Terra.start(config)
   /// ```
+  ///
+  /// - Throws: `TerraError` with deterministic codes such as
+  ///   `.invalid_endpoint`, `.persistence_setup_failed`, `.already_started`,
+  ///   or `.invalid_lifecycle_state`.
   public static func start(_ config: Configuration = .init()) async throws {
     try await _lifecycleController.start(config)
   }

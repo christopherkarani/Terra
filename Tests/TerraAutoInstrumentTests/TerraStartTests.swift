@@ -137,8 +137,8 @@ final class TerraStartTests {
     await Terra.reset()
   }
 
-  @Test("Terra.start() throws alreadyInstalled when called twice with different config")
-  func terraStartThrowsAlreadyInstalledOnSecondCall() async throws {
+  @Test("Terra.start() throws already_started when called twice with different config")
+  func terraStartThrowsAlreadyStartedOnSecondCall() async throws {
     Terra.resetOpenTelemetryForTesting()
     await Terra.reset()
     defer { Terra.resetOpenTelemetryForTesting() }
@@ -153,11 +153,11 @@ final class TerraStartTests {
     config2.serviceName = "com.example.changed"
     do {
       try await Terra.start(config2)
-      #expect(false, "Expected Terra.start to throw alreadyInstalled when called with a different config while running.")
-    } catch let error as Terra.InstallOpenTelemetryError {
-      #expect(error == .alreadyInstalled)
+      #expect(Bool(false), "Expected Terra.start to throw already_started when called with a different config while running.")
+    } catch let error as Terra.TerraError {
+      #expect(error.code == .already_started)
     } catch {
-      #expect(false, "Unexpected error: \(error)")
+      #expect(Bool(false), "Unexpected error: \(error)")
     }
     await Terra.reset()
   }

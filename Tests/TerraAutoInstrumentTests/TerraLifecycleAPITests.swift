@@ -70,11 +70,11 @@ final class TerraLifecycleAPITests {
     // Different-config start must throw without an explicit reconfigure.
     do {
       try await Terra.start(config1)
-      #expect(false, "Expected Terra.start to throw alreadyInstalled when called with a different config while running.")
-    } catch let error as Terra.InstallOpenTelemetryError {
-      #expect(error == .alreadyInstalled)
+      #expect(Bool(false), "Expected Terra.start to throw already_started when called with a different config while running.")
+    } catch let error as Terra.TerraError {
+      #expect(error.code == .already_started)
     } catch {
-      #expect(false, "Unexpected error: \(error)")
+      #expect(Bool(false), "Unexpected error: \(error)")
     }
   }
 
