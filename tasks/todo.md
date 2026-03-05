@@ -554,15 +554,15 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
   - [x] Add diagnostics + fix-its for `model/provider/runtime/callID` raw string literals.
   - [x] Keep expansions canonical after fix-it implementation.
 
-- [ ] Phase C: Human quickstart upgrade.
-  - [ ] Add a 90-second quickstart path to canonical docs.
-  - [ ] Add three compile-safe recipe snippets (infer/tool/agent) mirrored under `Examples/**`.
-  - [ ] TDD/verification: compile-check examples/snippets with zero local edits.
+- [x] Phase C: Human quickstart upgrade.
+  - [x] Add a 90-second quickstart path to canonical docs.
+  - [x] Add three compile-safe recipe snippets (infer/tool/agent) mirrored under `Examples/**`.
+  - [x] TDD/verification: compile-check examples/snippets with zero local edits.
 
-- [ ] Phase D: Error UX docs pass.
-  - [ ] Add deterministic `TerraError.code -> cause -> action` table.
-  - [ ] Add remediation hints for each lifecycle-facing public error code.
-  - [ ] Keep migration and front-facing docs aligned.
+- [x] Phase D: Error UX docs pass.
+  - [x] Add deterministic `TerraError.code -> cause -> action` table.
+  - [x] Add remediation hints for each lifecycle-facing public error code.
+  - [x] Keep migration and front-facing docs aligned.
 
 - [ ] Validation + commits.
   - [ ] Commit per phase with focused tests.

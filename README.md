@@ -20,23 +20,14 @@ let result = try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: "Say he
 
 ## Quick Start
 
+Copy-ready snippets live in `Examples/Terra Sample/RecipeSnippets.swift` and compile as-is.
+
 ```swift
 import Terra
 
-try await Terra.start()
-
-let answer = try await Terra
-  .infer(
-    Terra.ModelID("gpt-4o-mini"),
-    prompt: userPrompt,
-    provider: Terra.ProviderID("openai"),
-    runtime: Terra.RuntimeID("http_api")
-  )
-  .run { trace in
-    trace.event("request.start")
-    trace.tokens(input: 120, output: 70)
-    return try await llm.generate(userPrompt)
-  }
+try await Terra.start(.init(preset: .quickstart))
+let answer = try await TerraRecipeSnippets.inferRecipe(prompt: userPrompt)
+await Terra.shutdown()
 ```
 
 ## Setup Presets

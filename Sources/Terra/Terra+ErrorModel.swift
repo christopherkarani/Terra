@@ -50,5 +50,30 @@ extension Terra {
     }
 
     public var errorDescription: String? { message }
+
+    public var remediationHint: String {
+      code.remediationHint
+    }
+  }
+}
+
+extension Terra.TerraError.Code {
+  public var remediationHint: String {
+    switch rawValue {
+    case Terra.TerraError.Code.invalid_endpoint.rawValue:
+      return "Use a valid OTLP endpoint URL (http/https + host), then retry start/reconfigure."
+    case Terra.TerraError.Code.persistence_setup_failed.rawValue:
+      return "Ensure persistence.storageURL points to a writable directory, then retry start/reconfigure."
+    case Terra.TerraError.Code.already_started.rawValue:
+      return "Use Terra.reconfigure(...) for live updates, or call Terra.shutdown()/reset() before starting again."
+    case Terra.TerraError.Code.invalid_lifecycle_state.rawValue:
+      return "Call lifecycle APIs only from valid states (for example: start before reconfigure/shutdown)."
+    case Terra.TerraError.Code.start_failed.rawValue:
+      return "Check TerraError.context and exporter/runtime configuration, then retry Terra.start()."
+    case Terra.TerraError.Code.reconfigure_failed.rawValue:
+      return "Check TerraError.context and configuration deltas, then retry Terra.reconfigure(...)."
+    default:
+      return "Inspect TerraError.context and TerraError.underlying, then retry with corrected configuration/state."
+    }
   }
 }
