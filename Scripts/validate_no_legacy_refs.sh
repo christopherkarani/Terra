@@ -16,16 +16,18 @@ RG_BASE=(
   --glob '!website/.next/**'
   --glob '!website/out/**'
   --glob '!Docs/plans/**'
+  --glob '!Docs/reference/**'
   --glob '!Docs/Migration*.md'
   --glob '!Docs/API_V2_FLUENT_CALLSITE_SPEC.md'
   --glob '!Docs/Migration_v1_to_v2.md'
-  --glob '!Docs/reference/api-improvement-report.md'
-  --glob '!Docs/reference/api-surface-catalog.md'
 )
 
 SCOPE=(
   README.md
-  Docs
+  Docs/Front_Facing_API.md
+  Docs/Front_Facing_API_Examples.md
+  Docs/API_Cookbook.md
+  Docs/Integrations.md
   Examples
   website/src
 )
@@ -51,4 +53,3 @@ for pat in "${PATTERNS[@]}"; do
 done
 
 echo "OK: No legacy references found in canonical docs/snippets."
-

@@ -90,19 +90,19 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 
 ### Phase 6 — Macro + docs alignment
 
-- [ ] Update `@Traced` macro expansion to use canonical public API only (`infer/stream/embed/agent/tool/safety + run`).
-- [ ] Migrate `@Traced` expansion to typed IDs:
-  - [ ] Use `Terra.tool("name")` when no `callID` is present (rely on `callID: Terra.ToolCallID = .init()` default).
+- [x] Update `@Traced` macro expansion to use canonical public API only (`infer/stream/embed/agent/tool/safety + run`).
+- [x] Migrate `@Traced` expansion to typed IDs:
+  - [x] Use `Terra.tool("name")` when no `callID` is present (rely on `callID: Terra.ToolCallID = .init()` default).
   - [x] Wrap auto-detected `provider`/`runtime` *String* params as `Terra.ProviderID(provider)` / `Terra.RuntimeID(runtime)` (pass through when already typed).
-  - [ ] Wrap auto-detected tool `callID` *String* params as `Terra.ToolCallID(callID)` (pass through when already typed).
+  - [x] Wrap auto-detected tool `callID` *String* params as `Terra.ToolCallID(callID)` (pass through when already typed).
   - [x] Add optional `runtime:` support (explicit macro arg + auto-detected function param).
-- [ ] Update macro expansion tests for typed IDs + `tool` defaults:
-  - [ ] Update tool macro default callID expectation (remove `UUID().uuidString`).
-  - [ ] Add test: tool macro wraps `callID: String` parameter.
-  - [ ] Add test: tool macro passes `callID: Terra.ToolCallID` parameter directly.
-  - [ ] Add test: model macro wraps `provider: String` parameter (and `runtime: String` when supported).
-- [ ] Update docs/examples/website snippets to final API; remove legacy names from canonical docs.
-- [ ] Add and run stale-reference sweep gate for canonical docs/snippets.
+- [x] Update macro expansion tests for typed IDs + `tool` defaults:
+  - [x] Update tool macro default callID expectation (remove `UUID().uuidString`).
+  - [x] Add test: tool macro wraps `callID: String` parameter.
+  - [x] Add test: tool macro passes `callID: Terra.ToolCallID` parameter directly.
+  - [x] Add test: model macro wraps `provider: String` parameter (and `runtime: String` when supported).
+- [x] Update docs/examples/website snippets to final API; remove legacy names from canonical docs.
+- [x] Add and run stale-reference sweep gate for canonical docs/snippets.
 
 ### Validation gates (must pass)
 

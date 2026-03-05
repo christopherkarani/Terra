@@ -159,7 +159,7 @@ public struct TracedMacro: BodyMacro {
 
     case .tool:
       let toolExpr = try requiredArg(named: "tool", in: arguments)
-      let callIDExpr = resolved.toolCallID ?? "Terra.ToolCallID()"
+      let callIDExpr = resolved.toolCallID
       let typeExpr = argument(named: "type", in: arguments)
       return buildCall(
         "Terra.tool(\(toolExpr)",

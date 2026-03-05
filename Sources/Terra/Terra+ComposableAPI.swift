@@ -521,7 +521,7 @@ extension Terra {
 
   public static func tool(
     _ name: String,
-    callID: ToolCallID,
+    callID: ToolCallID = .init(),
     type: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil

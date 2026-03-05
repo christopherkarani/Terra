@@ -270,7 +270,7 @@ func toolMacroBasic() {
     """,
     expandedSource: """
     func search(query: String) async throws -> [Result] {
-      return try await Terra.tool("search", callID: Terra.ToolCallID()).run { trace in
+      return try await Terra.tool("search").run { trace in
         _ = trace
         try await doSearch(query)
       }
@@ -292,6 +292,27 @@ func toolMacroUsesFunctionCallID() {
     expandedSource: """
     func search(query: String, callID: String) async throws -> [Result] {
       return try await Terra.tool("search", callID: Terra.ToolCallID(callID)).run { trace in
+        _ = trace
+        try await doSearch(query)
+      }
+    }
+    """,
+    macros: testMacros
+  )
+}
+
+@Test("Tool macro passes ToolCallID parameter through")
+func toolMacroPassesTypedCallID() {
+  assertMacroExpansion(
+    """
+    @Traced(tool: "search")
+    func search(query: String, callID: Terra.ToolCallID) async throws -> [Result] {
+      try await doSearch(query)
+    }
+    """,
+    expandedSource: """
+    func search(query: String, callID: Terra.ToolCallID) async throws -> [Result] {
+      return try await Terra.tool("search", callID: callID).run { trace in
         _ = trace
         try await doSearch(query)
       }
@@ -469,6 +490,27 @@ func modelMacroWrapsRuntimeStringParameter() {
   )
 }
 
+@Test("Model macro wraps provider String parameter into ProviderID")
+func modelMacroWrapsProviderStringParameter() {
+  assertMacroExpansion(
+    """
+    @Traced(model: "gpt-4")
+    func generate(prompt: String, provider: String) async throws -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    expandedSource: """
+    func generate(prompt: String, provider: String) async throws -> String {
+      return try await Terra.infer("gpt-4", prompt: prompt, provider: Terra.ProviderID(provider)).run { trace in
+        _ = trace
+        try await doGenerate(prompt)
+      }
+    }
+    """,
+    macros: testMacros
+  )
+}
+
 @Test("Explicit runtime macro arg overrides detected runtime parameter")
 func explicitRuntimeOverridesDetectedParam() {
   assertMacroExpansion(
@@ -501,7 +543,7 @@ func toolMacroWrapsRuntimeStringParameter() {
     """,
     expandedSource: """
     func search(query: String, runtime: String) async throws -> [Result] {
-      return try await Terra.tool("search", callID: Terra.ToolCallID(), runtime: Terra.RuntimeID(runtime)).run { trace in
+      return try await Terra.tool("search", runtime: Terra.RuntimeID(runtime)).run { trace in
         _ = trace
         try await doSearch(query)
       }

@@ -5,8 +5,10 @@ This guide migrates existing integrations to the canonical composable API:
 - Startup: `Terra.start(...)` (`async`)
 - Operations: `Terra.infer/stream/embed/agent/tool/safety`
 - Terminal: `.run { ... }`
-- Metadata: `.attr(...)`
+- Metadata: `.attr(...)` / `.metadata { ... }`
 - Per-call content capture: `.capture(.includeContent)`
+- Stable lifecycle errors: `Terra.TerraError` (`code`-based)
+- Typed identifiers: `Terra.ModelID`, `Terra.ProviderID`, `Terra.RuntimeID`, `Terra.ToolCallID`
 
 ## API Mapping
 
@@ -52,7 +54,14 @@ let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: prompt) {
 ### After
 
 ```swift
-let answer = try await Terra.infer("gpt-4o-mini", prompt: prompt).run {
+let answer = try await Terra
+  .infer(
+    Terra.ModelID("gpt-4o-mini"),
+    prompt: prompt,
+    provider: Terra.ProviderID("openai"),
+    runtime: Terra.RuntimeID("http_api")
+  )
+  .run {
   try await llm.generate(prompt)
 }
 ```
@@ -75,12 +84,34 @@ let answer = try await Terra
 
 ```swift
 let answer = try await Terra
-  .infer("gpt-4o-mini", prompt: prompt)
-  .attr(.init("app.user_tier"), "pro")
+  .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+  .metadata {
+    Terra.attr(.init("app.user_tier"), "pro")
+    Terra.event("request.start")
+  }
   .capture(.includeContent)
   .run {
     try await llm.generate(prompt)
   }
+```
+
+## Lifecycle Error Migration
+
+Lifecycle/configuration throws now surface as `Terra.TerraError` with stable `code` values:
+
+- `invalid_endpoint`
+- `persistence_setup_failed`
+- `already_started`
+- `invalid_lifecycle_state`
+
+Example assertion:
+
+```swift
+do {
+  try await Terra.start(config)
+} catch let error as Terra.TerraError {
+  guard error.code == .invalid_endpoint else { throw error }
+}
 ```
 
 ## Privacy Migration
