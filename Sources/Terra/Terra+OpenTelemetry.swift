@@ -344,7 +344,7 @@ extension Terra {
 
   // MARK: - Shutdown
 
-  /// Shuts down Terra gracefully, resetting the runtime to `.uninitialized`.
+  /// Shuts down Terra gracefully, resetting the runtime to `.stopped`.
   ///
   /// Flushes buffered telemetry to configured exporter(s) and releases provider
   /// resources before returning. After this call, `Terra.installOpenTelemetry()`

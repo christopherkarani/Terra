@@ -89,7 +89,7 @@ final class TerraLifecycleTests: XCTestCase {
     var config = minimalConfig()
     // We can't easily verify the borrowed provider is not shut down without
     // deeper OTel SDK inspection, so we assert the lifecycle contract:
-    // after shutdown Terra is .uninitialized and a fresh install is allowed.
+    // after shutdown Terra is .stopped and a fresh install is allowed.
     config = Terra.OpenTelemetryConfiguration(
       tracerProviderStrategy: .augmentExisting,
       enableTraces: false,

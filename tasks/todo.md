@@ -29,10 +29,10 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
 
 ### Phase 1 — Public lifecycle API
 
-- [ ] Implement public lifecycle API (`start/shutdown/reset/reconfigure`) with linearizable actor state machine.
-- [ ] Make `Terra.start` async and update all call sites/docs/examples accordingly.
-- [ ] Refactor auto-instrumentations to be reconfigurable (dynamic config store; no “install-once freezes config”).
-- [ ] Add concurrency-safe lifecycle tests (parallel start/stop/reconfigure; no hangs).
+- [x] Implement public lifecycle API (`start/shutdown/reset/reconfigure`) with linearizable actor state machine.
+- [x] Make `Terra.start` async and update all call sites/docs/examples accordingly.
+- [x] Refactor auto-instrumentations to be reconfigurable (dynamic config store; no “install-once freezes config”).
+- [x] Add concurrency-safe lifecycle tests (parallel start/stop/reconfigure; no hangs).
 
 ### Phase 2 — Capture model unification
 
