@@ -647,3 +647,24 @@ Goal: finish highest-complexity public API improvements end-to-end (lifecycle, c
   - `Docs/Front_Facing_API_Examples.md` (engine injection end-to-end snippet).
   - `Docs/Front_Facing_API.md` (injection seam signatures + operation enum coverage).
 - Validation: `bash Scripts/validate_no_legacy_refs.sh` ✅
+
+## DocC Bootstrap (2026-03-05)
+
+- [x] Create DocC catalog for `Terra` module.
+- [x] Add canonical API overview page (quickstart + operations + typed IDs + errors).
+- [x] Add advanced seam article for `TelemetryEngine` injection.
+- [x] Validate references/build impact.
+
+## Review (DocC Bootstrap)
+
+- [x] Summary of DocC additions.
+- [x] Validation evidence.
+
+- Added new DocC catalog under `Sources/TerraAutoInstrument/Terra.docc`.
+- Added technology root + topic navigation (`Terra.md`) and two focused articles:
+  - `Canonical-API.md` (quickstart, canonical factories, shared call composition, typed IDs, error model).
+  - `TelemetryEngine-Injection.md` (single seam injection with `run(using:)` and `TelemetryContext`).
+- Validation:
+  - `swift build` ✅
+  - legacy seam-name grep in DocC content: zero matches ✅
+  - `swift package generate-documentation` unavailable in this toolchain (`Unknown subcommand or plugin name 'generate-documentation'`).
