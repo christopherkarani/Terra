@@ -17,21 +17,24 @@
 import Foundation
 import Terra
 
+@main
+struct TerraAutoInstrumentExample {
+  static func main() async throws {
 // ──────────────────────────────────────────────
 // Tier 1: Zero-Code Auto-Instrumentation
 // ──────────────────────────────────────────────
 
-// One line. Every CoreML prediction and HTTP AI API call is now traced.
-try Terra.start()
+    // One line. Every CoreML prediction and HTTP AI API call is now traced.
+    try await Terra.start()
 
-// Configure with presets:
-// try Terra.start(.init(preset: .production))
-//
-// Or customize:
-// var config = Terra.Configuration()
-// config.enableLogs = true
-// config.profiling.enableMemoryProfiler = true
-// try Terra.start(config)
+    // Configure with presets:
+    // try await Terra.start(.init(preset: .production))
+    //
+    // Or customize:
+    // var config = Terra.Configuration()
+    // config.enableLogs = true
+    // config.profiling.enableMemoryProfiler = true
+    // try await Terra.start(config)
 
 // ──────────────────────────────────────────────
 // Tier 2: @Traced Annotation (import TerraTracedMacro)
@@ -42,7 +45,7 @@ try Terra.start()
 //   try await mlxContainer.generate(prompt: prompt, maxTokens: maxTokens)
 // }
 // The macro auto-detects `prompt` and `maxTokens` parameters and wraps
-// the function body in Terra.inference(...).execute { ... }.
+// the function body in Terra.infer(...).run { ... }.
 
 // ──────────────────────────────────────────────
 // Tier 3: TerraMLX Closure (import TerraMLX)
@@ -73,3 +76,5 @@ try Terra.start()
 
 print("Terra auto-instrumentation is active.")
 print("CoreML predictions and HTTP AI API calls will produce OpenTelemetry spans.")
+  }
+}
