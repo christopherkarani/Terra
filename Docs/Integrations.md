@@ -1,70 +1,66 @@
 # Integrations (Core ML, MLX)
 
-Terra intentionally keeps its **core API runtime-agnostic**: you instrument *your* inference/agent boundaries, and attach backend-specific metadata as **low-cardinality span attributes**.
+Terra keeps its core API runtime-agnostic. You instrument your boundaries and attach backend metadata as low-cardinality attributes.
 
 ## Core ML
 
-If your app uses Core ML, attach what you *know deterministically* at runtime:
+Capture deterministic runtime facts:
 
-- Model identifier (your own stable string, e.g. `"coreml/com.yourorg.model@v3"`)
-- Requested compute units (if you control the `MLModelConfiguration`)
-- Input shape/batch size (only if low-cardinality)
-
-Example:
+- model identifier (stable string)
+- compute units (`cpuAndGPU`, `all`, etc.)
+- bounded input shape/batch metadata
 
 ```swift
 import CoreML
-import OpenTelemetryApi
 import TerraCoreML
 import Terra
 
-let request = Terra.InferenceRequest(model: "coreml/com.yourorg.model@v3")
+let result = await Terra
+  .infer(
+    Terra.ModelID("coreml/com.yourorg.model@v3"),
+    runtime: Terra.RuntimeID("coreml"),
+    provider: Terra.ProviderID("coreml")
+  )
+  .attr(.init("terra.coreml.compute_units"), "all")
+  .run {
+    let config = MLModelConfiguration()
+    config.computeUnits = .all
+    // call Core ML here
+    return "ok"
+  }
 
-await Terra.withInferenceSpan(request) { scope in
-  let config = MLModelConfiguration()
-  config.computeUnits = .all
-  scope.setCoreMLAttributes(configuration: config)
-
-  // ... call into Core ML
-}
+_ = result
 ```
 
 ## MLX
 
-MLX (and MLX-based LLM stacks) typically expose runtime details like device placement and dtype/quantization. Capture only **bounded-cardinality** values:
+Capture bounded runtime labels:
 
-- Device: `"cpu"` / `"gpu"` (or your own normalized labels)
-- Dtype / quantization: `"fp16"` / `"int8"` / `"q4"` etc
-- Batch size (if bounded)
-
-Example:
+- device: `cpu`, `gpu`, `ane`
+- quantization/dtype: `q4`, `fp16`, etc.
+- bounded batch size
 
 ```swift
-import OpenTelemetryApi
 import Terra
 
-let request = Terra.InferenceRequest(model: "mlx/local/llama-3.2-1b")
+let result = await Terra
+  .infer(
+    Terra.ModelID("mlx/local/llama-3.2-1b"),
+    runtime: Terra.RuntimeID("mlx"),
+    provider: Terra.ProviderID("mlx")
+  )
+  .attr(.init("terra.mlx.device"), "gpu")
+  .attr(.init("terra.mlx.quantization"), "q4")
+  .run {
+    // call MLX here
+    return "ok"
+  }
 
-await Terra.withInferenceSpan(request) { scope in
-  scope.setAttributes([
-    "terra.runtime": .string("mlx"),
-    "terra.mlx.device": .string("gpu"),
-    "terra.mlx.quantization": .string("q4"),
-  ])
-
-  // ... call into MLX
-}
+_ = result
 ```
 
-## Cardinality + Privacy Rules of Thumb
+## Cardinality + Privacy Rules
 
-- Do **not** attach raw prompts, tool arguments, or model outputs as span attributes.
-- Prefer numeric **metrics** (counts/latencies) over per-token/per-step span events.
-- If you need content capture, use `Terra.Privacy` with `CaptureIntent.optIn` + redaction.
-
-## See Also
-
-- Persistence paths and storage configuration: `README.md`
-- Instrumentation version access: `README.md`
-- CI status badge and test commands: `README.md`
-- Licensing: `README.md`
+- Do not attach raw prompts/tool args/model outputs as attributes.
+- Prefer counts/latencies and bounded labels.
+- For content capture on specific calls, use `.capture(.includeContent)`.

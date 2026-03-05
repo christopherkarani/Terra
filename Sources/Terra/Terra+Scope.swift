@@ -9,7 +9,7 @@ extension Terra {
   // @unchecked Sendable: `underlyingSpan` is an immutable (`let`) reference. All mutations
   // (addEvent, setAttribute, status) delegate to the OTel SDK Span, which serializes access
   // through its own internal lock — no additional synchronization is needed here.
-  public final class Scope<Kind>: @unchecked Sendable {
+  final class Scope<Kind>: @unchecked Sendable {
     private let underlyingSpan: any Span
 
     init(span: any Span) {
@@ -17,9 +17,9 @@ extension Terra {
     }
 
     /// Advanced escape hatch for integrations that already depend on OpenTelemetry APIs.
-    public var span: any Span { underlyingSpan }
+    var span: any Span { underlyingSpan }
 
-    public func addEvent(_ name: String, attributes: [String: AttributeValue] = [:]) {
+    func addEvent(_ name: String, attributes: [String: AttributeValue] = [:]) {
       if attributes.isEmpty {
         underlyingSpan.addEvent(name: name)
       } else {
@@ -27,15 +27,16 @@ extension Terra {
       }
     }
 
-    public func recordError(_ error: any Error, captureMessage: Bool = true) {
+    func recordError(_ error: any Error, captureMessage: Bool? = nil) {
       let message = String(describing: error)
       let exceptionType = String(reflecting: type(of: error))
-      underlyingSpan.status = .error(description: captureMessage ? message : exceptionType)
+      let shouldCaptureMessage = captureMessage ?? Runtime.shared.privacy.shouldCapture(includeContent: false)
+      underlyingSpan.status = .error(description: shouldCaptureMessage ? message : exceptionType)
 
       var attributes: [String: AttributeValue] = [
         "exception.type": .string(exceptionType),
       ]
-      if captureMessage {
+      if shouldCaptureMessage {
         attributes["exception.message"] = .string(message)
       }
 
@@ -46,7 +47,7 @@ extension Terra {
       )
     }
 
-    public func setAttributes(_ attributes: [String: AttributeValue]) {
+    func setAttributes(_ attributes: [String: AttributeValue]) {
       underlyingSpan.setAttributes(attributes)
     }
   }

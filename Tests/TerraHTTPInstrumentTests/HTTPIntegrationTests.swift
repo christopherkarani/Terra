@@ -7,9 +7,42 @@ import XCTest
 @testable import TerraHTTPInstrument
 
 final class HTTPIntegrationTests: XCTestCase {
+  func testTestingIsolationLockSupportsAsyncThreadHop() async {
+    Terra.lockTestingIsolation()
+
+    let crossThreadUnlock = expectation(description: "cross-thread unlock")
+    DispatchQueue.global().async {
+      Terra.unlockTestingIsolation()
+      crossThreadUnlock.fulfill()
+    }
+    await fulfillment(of: [crossThreadUnlock], timeout: 1.0)
+
+    let secondAcquire = expectation(description: "second lock acquire")
+    DispatchQueue.global().async {
+      Terra.lockTestingIsolation()
+      Terra.unlockTestingIsolation()
+      secondAcquire.fulfill()
+    }
+
+    let result = XCTWaiter.wait(for: [secondAcquire], timeout: 1.0)
+    if result != .completed {
+      // Cleanup for implementations that still keep thread-affine lock ownership.
+      Terra.unlockTestingIsolation()
+    }
+    XCTAssertEqual(result, .completed)
+  }
+
   func testHTTPInstrumentationCapturesRequestAndResponseGenAIAttributes() async throws {
+    Terra.lockTestingIsolation()
+    let previousTracerProvider = OpenTelemetry.instance.tracerProvider
+    Terra.resetOpenTelemetryForTesting()
     HTTPAIInstrumentation.resetForTesting()
-    defer { HTTPAIInstrumentation.resetForTesting() }
+    defer {
+      HTTPAIInstrumentation.resetForTesting()
+      Terra.resetOpenTelemetryForTesting()
+      OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+      Terra.unlockTestingIsolation()
+    }
 
     let exporter = InMemoryExporter()
     let tracerProvider = TracerProviderSdk()

@@ -31,8 +31,7 @@ let package = Package(
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", from: "2.3.0"),
     .package(url: "https://github.com/apple/swift-crypto.git", from: "4.2.0"),
-    .package(url: "https://github.com/apple/swift-testing.git", from: "0.99.0"),
-    .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0")
+    .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0")
   ],
   targets: [
     // MARK: - Core Libraries
@@ -160,6 +159,7 @@ let package = Package(
       dependencies: [
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
         .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+        .product(name: "SwiftDiagnostics", package: "swift-syntax"),
       ],
       path: "Sources/TerraTracedMacroPlugin",
       exclude: ["CLAUDE.md"]
@@ -183,7 +183,7 @@ let package = Package(
         "TerraLlama",
         "TerraTraceKit",
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
-        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core")
+        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
       ],
       path: "Tests/TerraTests",
       exclude: ["CLAUDE.md"]
@@ -196,7 +196,6 @@ let package = Package(
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
-        .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraCoreMLTests",
       exclude: ["CLAUDE.md"]
@@ -208,7 +207,6 @@ let package = Package(
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "SwiftProtobuf", package: "swift-protobuf"),
-        .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraTraceKitTests",
       exclude: ["CLAUDE.md"]
@@ -221,7 +219,6 @@ let package = Package(
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
-        .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraHTTPInstrumentTests",
       exclude: ["CLAUDE.md"]
@@ -234,7 +231,6 @@ let package = Package(
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
-        .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraMLXTests",
       exclude: ["CLAUDE.md"]
@@ -249,7 +245,6 @@ let package = Package(
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
-        .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraAutoInstrumentTests",
       exclude: ["CLAUDE.md"]
@@ -262,7 +257,6 @@ let package = Package(
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
-        .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraFoundationModelsTests",
       exclude: ["CLAUDE.md"]
@@ -272,9 +266,11 @@ let package = Package(
       dependencies: [
         "TerraTracedMacroPlugin",
         "TerraTracedMacro",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+        .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
         .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
-        .product(name: "Testing", package: "swift-testing"),
       ],
       path: "Tests/TerraTracedMacroTests",
       exclude: ["CLAUDE.md"]

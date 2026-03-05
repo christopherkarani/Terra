@@ -12,14 +12,36 @@ import OpenTelemetryApi
 #endif
 
 extension Terra {
-  public struct Installation {
-    public var privacy: Privacy
-    public var meterProvider: (any MeterProvider)?
-    public var tracerProvider: (any TracerProvider)?
-    public var loggerProvider: (any LoggerProvider)?
-    public var registerProvidersAsGlobal: Bool
+  /// The lifecycle state of the Terra runtime.
+  ///
+  /// - Note: During `installOpenTelemetry()`, there is a brief window where
+  ///   `installedOpenTelemetryConfiguration` is committed but `lifecycleState`
+  ///   still reports `.stopped`. Do not use `lifecycleState` as a strict
+  ///   proxy for whether a configuration is active across concurrent contexts.
+  public enum LifecycleState: Sendable, Equatable {
+    /// Terra has not been started, or has been shut down. `Terra.start()` may be called.
+    case stopped
 
-    public init(
+    /// Terra is starting. A start/reconfigure call is in progress.
+    case starting
+
+    /// Terra is running. Telemetry is being collected and exported.
+    case running
+
+    /// Terra is shutting down. A shutdown/reset/reconfigure call is in progress.
+    case shuttingDown
+  }
+}
+
+extension Terra {
+  package struct Installation {
+    package var privacy: Privacy
+    package var meterProvider: (any MeterProvider)?
+    package var tracerProvider: (any TracerProvider)?
+    package var loggerProvider: (any LoggerProvider)?
+    package var registerProvidersAsGlobal: Bool
+
+    package init(
       privacy: Privacy = .default,
       meterProvider: (any MeterProvider)? = nil,
       tracerProvider: (any TracerProvider)? = nil,
@@ -46,6 +68,46 @@ final class Runtime {
   private var anonymizationKeyID: String
 
   let metrics = TerraMetrics()
+
+  // MARK: - Lifecycle
+
+  private var lifecycleStateValue: Terra.LifecycleState = .stopped
+
+  var lifecycleState: Terra.LifecycleState {
+    lock.lock()
+    defer { lock.unlock() }
+    return lifecycleStateValue
+  }
+
+  func markStarting() {
+    lock.lock()
+    defer { lock.unlock() }
+    lifecycleStateValue = .starting
+  }
+
+  func markRunning() {
+    lock.lock()
+    defer { lock.unlock() }
+    lifecycleStateValue = .running
+  }
+
+  func markShuttingDown() {
+    lock.lock()
+    defer { lock.unlock() }
+    lifecycleStateValue = .shuttingDown
+  }
+
+  func markStopped() {
+    lock.lock()
+    defer { lock.unlock() }
+    lifecycleStateValue = .stopped
+    privacyValue = .default
+    tracerProviderOverride = nil
+    loggerProviderOverride = nil
+    let key = Runtime.loadOrCreateAnonymizationKey()
+    anonymizationKey = key
+    anonymizationKeyID = Runtime.deriveAnonymizationKeyID(from: key)
+  }
 
   private init() {
     let key = Runtime.loadOrCreateAnonymizationKey()

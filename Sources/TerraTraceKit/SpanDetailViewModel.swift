@@ -3,21 +3,21 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 
 /// Display-ready attribute entry.
-public struct AttributeItem: Hashable, Identifiable {
-  public var id: String { "\(key)=\(value)" }
-  public let key: String
-  public let value: String
+struct AttributeItem: Hashable, Identifiable {
+  var id: String { "\(key)=\(value)" }
+  let key: String
+  let value: String
 }
 
 /// Display-ready event entry.
-public struct EventItem: Hashable, Identifiable {
-  public let id: String
-  public let name: String
-  public let timestamp: Date
-  public let attributes: [(String, String)]
-  public let attributesText: String
+struct EventItem: Hashable, Identifiable {
+  let id: String
+  let name: String
+  let timestamp: Date
+  let attributes: [(String, String)]
+  let attributesText: String
 
-  public init(name: String, timestamp: Date, attributes: [(String, String)] = []) {
+  init(name: String, timestamp: Date, attributes: [(String, String)] = []) {
     self.name = name
     self.timestamp = timestamp
     self.attributes = attributes
@@ -32,46 +32,46 @@ public struct EventItem: Hashable, Identifiable {
     id = "\(name)|\(timestamp.timeIntervalSinceReferenceDate)|\(compact)"
   }
 
-  public static func == (lhs: EventItem, rhs: EventItem) -> Bool {
+  static func == (lhs: EventItem, rhs: EventItem) -> Bool {
     lhs.id == rhs.id
   }
 
-  public func hash(into hasher: inout Hasher) {
+  func hash(into hasher: inout Hasher) {
     hasher.combine(id)
   }
 }
 
 /// Display-ready link entry.
-public struct LinkItem: Hashable, Identifiable {
-  public var id: String { "\(traceId.hexString)-\(spanId.hexString)" }
-  public let traceId: TraceId
-  public let spanId: SpanId
+struct LinkItem: Hashable, Identifiable {
+  var id: String { "\(traceId.hexString)-\(spanId.hexString)" }
+  let traceId: TraceId
+  let spanId: SpanId
 }
 
 /// View model for a selected span's details.
 @MainActor
-public final class SpanDetailViewModel {
+final class SpanDetailViewModel {
   /// Currently selected span.
-  public private(set) var selectedSpan: SpanData?
+  private(set) var selectedSpan: SpanData?
   /// Attributes prepared for display.
-  public private(set) var attributeItems: [AttributeItem] = []
+  private(set) var attributeItems: [AttributeItem] = []
   /// Events prepared for display.
-  public private(set) var eventItems: [EventItem] = []
+  private(set) var eventItems: [EventItem] = []
   /// Recommendation events prepared for display.
-  public private(set) var recommendationEventItems: [EventItem] = []
+  private(set) var recommendationEventItems: [EventItem] = []
   /// Anomaly events prepared for display.
-  public private(set) var anomalyEventItems: [EventItem] = []
+  private(set) var anomalyEventItems: [EventItem] = []
   /// Policy and audit events prepared for display.
-  public private(set) var policyEventItems: [EventItem] = []
+  private(set) var policyEventItems: [EventItem] = []
   /// Hardware telemetry events prepared for display.
-  public private(set) var hardwareEventItems: [EventItem] = []
+  private(set) var hardwareEventItems: [EventItem] = []
   /// Stream lifecycle events prepared for display.
-  public private(set) var lifecycleEventItems: [EventItem] = []
+  private(set) var lifecycleEventItems: [EventItem] = []
   /// Links prepared for display.
-  public private(set) var linkItems: [LinkItem] = []
+  private(set) var linkItems: [LinkItem] = []
 
   /// Event counts by category for display as filter chips.
-  public var eventCategoryCounts: [String: Int] {
+  var eventCategoryCounts: [String: Int] {
     [
       "Lifecycle": lifecycleEventItems.count,
       "Policy": policyEventItems.count,
@@ -82,10 +82,10 @@ public final class SpanDetailViewModel {
   }
 
   /// Creates an empty detail view model.
-  public init() {}
+  init() {}
 
   /// Updates detail state for the selected span.
-  public func select(span: SpanData) {
+  func select(span: SpanData) {
     selectedSpan = span
     attributeItems = span.attributes
       .sorted(by: { $0.key < $1.key })
@@ -145,7 +145,7 @@ public final class SpanDetailViewModel {
   }
 
   /// Clears the current selection and associated detail state.
-  public func clearSelection() {
+  func clearSelection() {
     selectedSpan = nil
     attributeItems = []
     eventItems = []

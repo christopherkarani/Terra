@@ -1,14 +1,13 @@
 import Foundation
-import OpenTelemetryApi
 import TerraCore
 
-public enum TerraLlama {
-  public struct DecodeStats: Sendable {
-    public var tokensPerSecond: Double?
-    public var timeToFirstTokenMS: Double?
-    public var kvCacheUsagePercent: Double?
+package enum TerraLlama {
+  package struct DecodeStats: Sendable {
+    package var tokensPerSecond: Double?
+    package var timeToFirstTokenMS: Double?
+    package var kvCacheUsagePercent: Double?
 
-    public init(
+    package init(
       tokensPerSecond: Double? = nil,
       timeToFirstTokenMS: Double? = nil,
       kvCacheUsagePercent: Double? = nil
@@ -19,12 +18,12 @@ public enum TerraLlama {
     }
   }
 
-  public struct LayerMetric: Sendable {
-    public var layerName: String
-    public var durationMS: Double
-    public var memoryMB: Double?
+  package struct LayerMetric: Sendable {
+    package var layerName: String
+    package var durationMS: Double
+    package var memoryMB: Double?
 
-    public init(layerName: String, durationMS: Double, memoryMB: Double? = nil) {
+    package init(layerName: String, durationMS: Double, memoryMB: Double? = nil) {
       self.layerName = layerName
       self.durationMS = durationMS
       self.memoryMB = memoryMB
@@ -32,52 +31,63 @@ public enum TerraLlama {
   }
 
   @discardableResult
-  public static func traced<R>(
+  package static func traced<R>(
     model: String,
     prompt: String? = nil,
-    _ body: @Sendable (Terra.StreamingInferenceScope) async throws -> R
+    _ body: @Sendable (Terra.StreamingTrace) async throws -> R
   ) async rethrows -> R {
-    var request = Terra.InferenceRequest(model: model, prompt: prompt)
-    request.stream = true
-    return try await Terra.withStreamingInferenceSpan(request) { streamScope in
-      streamScope.setAttributes([
-        Terra.Keys.Terra.runtime: .string("llama_cpp"),
-        Terra.Keys.Terra.autoInstrumented: .bool(true),
-      ])
-      return try await body(streamScope)
-    }
+    let request = Terra.StreamingRequest(model: model, prompt: prompt)
+    return try await Terra
+      .stream(request)
+      .provider("llama.cpp")
+      .runtime("llama_cpp")
+      .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)
+      .execute { trace in
+        try await body(trace)
+      }
   }
 
-  public static func applyDecodeStats(
+  package static func applyDecodeStats(
     _ stats: DecodeStats,
-    to scope: Terra.StreamingInferenceScope
+    to scope: Terra.StreamingTrace
   ) {
-    var attributes: [String: AttributeValue] = [:]
     if let tokensPerSecond = stats.tokensPerSecond {
-      attributes[Terra.Keys.Terra.streamTokensPerSecond] = .double(tokensPerSecond)
+      scope.attribute(.init(Terra.Keys.Terra.streamTokensPerSecond), tokensPerSecond)
     }
     if let timeToFirstTokenMS = stats.timeToFirstTokenMS {
-      attributes[Terra.Keys.Terra.streamTimeToFirstTokenMs] = .double(timeToFirstTokenMS)
+      scope.attribute(.init(Terra.Keys.Terra.streamTimeToFirstTokenMs), timeToFirstTokenMS)
     }
     if let kvCacheUsagePercent = stats.kvCacheUsagePercent {
-      attributes["terra.llama.kv_cache_usage_percent"] = .double(kvCacheUsagePercent)
+      scope.attribute(.init("terra.llama.kv_cache_usage_percent"), kvCacheUsagePercent)
     }
-    scope.setAttributes(attributes)
   }
 
-  public static func recordLayerMetrics(
+  package static func recordLayerMetrics(
     _ metrics: [LayerMetric],
-    to scope: Terra.StreamingInferenceScope
+    to scope: Terra.StreamingTrace
   ) {
     for metric in metrics {
-      var attributes: [String: AttributeValue] = [
-        "terra.llama.layer.name": .string(metric.layerName),
-        "terra.llama.layer.duration_ms": .double(metric.durationMS),
-      ]
-      if let memoryMB = metric.memoryMB {
-        attributes["terra.llama.layer.memory_mb"] = .double(memoryMB)
+      scope.emit(LayerProfileEvent(
+        layerName: metric.layerName,
+        durationMS: metric.durationMS,
+        memoryMB: metric.memoryMB
+      ))
+    }
+  }
+
+  private struct LayerProfileEvent: Terra.TerraEvent {
+    static var name: StaticString { "terra.llama.layer.profile" }
+
+    let layerName: String
+    let durationMS: Double
+    let memoryMB: Double?
+
+    func encode(into attributes: inout Terra.AttributeBag) {
+      attributes.set(.init("terra.llama.layer.name"), layerName)
+      attributes.set(.init("terra.llama.layer.duration_ms"), durationMS)
+      if let memoryMB {
+        attributes.set(.init("terra.llama.layer.memory_mb"), memoryMB)
       }
-      scope.addEvent("terra.llama.layer.profile", attributes: attributes)
     }
   }
 }

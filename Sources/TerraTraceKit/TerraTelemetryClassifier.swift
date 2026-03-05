@@ -1,23 +1,23 @@
 import OpenTelemetryApi
 
-public enum TerraTelemetryClassifier {
-  public static let recommendationEventName = "terra.recommendation"
-  public static let recommendationAttributePrefix = "terra.recommendation."
+enum TerraTelemetryClassifier {
+  static let recommendationEventName = "terra.recommendation"
+  static let recommendationAttributePrefix = "terra.recommendation."
 
-  public static let anomalyNamePrefix = "terra.anomaly"
-  public static let anomalyAttributePrefix = "terra.anomaly."
+  static let anomalyNamePrefix = "terra.anomaly"
+  static let anomalyAttributePrefix = "terra.anomaly."
 
-  public static let policyNamePrefix = "terra.policy"
-  public static let auditNamePrefix = "terra.audit"
-  public static let policyAttributePrefix = "terra.policy."
-  public static let auditAttributePrefix = "terra.audit."
+  static let policyNamePrefix = "terra.policy"
+  static let auditNamePrefix = "terra.audit"
+  static let policyAttributePrefix = "terra.policy."
+  static let auditAttributePrefix = "terra.audit."
 
-  public static let lifecycleEventNames: Set<String> = [
+  static let lifecycleEventNames: Set<String> = [
     "terra.first_token",
     "terra.token.lifecycle",
     "terra.stream.lifecycle",
   ]
-  public static let lifecycleAttributeKeys: Set<String> = [
+  static let lifecycleAttributeKeys: Set<String> = [
     "terra.token.stage",
     "terra.token.index",
     "terra.token.gap_ms",
@@ -26,11 +26,11 @@ public enum TerraTelemetryClassifier {
     "terra.stream.time_to_first_token_ms",
   ]
 
-  public static let hardwareNamePrefixes = [
+  static let hardwareNamePrefixes = [
     "terra.process.",
     "terra.hw.",
   ]
-  public static let hardwareAttributeKeys: Set<String> = [
+  static let hardwareAttributeKeys: Set<String> = [
     "terra.process.thermal_state",
     "process.memory.resident_delta_mb",
     "process.memory.peak_mb",
@@ -42,7 +42,7 @@ public enum TerraTelemetryClassifier {
     "terra.hw.ane_utilization_pct",
   ]
 
-  public static func isRecommendationEvent(
+  static func isRecommendationEvent(
     name: String,
     attributes: [String: OpenTelemetryApi.AttributeValue]
   ) -> Bool {
@@ -52,7 +52,7 @@ public enum TerraTelemetryClassifier {
     return attributes.keys.contains(where: { $0.hasPrefix(recommendationAttributePrefix) })
   }
 
-  public static func isAnomalyEvent(
+  static func isAnomalyEvent(
     name: String,
     attributes: [String: OpenTelemetryApi.AttributeValue]
   ) -> Bool {
@@ -62,7 +62,7 @@ public enum TerraTelemetryClassifier {
     return attributes.keys.contains(where: { $0.hasPrefix(anomalyAttributePrefix) })
   }
 
-  public static func isPolicyEvent(
+  static func isPolicyEvent(
     name: String,
     attributes: [String: OpenTelemetryApi.AttributeValue]
   ) -> Bool {
@@ -74,7 +74,7 @@ public enum TerraTelemetryClassifier {
     }
   }
 
-  public static func isLifecycleEvent(
+  static func isLifecycleEvent(
     name: String,
     attributes: [String: OpenTelemetryApi.AttributeValue]
   ) -> Bool {
@@ -86,7 +86,7 @@ public enum TerraTelemetryClassifier {
     }
   }
 
-  public static func isHardwareEvent(
+  static func isHardwareEvent(
     name: String,
     attributes: [String: OpenTelemetryApi.AttributeValue]
   ) -> Bool {

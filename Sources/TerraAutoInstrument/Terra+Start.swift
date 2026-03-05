@@ -4,57 +4,240 @@ import TerraCoreML
 import TerraHTTPInstrument
 import TerraMetalProfiler
 import TerraSystemProfiler
+import OpenTelemetryApi
 import OpenTelemetrySdk
 
 extension Terra {
-  /// Configuration for `Terra.start()` auto-instrumentation.
-  public struct AutoInstrumentConfiguration: Sendable {
-    /// Privacy settings for all auto-instrumented spans.
-    public var privacy: Privacy
+  public struct Configuration: Sendable, Equatable {
+    public enum Preset: Sendable {
+      case quickstart
+      case production
+      case diagnostics
+    }
 
-    /// OpenTelemetry configuration (endpoints, persistence, etc.).
-    public var openTelemetry: OpenTelemetryConfiguration
+    public var privacy: Terra.PrivacyPolicy = .redacted
+    public var endpoint: URL = .init(string: "http://127.0.0.1:4318")!
+    public var serviceName: String? = nil
+    public var instrumentations: Instrumentations = .all
+    public var serviceVersion: String? = nil
+    public var anonymizationKey: Data? = nil
+    public var samplingRatio: Double? = nil
+    public var persistence: Persistence? = nil
+    public var metricsInterval: TimeInterval = 60
+    public var enableSignposts: Bool = true
+    public var enableSessions: Bool = true
+    public var resourceAttributes: [String: String] = [:]
+    public var profiling: Profiling = .init()
+    public var openClaw: OpenClawConfiguration = .disabled
+    public var excludedCoreMLModels: Set<String> = []
+    public var enableLogs: Bool = false
 
-    /// Which auto-instrumentations to enable.
-    public var instrumentations: Instrumentations
+    public init() {}
 
-    /// OpenClaw-specific configuration for diagnostics and gateway paths.
-    public var openClaw: OpenClawConfiguration
+    public init(preset: Preset = .quickstart) {
+      self.init()
+      switch preset {
+      case .quickstart:
+        break
+      case .production:
+        persistence = .init(
+          storageURL: Terra.defaultPersistenceStorageURL(),
+          performance: .balanced
+        )
+      case .diagnostics:
+        persistence = .init(
+          storageURL: Terra.defaultPersistenceStorageURL(),
+          performance: .balanced
+        )
+        instrumentations.insert(.openClawDiagnostics)
+        enableSignposts = true
+        enableSessions = true
+        enableLogs = true
+        metricsInterval = 15
+        profiling = .init(enableMemoryProfiler: true, enableMetalProfiler: true)
+        openClaw = .init(mode: .diagnosticsOnly)
+        resourceAttributes["terra.profile"] = "diagnostics"
+      }
+    }
 
-    /// Optional proxy configuration used when `.proxy` instrumentation is enabled.
-    public var proxy: ProxyConfiguration?
+    func asAutoInstrumentConfiguration() -> _ResolvedStartConfiguration {
+      var openTelemetryAttributes: [String: AttributeValue] = [:]
+      for (key, value) in resourceAttributes {
+        openTelemetryAttributes[key] = .string(value)
+      }
+      return .init(
+        privacy: .init(
+          contentPolicy: {
+            switch privacy {
+            case .capturing:
+              return .always
+            case .silent:
+              return .never
+            case .redacted, .lengthOnly:
+              return .optIn
+            }
+          }(),
+          redaction: privacy.redactionStrategy,
+          anonymizationKey: anonymizationKey
+        ),
+        openTelemetry: .init(
+          enableTraces: true,
+          enableMetrics: true,
+          enableLogs: enableLogs,
+          enableSignposts: enableSignposts,
+          enableSessions: enableSessions,
+          otlpTracesEndpoint: endpoint.appendingPathComponent("v1/traces"),
+          otlpMetricsEndpoint: endpoint.appendingPathComponent("v1/metrics"),
+          otlpLogsEndpoint: endpoint.appendingPathComponent("v1/logs"),
+          metricsExportInterval: metricsInterval,
+          persistence: persistence.map(\.asInternalConfiguration),
+          serviceName: serviceName,
+          serviceVersion: serviceVersion,
+          resourceAttributes: openTelemetryAttributes,
+          traceSamplingRatio: samplingRatio
+        ),
+        instrumentations: instrumentations,
+        openClaw: openClaw,
+        proxy: nil,
+        aiAPIHosts: HTTPAIInstrumentation.defaultAIHosts,
+        excludedCoreMLModels: excludedCoreMLModels,
+        profiling: profiling
+      )
+    }
 
-    /// Known AI API hosts for HTTP instrumentation.
-    public var aiAPIHosts: Set<String>
+    public struct Persistence: Equatable, Sendable {
+      public struct Performance: Equatable, Sendable {
+        public var maxFileSize: UInt64
+        public var maxDirectorySize: UInt64
+        public var maxFileAgeForWrite: TimeInterval
+        public var minFileAgeForRead: TimeInterval
+        public var maxFileAgeForRead: TimeInterval
+        public var maxObjectsInFile: Int
+        public var maxObjectSize: UInt64
+        public var synchronousWrite: Bool
 
-    /// Model names to exclude from CoreML auto-instrumentation.
-    public var excludedCoreMLModels: Set<String>
+        public var initialExportDelay: TimeInterval
+        public var defaultExportDelay: TimeInterval
+        public var minExportDelay: TimeInterval
+        public var maxExportDelay: TimeInterval
+        public var exportDelayChangeRate: Double
 
-    /// Low-level profiling toggles (memory/GPU).
-    public var profiling: Profiling
+        public init(
+          maxFileSize: UInt64,
+          maxDirectorySize: UInt64,
+          maxFileAgeForWrite: TimeInterval,
+          minFileAgeForRead: TimeInterval,
+          maxFileAgeForRead: TimeInterval,
+          maxObjectsInFile: Int,
+          maxObjectSize: UInt64,
+          synchronousWrite: Bool,
+          initialExportDelay: TimeInterval,
+          defaultExportDelay: TimeInterval,
+          minExportDelay: TimeInterval,
+          maxExportDelay: TimeInterval,
+          exportDelayChangeRate: Double
+        ) {
+          self.maxFileSize = maxFileSize
+          self.maxDirectorySize = maxDirectorySize
+          self.maxFileAgeForWrite = maxFileAgeForWrite
+          self.minFileAgeForRead = minFileAgeForRead
+          self.maxFileAgeForRead = maxFileAgeForRead
+          self.maxObjectsInFile = maxObjectsInFile
+          self.maxObjectSize = maxObjectSize
+          self.synchronousWrite = synchronousWrite
+          self.initialExportDelay = initialExportDelay
+          self.defaultExportDelay = defaultExportDelay
+          self.minExportDelay = minExportDelay
+          self.maxExportDelay = maxExportDelay
+          self.exportDelayChangeRate = exportDelayChangeRate
+        }
 
-    public init(
-      privacy: Privacy = .default,
-      openTelemetry: OpenTelemetryConfiguration = .init(),
-      instrumentations: Instrumentations = .all,
-      openClaw: OpenClawConfiguration = .disabled,
-      proxy: ProxyConfiguration? = nil,
-      aiAPIHosts: Set<String> = HTTPAIInstrumentation.defaultAIHosts,
-      excludedCoreMLModels: Set<String> = [],
-      profiling: Profiling = .init()
-    ) {
-      self.privacy = privacy
-      self.openTelemetry = openTelemetry
-      self.instrumentations = instrumentations
-      self.openClaw = openClaw
-      self.proxy = proxy
-      self.aiAPIHosts = aiAPIHosts
-      self.excludedCoreMLModels = excludedCoreMLModels
-      self.profiling = profiling
+        public static let balanced = Performance(
+          maxFileSize: 4 * 1_024 * 1_024,
+          maxDirectorySize: 512 * 1_024 * 1_024,
+          maxFileAgeForWrite: 4.75,
+          minFileAgeForRead: 5.25,
+          maxFileAgeForRead: 18 * 60 * 60,
+          maxObjectsInFile: 500,
+          maxObjectSize: 256 * 1_024,
+          synchronousWrite: false,
+          initialExportDelay: 5,
+          defaultExportDelay: 5,
+          minExportDelay: 1,
+          maxExportDelay: 20,
+          exportDelayChangeRate: 0.1
+        )
+
+        public static let lowRuntimeImpact = balanced
+
+        public static let instantDelivery = Performance(
+          maxFileSize: 4 * 1_024 * 1_024,
+          maxDirectorySize: 512 * 1_024 * 1_024,
+          maxFileAgeForWrite: 2.75,
+          minFileAgeForRead: 3.25,
+          maxFileAgeForRead: 18 * 60 * 60,
+          maxObjectsInFile: 500,
+          maxObjectSize: 256 * 1_024,
+          synchronousWrite: true,
+          initialExportDelay: 0.5,
+          defaultExportDelay: 3,
+          minExportDelay: 1,
+          maxExportDelay: 5,
+          exportDelayChangeRate: 0.5
+        )
+      }
+
+      public var storageURL: URL
+      public var performance: Performance
+
+      public init(
+        storageURL: URL,
+        performance: Performance = .balanced
+      ) {
+        self.storageURL = storageURL
+        self.performance = performance
+      }
+
+      public static func defaults() -> Self {
+        .init(storageURL: defaultStorageURL(), performance: .balanced)
+      }
+
+      public static func defaults(storageURL: URL) -> Self {
+        .init(storageURL: storageURL, performance: .balanced)
+      }
+
+      fileprivate var asInternalConfiguration: PersistenceConfiguration {
+        .init(
+          storageURL: storageURL,
+          performancePreset: .init(
+            maxFileSize: performance.maxFileSize,
+            maxDirectorySize: performance.maxDirectorySize,
+            maxFileAgeForWrite: performance.maxFileAgeForWrite,
+            minFileAgeForRead: performance.minFileAgeForRead,
+            maxFileAgeForRead: performance.maxFileAgeForRead,
+            maxObjectsInFile: performance.maxObjectsInFile,
+            maxObjectSize: performance.maxObjectSize,
+            synchronousWrite: performance.synchronousWrite,
+            initialExportDelay: performance.initialExportDelay,
+            defaultExportDelay: performance.defaultExportDelay,
+            minExportDelay: performance.minExportDelay,
+            maxExportDelay: performance.maxExportDelay,
+            exportDelayChangeRate: performance.exportDelayChangeRate
+          )
+        )
+      }
+
+      private static func defaultStorageURL() -> URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+          ?? FileManager.default.temporaryDirectory
+        return base
+          .appendingPathComponent("opentelemetry", isDirectory: true)
+          .appendingPathComponent("terra", isDirectory: true)
+      }
     }
   }
 
-  public struct Profiling: Sendable {
+  public struct Profiling: Sendable, Equatable {
     public var enableMemoryProfiler: Bool
     public var enableMetalProfiler: Bool
 
@@ -68,7 +251,7 @@ extension Terra {
   }
 
   /// Which auto-instrumentations to enable with `Terra.start()`.
-  public struct Instrumentations: OptionSet, Sendable {
+  public struct Instrumentations: OptionSet, Sendable, Equatable {
     public let rawValue: Int
     public init(rawValue: Int) { self.rawValue = rawValue }
 
@@ -79,6 +262,7 @@ extension Terra {
     public static let httpAIAPIs = Instrumentations(rawValue: 1 << 1)
 
     /// Reserved for low-level proxy instrumentation.
+    @available(*, deprecated, message: "Proxy instrumentation is not implemented. This option will be removed in a future release.")
     public static let proxy = Instrumentations(rawValue: 1 << 2)
 
     /// Auto-instrument OpenClaw gateway requests (localhost/OpenClaw hosts).
@@ -96,23 +280,33 @@ extension Terra {
     public static let none = Instrumentations([])
   }
 
-  /// One-line auto-instrumentation setup.
+  /// Start Terra telemetry with a configuration value.
   ///
-  /// Configures OpenTelemetry, installs Terra, and enables auto-instrumentation
-  /// for CoreML predictions and HTTP AI API calls.
+  /// This is the canonical entry point. Pass a `Configuration` to customize
+  /// behavior, or call with no arguments for quickstart defaults.
   ///
   /// ```swift
-  /// import Terra
-  /// try Terra.start()
+  /// // Quickstart (zero config)
+  /// try await Terra.start()
+  ///
+  /// // Production with persistence
+  /// try await Terra.start(.init(preset: .production))
+  ///
+  /// // Custom
+  /// var config = Terra.Configuration()
+  /// config.enableLogs = true
+  /// config.profiling.enableMemoryProfiler = true
+  /// try await Terra.start(config)
   /// ```
   ///
-  /// After calling `start()`, every CoreML prediction and HTTP request to known
-  /// AI API endpoints will automatically produce OpenTelemetry spans with
-  /// GenAI semantic convention attributes.
-  ///
-  /// Foundation Models and MLX wrappers are used independently via their
-  /// respective modules (`TerraFoundationModels`, `TerraMLX`).
-  public static func start(_ config: AutoInstrumentConfiguration = .init()) throws {
+  /// - Throws: `TerraError` with deterministic codes such as
+  ///   `.invalid_endpoint`, `.persistence_setup_failed`, `.already_started`,
+  ///   or `.invalid_lifecycle_state`.
+  public static func start(_ config: Configuration = .init()) async throws {
+    try await _lifecycleController.start(config)
+  }
+
+  static func _performStart(_ config: _ResolvedStartConfiguration) throws {
     // 1. Set up OpenTelemetry providers (traces, metrics, signposts, sessions)
     var openTelemetryConfig = config.openTelemetry
     if openTelemetryConfig.serviceName == nil {
@@ -127,11 +321,10 @@ extension Terra {
     install(.init(privacy: config.privacy))
 
     // 3. Enable CoreML auto-instrumentation
-    if config.instrumentations.contains(.coreML) {
-      CoreMLInstrumentation.install(.init(
-        excludedModels: config.excludedCoreMLModels
-      ))
-    }
+    CoreMLInstrumentation.install(.init(
+      enabled: config.instrumentations.contains(.coreML),
+      excludedModels: config.excludedCoreMLModels
+    ))
 
     // 3b. Optional low-level profilers.
     if config.profiling.enableMemoryProfiler {
@@ -153,8 +346,14 @@ extension Terra {
 
     if config.instrumentations.contains(.httpAIAPIs) || shouldEnableOpenClawGateway {
       HTTPAIInstrumentation.install(
-        hosts: monitoredHosts,
+        hosts: config.instrumentations.contains(.httpAIAPIs) ? monitoredHosts : [],
         openClawGatewayHosts: openClawGatewayHosts,
+        openClawMode: config.openClaw.modeString
+      )
+    } else {
+      HTTPAIInstrumentation.install(
+        hosts: [],
+        openClawGatewayHosts: [],
         openClawMode: config.openClaw.modeString
       )
     }
@@ -168,8 +367,25 @@ extension Terra {
     let shouldEnableDiagnostics =
       config.instrumentations.contains(.openClawDiagnostics)
       || config.openClaw.shouldEnableDiagnosticsExport
-    if shouldEnableDiagnostics {
-      OpenClawDiagnosticsExporter.installIfNeeded(configuration: config.openClaw)
-    }
+    OpenClawDiagnosticsExporter.configure(configuration: shouldEnableDiagnostics ? config.openClaw : .disabled)
+  }
+
+  static func _disableAutoInstrumentationsForShutdown() {
+    CoreMLInstrumentation.install(.init(enabled: false, excludedModels: []))
+    HTTPAIInstrumentation.install(hosts: [], openClawGatewayHosts: [], openClawMode: "disabled")
+    OpenClawDiagnosticsExporter.configure(configuration: .disabled)
+  }
+}
+
+extension Terra {
+  struct _ResolvedStartConfiguration: Sendable {
+    var privacy: Privacy
+    var openTelemetry: OpenTelemetryConfiguration
+    var instrumentations: Instrumentations
+    var openClaw: OpenClawConfiguration
+    var proxy: ProxyConfiguration?
+    var aiAPIHosts: Set<String>
+    var excludedCoreMLModels: Set<String>
+    var profiling: Profiling
   }
 }

@@ -5,19 +5,20 @@ import TerraSystemProfiler
 /// An on-device GenAI observability façade built on OpenTelemetry Swift.
 public enum Terra {
   /// The OpenTelemetry instrumentation scope name for Terra spans and metrics.
-  public static let instrumentationName: String = "io.opentelemetry.terra"
-  public static let instrumentationVersion: String? = nil
+  package static let instrumentationName: String = "io.opentelemetry.terra"
+  package static let instrumentationVersion: String? = nil
 
   /// Installs Terra configuration. If providers are supplied they may be registered globally.
-  public static func install(_ installation: Installation) {
+  package static func install(_ installation: Installation) {
     Runtime.shared.install(installation)
   }
 
   // MARK: - Public API (Phase 2)
 
   @discardableResult
-  public static func withInferenceSpan<R>(
+  static func withInferenceSpan<R>(
     _ request: InferenceRequest,
+    stream: Bool? = nil,
     _ body: @Sendable (Scope<InferenceSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
@@ -34,11 +35,11 @@ public enum Terra {
     if let temperature = request.temperature {
       attributes[Keys.GenAI.requestTemperature] = .double(temperature)
     }
-    if let stream = request.stream {
+    if let stream {
       attributes[Keys.GenAI.requestStream] = .bool(stream)
     }
 
-    if let prompt = request.prompt, privacy.shouldCapture(promptCapture: request.promptCapture) {
+    if let prompt = request.prompt, privacy.shouldCapture(includeContent: request.includeContent) {
       attributes.merge(
         redactedStringAttributes(
           original: prompt,
@@ -60,32 +61,38 @@ public enum Terra {
       name: SpanNames.inference,
       kind: .internal,
       attributes: attributes,
-      allowErrorMessageCapture: privacy.shouldCapture(promptCapture: request.promptCapture),
+      allowErrorMessageCapture: privacy.shouldCapture(includeContent: request.includeContent),
       body
     )
   }
 
   @discardableResult
-  public static func withStreamingInferenceSpan<R>(
-    _ request: InferenceRequest,
+  static func withStreamingInferenceSpan<R>(
+    _ request: StreamingRequest,
     _ body: @Sendable (StreamingInferenceScope) async throws -> R
   ) async rethrows -> R {
-    var streamingRequest = request
-    if streamingRequest.stream == nil {
-      streamingRequest.stream = true
-    }
+    let streamingRequest = InferenceRequest(
+      model: request.model,
+      prompt: request.prompt,
+      includeContent: request.includeContent,
+      maxOutputTokens: request.maxOutputTokens,
+      temperature: request.temperature
+    )
 
     let startedAt = ContinuousClock.now
-    return try await withInferenceSpan(streamingRequest) { scope in
+    return try await withInferenceSpan(streamingRequest, stream: true) { scope in
       let streamingScope = StreamingInferenceScope(scope: scope, startedAt: startedAt)
+      if let expectedOutputTokens = request.expectedOutputTokens, expectedOutputTokens > 0 {
+        streamingScope.setAttributes([Keys.Terra.streamOutputTokens: .int(expectedOutputTokens)])
+      }
       defer { streamingScope.finish() }
       return try await body(streamingScope)
     }
   }
 
   @discardableResult
-  public static func withAgentInvocationSpan<R>(
-    agent: Agent,
+  static func withAgentInvocationSpan<R>(
+    agent: AgentRequest,
     _ body: @Sendable (Scope<AgentInvocationSpan>) async throws -> R
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
@@ -100,21 +107,20 @@ public enum Terra {
       name: SpanNames.agentInvocation,
       kind: .internal,
       attributes: attributes,
-      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(promptCapture: .default),
+      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(includeContent: false),
       body
     )
   }
 
   @discardableResult
-  public static func withToolExecutionSpan<R>(
-    tool: Tool,
-    call: ToolCall,
+  static func withToolExecutionSpan<R>(
+    tool: ToolRequest,
     _ body: @Sendable (Scope<ToolExecutionSpan>) async throws -> R
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.executeTool.rawValue),
       Keys.GenAI.toolName: .string(tool.name),
-      Keys.GenAI.toolCallID: .string(call.id),
+      Keys.GenAI.toolCallID: .string(tool.callID),
     ]
     if let type = tool.type {
       attributes[Keys.GenAI.toolType] = .string(type)
@@ -124,13 +130,13 @@ public enum Terra {
       name: SpanNames.toolExecution,
       kind: .internal,
       attributes: attributes,
-      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(promptCapture: .default),
+      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(includeContent: false),
       body
     )
   }
 
   @discardableResult
-  public static func withEmbeddingSpan<R>(
+  static func withEmbeddingSpan<R>(
     _ request: EmbeddingRequest,
     _ body: @Sendable (Scope<EmbeddingSpan>) async throws -> R
   ) async rethrows -> R {
@@ -146,14 +152,14 @@ public enum Terra {
       name: SpanNames.embedding,
       kind: .internal,
       attributes: attributes,
-      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(promptCapture: .default),
+      allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(includeContent: false),
       body
     )
   }
 
   @discardableResult
-  public static func withSafetyCheckSpan<R>(
-    _ check: SafetyCheck,
+  static func withSafetyCheckSpan<R>(
+    _ check: SafetyCheckRequest,
     _ body: @Sendable (Scope<SafetyCheckSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
@@ -163,7 +169,7 @@ public enum Terra {
       Keys.Terra.safetyCheckName: .string(check.name),
     ]
 
-    if let subject = check.subject, privacy.shouldCapture(promptCapture: check.subjectCapture) {
+    if let subject = check.subject, privacy.shouldCapture(includeContent: check.includeContent) {
       attributes.merge(
         redactedStringAttributes(
           original: subject,
@@ -179,7 +185,7 @@ public enum Terra {
       name: SpanNames.safetyCheck,
       kind: .internal,
       attributes: attributes,
-      allowErrorMessageCapture: privacy.shouldCapture(promptCapture: check.subjectCapture),
+      allowErrorMessageCapture: privacy.shouldCapture(includeContent: check.includeContent),
       body
     )
   }
@@ -235,7 +241,7 @@ public enum Terra {
     }
   }
 
-  public final class StreamingInferenceScope: @unchecked Sendable {
+  final class StreamingInferenceScope: @unchecked Sendable {
     private let scope: Scope<InferenceSpan>
     private let startedAt: ContinuousClock.Instant
     private let lock = NSLock()
@@ -248,17 +254,21 @@ public enum Terra {
       self.startedAt = startedAt
     }
 
-    public var span: any Span { scope.span }
+    var span: any Span { scope.span }
 
-    public func addEvent(_ name: String, attributes: [String: AttributeValue] = [:]) {
+    func addEvent(_ name: String, attributes: [String: AttributeValue] = [:]) {
       scope.addEvent(name, attributes: attributes)
     }
 
-    public func setAttributes(_ attributes: [String: AttributeValue]) {
+    func setAttributes(_ attributes: [String: AttributeValue]) {
       scope.setAttributes(attributes)
     }
 
-    public func recordToken(_ count: Int = 1) {
+    func recordError(_ error: any Error) {
+      scope.recordError(error)
+    }
+
+    func recordToken(_ count: Int = 1) {
       guard count > 0 else { return }
       let now = ContinuousClock.now
       var shouldEmitFirstTokenEvent = false
@@ -275,7 +285,7 @@ public enum Terra {
       }
     }
 
-    public func recordOutputTokenCount(_ totalCount: Int) {
+    func recordOutputTokenCount(_ totalCount: Int) {
       guard totalCount >= 0 else { return }
       let now = ContinuousClock.now
       var shouldEmitFirstTokenEvent = false
@@ -292,11 +302,26 @@ public enum Terra {
       }
     }
 
-    public func recordChunk() {
+    func recordChunk() {
       let now = ContinuousClock.now
       var shouldEmitFirstTokenEvent = false
       lock.lock()
       chunkCount += 1
+      if firstTokenAt == nil {
+        firstTokenAt = now
+        shouldEmitFirstTokenEvent = true
+      }
+      lock.unlock()
+
+      if shouldEmitFirstTokenEvent {
+        scope.addEvent(Keys.Terra.streamFirstTokenEvent)
+      }
+    }
+
+    func recordFirstToken() {
+      let now = ContinuousClock.now
+      var shouldEmitFirstTokenEvent = false
+      lock.lock()
       if firstTokenAt == nil {
         firstTokenAt = now
         shouldEmitFirstTokenEvent = true

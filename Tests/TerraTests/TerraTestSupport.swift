@@ -51,6 +51,7 @@ final class TerraTestSupport {
   let spanExporter: InMemoryExporter
 
   init() {
+    Terra.lockTestingIsolation()
     previousTracerProvider = OpenTelemetry.instance.tracerProvider
 
     if #available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *) {
@@ -67,6 +68,7 @@ final class TerraTestSupport {
 
   deinit {
     OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+    Terra.unlockTestingIsolation()
   }
 
   func finishedSpans() -> [SpanData] {

@@ -10,14 +10,14 @@ public enum TerraMLX {
   ///
   /// Usage:
   /// ```swift
-  /// let result = try await TerraMLX.traced(model: "mlx-community/Llama-3.2-1B", maxTokens: 256) {
+  /// let result = try await TerraMLX.traced(model: Terra.ModelID("mlx-community/Llama-3.2-1B"), maxTokens: 256) {
   ///   // Your mlx-swift generation code here
   ///   return resultString
   /// }
   /// ```
   @discardableResult
   public static func traced<R>(
-    model: String,
+    model: Terra.ModelID,
     maxTokens: Int? = nil,
     temperature: Double? = nil,
     device: String? = nil,
@@ -26,26 +26,28 @@ public enum TerraMLX {
     _ body: @Sendable () async throws -> R
   ) async throws -> R {
     let request = Terra.InferenceRequest(
-      model: model,
+      model: model.rawValue,
       maxOutputTokens: maxTokens,
       temperature: temperature
     )
-    return try await Terra.withInferenceSpan(request) { scope in
-      var attributes: [String: AttributeValue] = [
-        Terra.Keys.Terra.runtime: .string("mlx"),
-        Terra.Keys.Terra.autoInstrumented: .bool(true)
-      ]
-      if let device {
-        attributes["terra.mlx.device"] = .string(device)
-      }
-      if let memoryFootprintMB {
-        attributes["terra.mlx.memory_footprint_mb"] = .double(memoryFootprintMB)
-      }
-      if let modelLoadDurationMS {
-        attributes["terra.mlx.model_load_duration_ms"] = .double(modelLoadDurationMS)
-      }
-      scope.setAttributes(attributes)
-      return try await body()
+    var call = Terra
+      .inference(request)
+      .provider("mlx")
+      .runtime("mlx")
+      .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)
+
+    if let device {
+      call = call.attribute(.init("terra.mlx.device"), device)
+    }
+    if let memoryFootprintMB {
+      call = call.attribute(.init("terra.mlx.memory_footprint_mb"), memoryFootprintMB)
+    }
+    if let modelLoadDurationMS {
+      call = call.attribute(.init("terra.mlx.model_load_duration_ms"), modelLoadDurationMS)
+    }
+
+    return try await call.execute {
+      try await body()
     }
   }
 

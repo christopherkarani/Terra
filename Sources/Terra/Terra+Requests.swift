@@ -3,88 +3,141 @@ import Foundation
 extension Terra {
   // MARK: - Typed scope markers
 
-  public enum InferenceSpan: Sendable {}
-  public enum EmbeddingSpan: Sendable {}
-  public enum AgentInvocationSpan: Sendable {}
-  public enum ToolExecutionSpan: Sendable {}
-  public enum SafetyCheckSpan: Sendable {}
+  enum InferenceSpan: Sendable {}
+  enum EmbeddingSpan: Sendable {}
+  enum AgentInvocationSpan: Sendable {}
+  enum ToolExecutionSpan: Sendable {}
+  enum SafetyCheckSpan: Sendable {}
 
   // MARK: - Requests
 
-  public struct InferenceRequest: Sendable, Hashable {
-    public var model: String
-    public var prompt: String?
-    public var promptCapture: CaptureIntent
+  package struct InferenceRequest: Sendable, Hashable {
+    package var model: String
+    package var prompt: String?
+    package var includeContent: Bool
 
-    public var maxOutputTokens: Int?
-    public var temperature: Double?
-    public var stream: Bool?
+    package var maxOutputTokens: Int?
+    package var temperature: Double?
 
-    public init(
+    package init(
       model: String,
       prompt: String? = nil,
-      promptCapture: CaptureIntent = .default,
+      includeContent: Bool = false,
       maxOutputTokens: Int? = nil,
-      temperature: Double? = nil,
-      stream: Bool? = nil
+      temperature: Double? = nil
     ) {
       self.model = model
       self.prompt = prompt
-      self.promptCapture = promptCapture
+      self.includeContent = includeContent
       self.maxOutputTokens = maxOutputTokens
       self.temperature = temperature
-      self.stream = stream
+    }
+
+    package static func chat(model: String, prompt: String? = nil) -> Self {
+      .init(model: model, prompt: prompt)
+    }
+
+    package func maxOutputTokens(_ value: Int) -> Self {
+      var copy = self
+      copy.maxOutputTokens = value
+      return copy
+    }
+
+    package func temperature(_ value: Double) -> Self {
+      var copy = self
+      copy.temperature = value
+      return copy
     }
   }
 
-  public struct EmbeddingRequest: Sendable, Hashable {
-    public var model: String
-    public var inputCount: Int?
+  package struct StreamingRequest: Sendable, Hashable {
+    package var model: String
+    package var prompt: String?
+    package var includeContent: Bool
+    package var maxOutputTokens: Int?
+    package var temperature: Double?
+    package var expectedOutputTokens: Int?
 
-    public init(model: String, inputCount: Int? = nil) {
+    package init(
+      model: String,
+      prompt: String? = nil,
+      includeContent: Bool = false,
+      maxOutputTokens: Int? = nil,
+      temperature: Double? = nil,
+      expectedOutputTokens: Int? = nil
+    ) {
+      self.model = model
+      self.prompt = prompt
+      self.includeContent = includeContent
+      self.maxOutputTokens = maxOutputTokens
+      self.temperature = temperature
+      self.expectedOutputTokens = expectedOutputTokens
+    }
+
+    package static func chat(model: String, prompt: String? = nil) -> Self {
+      .init(model: model, prompt: prompt)
+    }
+
+    package func maxOutputTokens(_ value: Int) -> Self {
+      var copy = self
+      copy.maxOutputTokens = value
+      return copy
+    }
+
+    package func temperature(_ value: Double) -> Self {
+      var copy = self
+      copy.temperature = value
+      return copy
+    }
+
+    package func expectedOutputTokens(_ value: Int) -> Self {
+      var copy = self
+      copy.expectedOutputTokens = value
+      return copy
+    }
+  }
+
+  package struct EmbeddingRequest: Sendable, Hashable {
+    package var model: String
+    package var inputCount: Int?
+
+    package init(model: String, inputCount: Int? = nil) {
       self.model = model
       self.inputCount = inputCount
     }
   }
 
-  public struct Agent: Sendable, Hashable {
-    public var name: String
-    public var id: String?
+  package struct AgentRequest: Sendable, Hashable {
+    package var name: String
+    package var id: String?
 
-    public init(name: String, id: String? = nil) {
+    package init(name: String, id: String? = nil) {
       self.name = name
       self.id = id
     }
   }
 
-  public struct Tool: Sendable, Hashable {
-    public var name: String
-    public var type: String?
+  package struct ToolRequest: Sendable, Hashable {
+    package var name: String
+    package var callID: String
+    package var type: String?
 
-    public init(name: String, type: String? = nil) {
+    package init(name: String, callID: String, type: String? = nil) {
       self.name = name
+      self.callID = callID
       self.type = type
     }
   }
 
-  public struct ToolCall: Sendable, Hashable {
-    public var id: String
+  package struct SafetyCheckRequest: Sendable, Hashable {
+    package var name: String
+    package var subject: String?
+    package var includeContent: Bool
 
-    public init(id: String) {
-      self.id = id
-    }
-  }
-
-  public struct SafetyCheck: Sendable, Hashable {
-    public var name: String
-    public var subject: String?
-    public var subjectCapture: CaptureIntent
-
-    public init(name: String, subject: String? = nil, subjectCapture: CaptureIntent = .default) {
+    package init(name: String, subject: String? = nil, includeContent: Bool = false) {
       self.name = name
       self.subject = subject
-      self.subjectCapture = subjectCapture
+      self.includeContent = includeContent
     }
   }
 }
-

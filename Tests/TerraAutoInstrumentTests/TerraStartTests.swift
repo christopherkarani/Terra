@@ -1,10 +1,20 @@
-import Testing
-import Terra
-@testable import TerraCore
 import OpenTelemetrySdk
+import Testing
+@testable import Terra
+@testable import TerraCore
 
-@Suite("Terra.start / AutoInstrument Tests", .serialized)
-struct TerraStartTests {
+@Suite("Terra.start canonical API", .serialized)
+final class TerraStartTests {
+  init() {
+    Terra.lockTestingIsolation()
+    Terra.resetOpenTelemetryForTesting()
+  }
+
+  deinit {
+    Terra.resetOpenTelemetryForTesting()
+    Terra.unlockTestingIsolation()
+  }
+
   // MARK: - Terra.Instrumentations OptionSet Tests
 
   @Test("Instrumentations.none has rawValue 0")
@@ -48,43 +58,53 @@ struct TerraStartTests {
     #expect(values.allSatisfy { $0 != 0 })
   }
 
-  // MARK: - Terra.AutoInstrumentConfiguration Tests
+  // MARK: - Canonical Configuration Tests
 
-  @Test("AutoInstrumentConfiguration default instrumentations is .all")
+  @Test("Configuration default instrumentations is .all")
   func defaultConfigurationInstrumentationsIsAll() {
-    let config = Terra.AutoInstrumentConfiguration()
+    let config = Terra.Configuration()
     #expect(config.instrumentations == .all)
   }
 
-  @Test("AutoInstrumentConfiguration can be customized with .none")
-  func configurationCanBeNone() {
-    let config = Terra.AutoInstrumentConfiguration(instrumentations: .none)
+  @Test("Configuration can disable instrumentations via .none")
+  func configurationCanDisableInstrumentations() {
+    var config = Terra.Configuration()
+    config.instrumentations = .none
     #expect(config.instrumentations == .none)
   }
 
-  @Test("AutoInstrumentConfiguration holds custom excluded CoreML models")
+  @Test("Configuration holds custom excluded CoreML models")
   func configurationExcludedCoreMLModels() {
     let excluded: Set<String> = ["ModelA", "ModelB"]
-    let config = Terra.AutoInstrumentConfiguration(excludedCoreMLModels: excluded)
+    var config = Terra.Configuration()
+    config.excludedCoreMLModels = excluded
     #expect(config.excludedCoreMLModels == excluded)
   }
 
-  @Test("AutoInstrumentConfiguration default excluded CoreML models is empty")
+  @Test("Configuration default excluded CoreML models is empty")
   func defaultExcludedCoreMLModelsIsEmpty() {
-    let config = Terra.AutoInstrumentConfiguration()
+    let config = Terra.Configuration()
     #expect(config.excludedCoreMLModels.isEmpty)
   }
 
-  @Test("AutoInstrumentConfiguration default OpenClaw mode is disabled")
+  @Test("Configuration default OpenClaw mode is disabled")
   func defaultOpenClawModeIsDisabled() {
-    let config = Terra.AutoInstrumentConfiguration()
+    let config = Terra.Configuration()
     #expect(config.openClaw.mode == .disabled)
   }
 
-  @Test("OpenClaw disabled mode defaults to no gateway hosts")
+  @Test("Configuration default OpenClaw gateway hosts are empty when disabled")
   func defaultOpenClawGatewayHostsAreEmptyWhenDisabled() {
-    let config = Terra.AutoInstrumentConfiguration()
+    let config = Terra.Configuration()
     #expect(config.openClaw.gatewayHosts.isEmpty)
+  }
+
+  @Test("Configuration conversion preserves disabled OpenClaw hosts")
+  func configurationDefaultKeepsOpenClawHostsEmpty() {
+    let config = Terra.Configuration()
+    let resolved = config.asAutoInstrumentConfiguration()
+    #expect(resolved.openClaw.mode == .disabled)
+    #expect(resolved.openClaw.gatewayHosts.isEmpty)
   }
 
   @Test("OpenClaw diagnosticsOnly enables diagnostics export and disables gateway instrumentation")
@@ -94,84 +114,67 @@ struct TerraStartTests {
     #expect(openClaw.shouldEnableDiagnosticsExport)
   }
 
-  @Test("AutoInstrumentConfiguration profiling defaults are disabled")
+  @Test("Configuration profiling defaults are disabled")
   func profilingDefaultsDisabled() {
-    let config = Terra.AutoInstrumentConfiguration()
+    let config = Terra.Configuration()
     #expect(!config.profiling.enableMemoryProfiler)
     #expect(!config.profiling.enableMetalProfiler)
   }
 
   // MARK: - Terra.start() Smoke Tests
-  //
-  // Terra.start() calls installOpenTelemetry which throws .alreadyInstalled if called
-  // a second time with a different configuration. We test only the .none instrumentations
-  // path in isolation via the public API. Each test avoids double-installing by using
-  // the DEBUG reset hook.
 
   @Test("Terra.start() with .none instrumentations does not crash")
-  func terraStartWithNoneInstrumentationsDoesNotCrash() throws {
-    // Reset any prior install state from other tests or runs
+  func terraStartWithNoneInstrumentationsDoesNotCrash() async throws {
     Terra.resetOpenTelemetryForTesting()
+    await Terra.reset()
     defer { Terra.resetOpenTelemetryForTesting() }
 
-    let config = Terra.AutoInstrumentConfiguration(
-      openTelemetry: .init(
-        enableTraces: false,
-        enableMetrics: false,
-        enableLogs: false,
-        enableSignposts: false,
-        enableSessions: false
-      ),
-      instrumentations: .none
-    )
-
-    // Should not throw
-    try Terra.start(config)
+    var config = Terra.Configuration()
+    config.instrumentations = .none
+    config.enableSignposts = false
+    config.enableSessions = false
+    try await Terra.start(config)
+    await Terra.reset()
   }
 
-  @Test("Terra.start() throws alreadyInstalled when called twice with different config")
-  func terraStartThrowsAlreadyInstalledOnSecondCall() throws {
+  @Test("Terra.start() throws already_started when called twice with different config")
+  func terraStartThrowsAlreadyStartedOnSecondCall() async throws {
     Terra.resetOpenTelemetryForTesting()
+    await Terra.reset()
     defer { Terra.resetOpenTelemetryForTesting() }
 
-    let config1 = Terra.AutoInstrumentConfiguration(
-      openTelemetry: .init(
-        enableTraces: false,
-        enableMetrics: false,
-        enableLogs: false,
-        enableSignposts: false,
-        enableSessions: false
-      ),
-      instrumentations: .none
-    )
-    try Terra.start(config1)
+    var config1 = Terra.Configuration()
+    config1.instrumentations = .none
+    config1.enableSignposts = false
+    config1.enableSessions = false
+    try await Terra.start(config1)
 
-    // Second call with a different config should throw
     var config2 = config1
-    config2.openTelemetry.enableTraces = true
-    #expect(throws: Terra.InstallOpenTelemetryError.alreadyInstalled) {
-      try Terra.start(config2)
+    config2.serviceName = "com.example.changed"
+    do {
+      try await Terra.start(config2)
+      #expect(Bool(false), "Expected Terra.start to throw already_started when called with a different config while running.")
+    } catch let error as Terra.TerraError {
+      #expect(error.code == .already_started)
+    } catch {
+      #expect(Bool(false), "Unexpected error: \(error)")
     }
+    await Terra.reset()
   }
 
   @Test("Terra.start() is idempotent when called twice with identical config")
-  func terraStartIsIdempotentWithSameConfig() throws {
+  func terraStartIsIdempotentWithSameConfig() async throws {
     Terra.resetOpenTelemetryForTesting()
+    await Terra.reset()
     defer { Terra.resetOpenTelemetryForTesting() }
 
-    let config = Terra.AutoInstrumentConfiguration(
-      openTelemetry: .init(
-        enableTraces: false,
-        enableMetrics: false,
-        enableLogs: false,
-        enableSignposts: false,
-        enableSessions: false
-      ),
-      instrumentations: .none
-    )
+    var config = Terra.Configuration()
+    config.instrumentations = .none
+    config.enableSignposts = false
+    config.enableSessions = false
 
-    // Two calls with the same config should not throw
-    try Terra.start(config)
-    try Terra.start(config)
+    try await Terra.start(config)
+    try await Terra.start(config)
+    await Terra.reset()
   }
 }

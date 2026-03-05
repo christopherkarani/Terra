@@ -17,37 +17,41 @@
 import Foundation
 import Terra
 
+@main
+struct TerraAutoInstrumentExample {
+  static func main() async throws {
 // ──────────────────────────────────────────────
 // Tier 1: Zero-Code Auto-Instrumentation
 // ──────────────────────────────────────────────
 
-// One line. Every CoreML prediction and HTTP AI API call is now traced.
-try Terra.start()
+    // One line. Every CoreML prediction and HTTP AI API call is now traced.
+    try await Terra.start()
 
-// Configure with options:
-// try Terra.start(.init(
-//   privacy: .init(contentPolicy: .never),
-//   instrumentations: [.coreML, .httpAIAPIs],
-//   aiAPIHosts: HTTPAIInstrumentation.defaultAIHosts,
-//   excludedCoreMLModels: ["background_removal_model"]
-// ))
+    // Configure with presets:
+    // try await Terra.start(.init(preset: .production))
+    //
+    // Or customize:
+    // var config = Terra.Configuration()
+    // config.enableLogs = true
+    // config.profiling.enableMemoryProfiler = true
+    // try await Terra.start(config)
 
 // ──────────────────────────────────────────────
 // Tier 2: @Traced Annotation (import TerraTracedMacro)
 // ──────────────────────────────────────────────
 
-// @Traced(model: "llama-3.2-1B")
+// @Traced(model: Terra.ModelID("llama-3.2-1B"))
 // func summarize(prompt: String, maxTokens: Int = 512) async throws -> String {
 //   try await mlxContainer.generate(prompt: prompt, maxTokens: maxTokens)
 // }
 // The macro auto-detects `prompt` and `maxTokens` parameters and wraps
-// the function body in Terra.withInferenceSpan(...).
+// the function body in Terra.infer(...).run { ... }.
 
 // ──────────────────────────────────────────────
 // Tier 3: TerraMLX Closure (import TerraMLX)
 // ──────────────────────────────────────────────
 
-// let result = try await TerraMLX.traced(model: "mlx-community/Llama-3.2-1B") {
+// let result = try await TerraMLX.traced(model: Terra.ModelID("mlx-community/Llama-3.2-1B")) {
 //   try await container.perform { context in
 //     var firstToken = true
 //     let output = try MLXLMCommon.generate(
@@ -72,3 +76,5 @@ try Terra.start()
 
 print("Terra auto-instrumentation is active.")
 print("CoreML predictions and HTTP AI API calls will produce OpenTelemetry spans.")
+  }
+}

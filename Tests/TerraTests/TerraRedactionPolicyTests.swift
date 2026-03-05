@@ -13,6 +13,7 @@ final class TerraRedactionPolicyTests: XCTestCase {
 
   override func tearDown() {
     support.reset()
+    support = nil
     super.tearDown()
   }
 
@@ -151,6 +152,21 @@ final class TerraRedactionPolicyTests: XCTestCase {
     #else
       XCTAssertNil(Runtime.hmacSHA256Hex(input, key: keyA))
       XCTAssertNil(Runtime.hmacSHA256Hex(input, key: keyB))
+    #endif
+  }
+
+  func testHMACDigest_isDeterministicForSameKeyAndInput() {
+    let input = "hello"
+    let key = Data("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".utf8)
+
+    #if canImport(CryptoKit) || canImport(Crypto)
+      let digestA = Runtime.hmacSHA256Hex(input, key: key)
+      let digestB = Runtime.hmacSHA256Hex(input, key: key)
+      XCTAssertNotNil(digestA)
+      XCTAssertNotNil(digestB)
+      XCTAssertEqual(digestA, digestB)
+    #else
+      XCTAssertNil(Runtime.hmacSHA256Hex(input, key: key))
     #endif
   }
 

@@ -1,6 +1,6 @@
 import Testing
 import TerraMLX
-import TerraCore
+@testable import TerraCore
 import OpenTelemetryApi
 import OpenTelemetrySdk
 import InMemoryExporter
@@ -16,7 +16,9 @@ private struct SpanTestHarness {
   let tracerProvider: TracerProviderSdk
 
   init() {
+    Terra.lockTestingIsolation()
     previousTracerProvider = OpenTelemetry.instance.tracerProvider
+    Terra.resetOpenTelemetryForTesting()
     spanExporter = InMemoryExporter()
     tracerProvider = TracerProviderSdk()
     tracerProvider.addSpanProcessor(SimpleSpanProcessor(spanExporter: spanExporter))
@@ -31,7 +33,9 @@ private struct SpanTestHarness {
   }
 
   func tearDown() {
+    Terra.resetOpenTelemetryForTesting()
     OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+    Terra.unlockTestingIsolation()
   }
 }
 
@@ -44,7 +48,7 @@ struct TerraMLXTests {
     let h = SpanTestHarness()
     defer { h.tearDown() }
 
-    _ = try await TerraMLX.traced(model: "test-model") {
+    _ = try await TerraMLX.traced(model: Terra.ModelID("test-model")) {
       "result"
     }
 
@@ -60,7 +64,7 @@ struct TerraMLXTests {
     let h = SpanTestHarness()
     defer { h.tearDown() }
 
-    _ = try await TerraMLX.traced(model: "mlx-community/Llama-3.2-1B") {
+    _ = try await TerraMLX.traced(model: Terra.ModelID("mlx-community/Llama-3.2-1B")) {
       "response"
     }
 
@@ -69,12 +73,25 @@ struct TerraMLXTests {
     #expect(span.attributes[Terra.Keys.Terra.runtime]?.description == "mlx")
   }
 
+  @Test("traced sets provider attribute to mlx")
+  func tracedSetsProviderAttribute() async throws {
+    let h = SpanTestHarness()
+    defer { h.tearDown() }
+
+    _ = try await TerraMLX.traced(model: Terra.ModelID("mlx-community/Llama-3.2-1B")) {
+      "response"
+    }
+
+    let span = try #require(h.finishedSpans().first)
+    #expect(span.attributes[Terra.Keys.GenAI.providerName]?.description == "mlx")
+  }
+
   @Test("traced sets terra.auto_instrumented attribute to true")
   func tracedSetsAutoInstrumentedAttribute() async throws {
     let h = SpanTestHarness()
     defer { h.tearDown() }
 
-    _ = try await TerraMLX.traced(model: "test-model") {
+    _ = try await TerraMLX.traced(model: Terra.ModelID("test-model")) {
       42
     }
 
@@ -88,7 +105,7 @@ struct TerraMLXTests {
     let h = SpanTestHarness()
     defer { h.tearDown() }
 
-    _ = try await TerraMLX.traced(model: "test-model", maxTokens: 256) {
+    _ = try await TerraMLX.traced(model: Terra.ModelID("test-model"), maxTokens: 256) {
       "result"
     }
 
@@ -102,7 +119,7 @@ struct TerraMLXTests {
     let h = SpanTestHarness()
     defer { h.tearDown() }
 
-    _ = try await TerraMLX.traced(model: "test-model", temperature: 0.8) {
+    _ = try await TerraMLX.traced(model: Terra.ModelID("test-model"), temperature: 0.8) {
       "result"
     }
 
@@ -116,7 +133,7 @@ struct TerraMLXTests {
     let h = SpanTestHarness()
     defer { h.tearDown() }
 
-    let result = try await TerraMLX.traced(model: "test-model") {
+    let result = try await TerraMLX.traced(model: Terra.ModelID("test-model")) {
       "the generated text"
     }
 
@@ -131,7 +148,7 @@ struct TerraMLXTests {
     defer { h.tearDown() }
 
     do {
-      _ = try await TerraMLX.traced(model: "test-model") {
+      _ = try await TerraMLX.traced(model: Terra.ModelID("test-model")) {
         throw GenerationError()
       }
       Issue.record("Expected GenerationError to be thrown")
@@ -148,7 +165,7 @@ struct TerraMLXTests {
     let h = SpanTestHarness()
     defer { h.tearDown() }
 
-    _ = try await TerraMLX.traced(model: "test-model") { "r" }
+    _ = try await TerraMLX.traced(model: Terra.ModelID("test-model")) { "r" }
 
     let span = try #require(h.finishedSpans().first)
     #expect(span.name == Terra.SpanNames.inference)
@@ -161,7 +178,7 @@ struct TerraMLXTests {
     let h = SpanTestHarness()
     defer { h.tearDown() }
 
-    _ = try await TerraMLX.traced(model: "test-model") {
+    _ = try await TerraMLX.traced(model: Terra.ModelID("test-model")) {
       TerraMLX.recordTokenCount(128)
       return "done"
     }
@@ -177,7 +194,7 @@ struct TerraMLXTests {
     let h = SpanTestHarness()
     defer { h.tearDown() }
 
-    _ = try await TerraMLX.traced(model: "test-model") {
+    _ = try await TerraMLX.traced(model: Terra.ModelID("test-model")) {
       TerraMLX.recordFirstToken()
       return "done"
     }
@@ -194,7 +211,7 @@ struct TerraMLXTests {
     let h = SpanTestHarness()
     defer { h.tearDown() }
 
-    _ = try await Terra.MLX.traced(model: "alias-test") { "ok" }
+    _ = try await Terra.MLX.traced(model: Terra.ModelID("alias-test")) { "ok" }
 
     #expect(h.finishedSpans().count == 1)
   }
