@@ -90,6 +90,23 @@ func locatorIncludesCompositePrefixFiles() throws {
   #expect(files[0].timestamp == Date(timeIntervalSinceReferenceDate: 999.0))
 }
 
+@Test("TraceFileLocator detailed listing includes invalid filenames")
+func locatorDetailedListingIncludesInvalidFilenames() throws {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  try Data("[]".utf8).write(to: dir.appendingPathComponent("1000000"))
+  try Data("[]".utf8).write(to: dir.appendingPathComponent("invalid-name"))
+
+  let locator = TraceFileLocator(tracesDirectoryURL: dir)
+  let result = try locator.listTraceFilesDetailed()
+
+  #expect(result.files.count == 1)
+  #expect(result.invalidFiles.map(\.lastPathComponent) == ["invalid-name"])
+}
+
 @Test("TraceFileLocator returns files sorted by timestamp ascending")
 func locatorSortsByTimestamp() throws {
   let dir = FileManager.default.temporaryDirectory
@@ -238,6 +255,48 @@ func loaderHandlesMixedFiles() throws {
   #expect(result.totalFileCount == 2)
 }
 
+@Test("TraceLoader surfaces invalid filenames as explicit failures")
+func loaderSurfacesInvalidFilenamesAsFailures() throws {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  let traceId = TraceId()
+  let span = makeSpan(name: "root", traceId: traceId)
+  try writeSpanFile(spans: [span], to: dir.appendingPathComponent("1000000"))
+  try Data("[]".utf8).write(to: dir.appendingPathComponent("invalid-file-name"))
+
+  let loader = TraceLoader(locator: TraceFileLocator(tracesDirectoryURL: dir))
+  let result = try loader.loadTracesWithFailures()
+
+  #expect(result.traces.count == 1)
+  #expect(result.failures.count == 1)
+  #expect(result.failures[0].file.lastPathComponent == "invalid-file-name")
+  #expect(result.failures[0].error as? TraceModelError == .invalidFileName)
+}
+
+@Test("TraceLoader preserves duplicate span ID failures")
+func loaderPreservesDuplicateSpanIDFailures() throws {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  let traceId = TraceId()
+  let duplicateSpanID = SpanId.random()
+  let spanA = makeSpan(name: "a", traceId: traceId, spanId: duplicateSpanID)
+  let spanB = makeSpan(name: "b", traceId: traceId, spanId: duplicateSpanID)
+  try writeSpanFile(spans: [spanA, spanB], to: dir.appendingPathComponent("1000000"))
+
+  let loader = TraceLoader(locator: TraceFileLocator(tracesDirectoryURL: dir))
+  let result = try loader.loadTracesWithFailures()
+
+  #expect(result.traces.isEmpty)
+  #expect(result.failures.count == 1)
+  #expect(result.failures[0].error as? TraceModelError == .duplicateSpanIds)
+}
+
 @Test("TraceLoader maxFiles loads only the newest files")
 func loaderRespectsMaxFilesNewestFirst() throws {
   let dir = FileManager.default.temporaryDirectory
@@ -256,6 +315,32 @@ func loaderRespectsMaxFilesNewestFirst() throws {
   #expect(result.traces.first?.spans.first?.name == "new")
   #expect(result.loadedFileCount == 1)
   #expect(result.totalFileCount == 2)
+}
+
+@Test("TraceLoader pagination path stays within performance budget")
+func loaderPaginationPerformanceBudget() throws {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  for index in 0..<250 {
+    let traceId = TraceId()
+    let span = makeSpan(name: "span-\(index)", traceId: traceId)
+    try writeSpanFile(
+      spans: [span],
+      to: dir.appendingPathComponent("\(1_000_000 + index)")
+    )
+  }
+
+  let loader = TraceLoader(locator: TraceFileLocator(tracesDirectoryURL: dir))
+  let clock = ContinuousClock()
+  let elapsed = clock.measure {
+    let result = try? loader.loadTracesWithFailures(maxFiles: 75)
+    #expect(result?.traces.count == 75)
+  }
+
+  #expect(elapsed < .seconds(2))
 }
 
 @Test("TraceLoader returns empty for non-existent directory")

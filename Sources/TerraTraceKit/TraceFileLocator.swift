@@ -1,5 +1,10 @@
 import Foundation
 
+public struct TraceFileDiscoveryResult {
+  public let files: [TraceFileReference]
+  public let invalidFiles: [URL]
+}
+
 /// Discovers persisted trace files under the Terra traces directory.
 public struct TraceFileLocator {
   public let tracesDirectoryURL: URL
@@ -11,9 +16,13 @@ public struct TraceFileLocator {
 
   /// Returns trace files with numeric names (milliseconds since reference date), sorted by time.
   public func listTraceFiles() throws -> [TraceFileReference] {
+    try listTraceFilesDetailed().files
+  }
+
+  public func listTraceFilesDetailed() throws -> TraceFileDiscoveryResult {
     let fileManager = FileManager.default
     guard fileManager.fileExists(atPath: tracesDirectoryURL.path) else {
-      return []
+      return TraceFileDiscoveryResult(files: [], invalidFiles: [])
     }
 
     let urls = try fileManager.contentsOfDirectory(
@@ -22,15 +31,23 @@ public struct TraceFileLocator {
       options: [.skipsHiddenFiles]
     )
 
-    let files = urls.compactMap { url -> TraceFileReference? in
+    var files: [TraceFileReference] = []
+    var invalidFiles: [URL] = []
+    files.reserveCapacity(urls.count)
+
+    for url in urls {
       let name = url.lastPathComponent
       guard let timestamp = TraceFileNameParser.timestamp(from: name) else {
-        return nil
+        invalidFiles.append(url)
+        continue
       }
-      return TraceFileReference(url: url, fileName: name, timestamp: timestamp)
+      files.append(TraceFileReference(url: url, fileName: name, timestamp: timestamp))
     }
 
-    return files.sorted { $0.timestamp < $1.timestamp }
+    return TraceFileDiscoveryResult(
+      files: files.sorted { $0.timestamp < $1.timestamp },
+      invalidFiles: invalidFiles.sorted { $0.lastPathComponent < $1.lastPathComponent }
+    )
   }
 
   /// Returns the default Terra traces directory in the user caches folder.

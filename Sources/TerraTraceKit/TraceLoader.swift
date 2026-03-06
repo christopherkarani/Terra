@@ -29,7 +29,8 @@ public struct TraceLoader {
 
   /// Loads and groups spans into trace models, reporting per-file failures.
   public func loadTracesWithFailures(maxFiles: Int? = nil) throws -> TraceLoadResult {
-    let files = try locator.listTraceFiles()
+    let discovery = try locator.listTraceFilesDetailed()
+    let files = discovery.files
     let filesToProcess: [TraceFileReference]
     if let maxFiles {
       let boundedMax = max(0, maxFiles)
@@ -39,7 +40,9 @@ public struct TraceLoader {
     }
 
     var traces = [Trace]()
-    var failures = [(file: URL, error: Error)]()
+    var failures: [(file: URL, error: Error)] = discovery.invalidFiles.map { invalidFile in
+      (file: invalidFile, error: TraceModelError.invalidFileName)
+    }
 
     for file in filesToProcess {
       let spans: [SpanData]
