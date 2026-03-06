@@ -61,8 +61,12 @@ final class Runtime {
       anonymizationKey = providedAnonymizationKey
       anonymizationKeyID = Runtime.deriveAnonymizationKeyID(from: providedAnonymizationKey)
     }
-    tracerProviderOverride = installation.tracerProvider
-    loggerProviderOverride = installation.loggerProvider
+    if let tracerProvider = installation.tracerProvider {
+      tracerProviderOverride = tracerProvider
+    }
+    if let loggerProvider = installation.loggerProvider {
+      loggerProviderOverride = loggerProvider
+    }
 
     if installation.registerProvidersAsGlobal {
       if let tracerProvider = installation.tracerProvider {

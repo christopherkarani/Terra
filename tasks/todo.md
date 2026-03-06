@@ -1,17 +1,24 @@
 # Open PR Consolidation on Main (2026-03-06)
 
-- [ ] Create isolated `main`-based integration branch/worktree for PR consolidation.
-- [ ] Inventory open PRs and classify them as contained, focused-value, overlapping audit, or broad/stale.
-- [ ] Merge or replay focused-value changes from PR #12 while dropping bookkeeping-only hunks.
-- [ ] Merge or replay parser hardening from PR #4 while excluding stale TraceMacApp-only changes.
-- [ ] Reconcile overlapping OpenTelemetry/install audit PR value into a single coherent implementation on `main`.
-- [ ] Selectively salvage still-applicable source/test/doc value from PR #11 without importing stale app/artifact churn.
-- [ ] Run targeted verification after each integration step and final `swift test` before completion.
-- [ ] Add review notes summarizing preserved value, skipped stale changes, and residual risks.
+- [x] Create isolated `main`-based integration branch/worktree for PR consolidation.
+- [x] Inventory open PRs and classify them as contained, focused-value, overlapping audit, or broad/stale.
+- [x] Merge or replay focused-value changes from PR #12 while dropping bookkeeping-only hunks.
+- [x] Merge or replay parser hardening from PR #4 while excluding stale TraceMacApp-only changes.
+- [x] Reconcile overlapping OpenTelemetry/install audit PR value into a single coherent implementation on `main`.
+- [x] Selectively salvage still-applicable source/test/doc value from PR #11 without importing stale app/artifact churn.
+- [x] Run targeted verification after each integration step and final `swift test` before completion.
+- [x] Add review notes summarizing preserved value, skipped stale changes, and residual risks.
 
 ## Review
 
-- Pending.
+- Created isolated consolidation worktree at `/tmp/terra-pr-consolidation` on branch `pr-consolidation-main`, leaving the user’s existing `api-design` branch untouched.
+- PR #2 (`macApp`) and PR #7 (`codex/he`) were already effectively contained on `main`; no replay was needed.
+- Preserved PR #12 value in `8579dd5` by replaying the live TraceKit/OpenTelemetry hardening and dropping imported task-bookkeeping hunks.
+- Preserved PR #4 value in `5fefb8b` by porting request/response parser hardening and skipping stale TraceMacApp-only changes.
+- Reconciled overlapping telemetry/install audit value from PRs #3, #5, #6, #8, #9, and #10 in `8b2717d`, then followed up by preserving prior partial-install override semantics so tracer/logger overrides are not cleared by unrelated `Terra.install(.init(...))` calls.
+- Selectively salvaged still-relevant TraceKit filename/discovery behavior from PR #11 in `4fdfe86` and intentionally skipped stale app/UI/artifact churn.
+- Verification: `swift build` passes and full `swift test` passes on the consolidation branch.
+- Residual risk is limited to intentionally skipped stale branch content that no longer matches the current repo layout or would regress current runtime behavior.
 
 # TraceMacApp Extraction Verification
 
