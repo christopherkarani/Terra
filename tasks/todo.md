@@ -1,3 +1,18 @@
+# Open PR Consolidation on Main (2026-03-06)
+
+- [ ] Create isolated `main`-based integration branch/worktree for PR consolidation.
+- [ ] Inventory open PRs and classify them as contained, focused-value, overlapping audit, or broad/stale.
+- [ ] Merge or replay focused-value changes from PR #12 while dropping bookkeeping-only hunks.
+- [ ] Merge or replay parser hardening from PR #4 while excluding stale TraceMacApp-only changes.
+- [ ] Reconcile overlapping OpenTelemetry/install audit PR value into a single coherent implementation on `main`.
+- [ ] Selectively salvage still-applicable source/test/doc value from PR #11 without importing stale app/artifact churn.
+- [ ] Run targeted verification after each integration step and final `swift test` before completion.
+- [ ] Add review notes summarizing preserved value, skipped stale changes, and residual risks.
+
+## Review
+
+- Pending.
+
 # TraceMacApp Extraction Verification
 
 - [x] Baseline current repo state and identify remaining TraceMacApp coupling.
