@@ -50,6 +50,21 @@ final class OTLPRequestDecoderTests: XCTestCase {
 
     assertDecodedSpans(spans)
   }
+
+  func testDecodeRejectsTruncatedDeflatePayload() throws {
+    let body = try OTLPTestFixtures.serializedRequest()
+    var compressed = try OTLPTestCompression.deflate(body)
+    compressed.removeLast()
+
+    let decoder = OTLPRequestDecoder(
+      maxBodyBytes: compressed.count + 64,
+      maxDecompressedBytes: body.count + 64
+    )
+
+    XCTAssertThrowsError(
+      try decoder.decode(body: compressed, headers: ["Content-Encoding": "deflate"])
+    )
+  }
   #endif
 
   func testDecodeRejectsOversizedDecompressedPayload() throws {

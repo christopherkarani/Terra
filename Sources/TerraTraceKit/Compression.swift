@@ -68,6 +68,7 @@ struct OTLPDecompressor {
       repeat {
         stream.dst_ptr = dstBuffer
         stream.dst_size = dstSize
+        let previousRemainingInput = stream.src_size
 
         streamStatus = compression_stream_process(&stream, 0)
 
@@ -82,7 +83,14 @@ struct OTLPDecompressor {
         if streamStatus == COMPRESSION_STATUS_ERROR {
           throw OTLPRequestDecoderError.decompressionFailed(reason: "Zlib decompression error")
         }
+        if streamStatus == COMPRESSION_STATUS_OK, produced == 0, stream.src_size == previousRemainingInput {
+          throw OTLPRequestDecoderError.decompressionFailed(reason: "Incomplete zlib payload")
+        }
       } while streamStatus == COMPRESSION_STATUS_OK
+
+      guard streamStatus == COMPRESSION_STATUS_END else {
+        throw OTLPRequestDecoderError.decompressionFailed(reason: "Incomplete zlib payload")
+      }
 
       return output
     }

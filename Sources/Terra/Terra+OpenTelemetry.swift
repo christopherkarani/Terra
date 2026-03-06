@@ -126,38 +126,39 @@ extension Terra {
   public static func installOpenTelemetry(_ configuration: OpenTelemetryConfiguration) throws {
     openTelemetryInstallLock.lock()
     defer { openTelemetryInstallLock.unlock() }
+    let normalizedConfiguration = normalize(configuration)
 
     if let installed = installedOpenTelemetryConfiguration {
-      if installed == configuration {
+      if installed == normalizedConfiguration {
         return
       }
       throw InstallOpenTelemetryError.alreadyInstalled
     }
 
-    installedOpenTelemetryConfiguration = configuration
+    installedOpenTelemetryConfiguration = normalizedConfiguration
 
     do {
-      if let persistence = configuration.persistence {
+      if let persistence = normalizedConfiguration.persistence {
         try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
       }
 
-      let tracerProviderSdk = try installTracing(configuration: configuration)
+      let tracerProviderSdk = try installTracing(configuration: normalizedConfiguration)
 
-      if configuration.enableSignposts {
+      if normalizedConfiguration.enableSignposts {
         installSignposts(tracerProviderSdk: tracerProviderSdk)
       }
 
-      if configuration.enableLogs {
-        _ = try installLogs(configuration: configuration)
+      if normalizedConfiguration.enableLogs {
+        _ = try installLogs(configuration: normalizedConfiguration)
       }
 
-      if configuration.enableSessions {
+      if normalizedConfiguration.enableSessions {
         tracerProviderSdk.addSpanProcessor(TerraSessionSpanProcessor())
         SessionEventInstrumentation.install()
       }
 
-      if configuration.enableMetrics {
-        let meterProvider = try installMetrics(configuration: configuration)
+      if normalizedConfiguration.enableMetrics {
+        let meterProvider = try installMetrics(configuration: normalizedConfiguration)
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
     } catch {
@@ -203,8 +204,12 @@ extension Terra {
     let resource = makeResource(configuration: configuration)
     let sampler: Sampler?
     if let ratio = configuration.traceSamplingRatio {
-      let clamped = min(max(ratio, 0), 1)
-      sampler = Samplers.parentBased(root: Samplers.traceIdRatio(ratio: clamped))
+      if ratio.isFinite {
+        let clamped = min(max(ratio, 0), 1)
+        sampler = Samplers.parentBased(root: Samplers.traceIdRatio(ratio: clamped))
+      } else {
+        sampler = nil
+      }
     } else {
       sampler = nil
     }
@@ -251,6 +256,18 @@ extension Terra {
     #else
       _ = tracerProviderSdk
     #endif
+  }
+
+  private static func normalize(_ configuration: OpenTelemetryConfiguration) -> OpenTelemetryConfiguration {
+    var normalized = configuration
+    if let ratio = normalized.traceSamplingRatio {
+      if ratio.isFinite {
+        normalized.traceSamplingRatio = min(max(ratio, 0), 1)
+      } else {
+        normalized.traceSamplingRatio = nil
+      }
+    }
+    return normalized
   }
 
   // MARK: - Metrics

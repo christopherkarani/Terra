@@ -24,10 +24,9 @@ public struct TraceFileLocator {
 
     let files = urls.compactMap { url -> TraceFileReference? in
       let name = url.lastPathComponent
-      guard let milliseconds = UInt64(name) else {
+      guard let timestamp = TraceFileNameParser.timestamp(from: name) else {
         return nil
       }
-      let timestamp = Date(timeIntervalSinceReferenceDate: TimeInterval(milliseconds) / 1000.0)
       return TraceFileReference(url: url, fileName: name, timestamp: timestamp)
     }
 
