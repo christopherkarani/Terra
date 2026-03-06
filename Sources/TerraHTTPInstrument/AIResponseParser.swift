@@ -23,27 +23,27 @@ struct AIResponseParser {
 
         if let usage = json["usage"] as? [String: Any] {
             // OpenAI format
-            if let promptTokens = usage["prompt_tokens"] as? Int {
+            if let promptTokens = intValue(usage["prompt_tokens"]) {
                 inputTokens = promptTokens
             }
-            if let completionTokens = usage["completion_tokens"] as? Int {
+            if let completionTokens = intValue(usage["completion_tokens"]) {
                 outputTokens = completionTokens
             }
 
             // Anthropic format (overrides if present, or fills in if OpenAI keys absent)
-            if let v = usage["input_tokens"] as? Int {
+            if let v = intValue(usage["input_tokens"]) {
                 inputTokens = v
             }
-            if let v = usage["output_tokens"] as? Int {
+            if let v = intValue(usage["output_tokens"]) {
                 outputTokens = v
             }
         }
 
         // Ollama format (top-level keys)
-        if let v = json["prompt_eval_count"] as? Int {
+        if let v = intValue(json["prompt_eval_count"]) {
             inputTokens = v
         }
-        if let v = json["eval_count"] as? Int {
+        if let v = intValue(json["eval_count"]) {
             outputTokens = v
         }
 
@@ -63,4 +63,30 @@ struct ParsedResponse: Sendable {
     let inputTokens: Int?
     let outputTokens: Int?
     let model: String?
+}
+
+private func intValue(_ value: Any?) -> Int? {
+    guard let number = value as? NSNumber else {
+        return nil
+    }
+
+    if isBoolean(number) {
+        return nil
+    }
+
+    let doubleValue = number.doubleValue
+    guard doubleValue.isFinite else {
+        return nil
+    }
+
+    let rounded = doubleValue.rounded()
+    guard rounded == doubleValue else {
+        return nil
+    }
+
+    return Int(rounded)
+}
+
+private func isBoolean(_ number: NSNumber) -> Bool {
+    CFGetTypeID(number) == CFBooleanGetTypeID()
 }
