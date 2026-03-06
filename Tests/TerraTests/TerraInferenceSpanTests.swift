@@ -95,10 +95,13 @@ final class TerraInferenceSpanTests: XCTestCase {
     let span = try XCTUnwrap(support.finishedSpans().first)
     let exception = try XCTUnwrap(span.events.first(where: { $0.name == "exception" }))
     XCTAssertNil(exception.attributes["exception.message"])
+    XCTAssertNil(exception.attributes[Terra.Keys.Terra.errorMessageLength])
+    XCTAssertNil(exception.attributes[Terra.Keys.Terra.errorMessageHMACSHA256])
+    XCTAssertNil(exception.attributes[Terra.Keys.Terra.errorMessageSHA256])
     XCTAssertEqual(exception.attributes["exception.type"]?.description, String(reflecting: TestFailure.self))
   }
 
-  func testWithInferenceSpan_privacyAlways_recordsExceptionMessage() async throws {
+  func testWithInferenceSpan_privacyAlways_lengthOnlyRecordsOnlyRedactedExceptionMetadata() async throws {
     Terra.install(
       .init(
         privacy: .init(contentPolicy: .always, redaction: .lengthOnly),
@@ -118,7 +121,15 @@ final class TerraInferenceSpanTests: XCTestCase {
 
     let span = try XCTUnwrap(support.finishedSpans().first)
     let exception = try XCTUnwrap(span.events.first(where: { $0.name == "exception" }))
-    XCTAssertEqual(exception.attributes["exception.message"]?.description, TestFailure.secret.description)
+    XCTAssertNil(exception.attributes["exception.message"])
+    XCTAssertEqual(
+      exception.attributes[Terra.Keys.Terra.errorMessageLength]?.description,
+      String(TestFailure.secret.description.count)
+    )
+    XCTAssertNil(exception.attributes[Terra.Keys.Terra.errorMessageHMACSHA256])
+    XCTAssertNil(exception.attributes[Terra.Keys.Terra.errorMessageSHA256])
     XCTAssertEqual(exception.attributes["exception.type"]?.description, String(reflecting: TestFailure.self))
+    XCTAssertTrue(span.status.description.contains(String(reflecting: TestFailure.self)))
+    XCTAssertFalse(span.status.description.contains(TestFailure.secret.description))
   }
 }

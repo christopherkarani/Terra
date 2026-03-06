@@ -84,6 +84,10 @@ extension Terra {
       /// Legacy compatibility attribute during migration to keyed digests.
       public static let safetySubjectSHA256 = "terra.safety.subject.sha256"
       public static let anonymizationKeyID = "terra.anonymization.key_id"
+      public static let errorMessageLength = "terra.error.message.length"
+      public static let errorMessageHMACSHA256 = "terra.error.message.hmac_sha256"
+      /// Legacy compatibility attribute during migration to keyed digests.
+      public static let errorMessageSHA256 = "terra.error.message.sha256"
 
       /// Marks spans created by auto-instrumentation (vs. manual `withInferenceSpan`).
       public static let autoInstrumented = "terra.auto_instrumented"

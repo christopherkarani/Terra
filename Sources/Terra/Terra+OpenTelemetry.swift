@@ -46,9 +46,9 @@ extension Terra {
       enableLogs: Bool = false,
       enableSignposts: Bool = true,
       enableSessions: Bool = true,
-      otlpTracesEndpoint: URL = defaultOltpHttpTracesEndpoint(),
+      otlpTracesEndpoint: URL = defaultOtlpHttpTracesEndpoint(),
       otlpMetricsEndpoint: URL = defaultOtlpHttpMetricsEndpoint(),
-      otlpLogsEndpoint: URL = defaultOltpHttpLoggingEndpoint(),
+      otlpLogsEndpoint: URL = defaultOtlpHttpLogsEndpoint(),
       metricsExportInterval: TimeInterval = 60,
       persistence: PersistenceConfiguration? = nil,
       serviceName: String? = nil,
@@ -107,6 +107,33 @@ extension Terra {
       .appendingPathComponent("terra", isDirectory: true)
   }
 
+  public static func defaultOtlpHttpTracesEndpoint() -> URL {
+    URL(string: "http://localhost:4318/v1/traces")!
+  }
+
+  public static func defaultOtlpHttpMetricsEndpoint() -> URL {
+    URL(string: "http://localhost:4318/v1/metrics")!
+  }
+
+  public static func defaultOtlpHttpLogsEndpoint() -> URL {
+    URL(string: "http://localhost:4318/v1/logs")!
+  }
+
+  @available(*, deprecated, renamed: "defaultOtlpHttpTracesEndpoint")
+  public static func defaultOltpHttpTracesEndpoint() -> URL {
+    defaultOtlpHttpTracesEndpoint()
+  }
+
+  @available(*, deprecated, renamed: "defaultOtlpHttpMetricsEndpoint")
+  public static func defaultOltpHttpMetricsEndpoint() -> URL {
+    defaultOtlpHttpMetricsEndpoint()
+  }
+
+  @available(*, deprecated, renamed: "defaultOtlpHttpLogsEndpoint")
+  public static func defaultOltpHttpLoggingEndpoint() -> URL {
+    defaultOtlpHttpLogsEndpoint()
+  }
+
   public enum InstallOpenTelemetryError: Error {
     case alreadyInstalled
   }
@@ -134,17 +161,18 @@ extension Terra {
       }
       throw InstallOpenTelemetryError.alreadyInstalled
     }
-
-    installedOpenTelemetryConfiguration = normalizedConfiguration
+    let previousTracerProvider = OpenTelemetry.instance.tracerProvider
+    let previousMeterProvider = OpenTelemetry.instance.meterProvider
+    let previousLoggerProvider = OpenTelemetry.instance.loggerProvider
 
     do {
       if let persistence = normalizedConfiguration.persistence {
         try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
       }
 
-      let tracerProviderSdk = try installTracing(configuration: normalizedConfiguration)
+      let tracerProvider = try installTracing(configuration: normalizedConfiguration)
 
-      if normalizedConfiguration.enableSignposts {
+      if normalizedConfiguration.enableSignposts, let tracerProviderSdk = tracerProvider as? TracerProviderSdk {
         installSignposts(tracerProviderSdk: tracerProviderSdk)
       }
 
@@ -152,7 +180,7 @@ extension Terra {
         _ = try installLogs(configuration: normalizedConfiguration)
       }
 
-      if normalizedConfiguration.enableSessions {
+      if normalizedConfiguration.enableSessions, let tracerProviderSdk = tracerProvider as? TracerProviderSdk {
         tracerProviderSdk.addSpanProcessor(TerraSessionSpanProcessor())
         SessionEventInstrumentation.install()
       }
@@ -161,8 +189,12 @@ extension Terra {
         let meterProvider = try installMetrics(configuration: normalizedConfiguration)
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
+      installedOpenTelemetryConfiguration = normalizedConfiguration
     } catch {
       installedOpenTelemetryConfiguration = nil
+      OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+      OpenTelemetry.registerMeterProvider(meterProvider: previousMeterProvider)
+      OpenTelemetry.registerLoggerProvider(loggerProvider: previousLoggerProvider)
       throw error
     }
   }
@@ -180,7 +212,13 @@ extension Terra {
     return Resource(attributes: attributes)
   }
 
-  private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> TracerProviderSdk {
+  private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> any TracerProvider {
+    guard configuration.enableTraces else {
+      let provider = DefaultTracerProvider.instance
+      OpenTelemetry.registerTracerProvider(tracerProvider: provider)
+      return provider
+    }
+
     func makeExporter() throws -> any SpanExporter {
       let baseExporter = OtlpHttpTraceExporter(endpoint: configuration.otlpTracesEndpoint)
       guard let persistence = configuration.persistence else {
@@ -194,13 +232,8 @@ extension Terra {
       )
     }
 
-    let spanProcessor: SpanProcessor?
-    if configuration.enableTraces {
-      let exporter = try makeExporter()
-      spanProcessor = SimpleSpanProcessor(spanExporter: exporter)
-    } else {
-      spanProcessor = nil
-    }
+    let exporter = try makeExporter()
+    let spanProcessor = SimpleSpanProcessor(spanExporter: exporter)
     let resource = makeResource(configuration: configuration)
     let sampler: Sampler?
     if let ratio = configuration.traceSamplingRatio {
@@ -222,9 +255,7 @@ extension Terra {
           existing.updateActiveSampler(sampler)
         }
         existing.addSpanProcessor(TerraSpanEnrichmentProcessor())
-        if let spanProcessor {
-          existing.addSpanProcessor(spanProcessor)
-        }
+        existing.addSpanProcessor(spanProcessor)
         return existing
       }
       fallthrough
@@ -235,9 +266,7 @@ extension Terra {
         builder = builder.with(sampler: sampler)
       }
       builder = builder.add(spanProcessor: TerraSpanEnrichmentProcessor())
-      if let spanProcessor {
-        builder = builder.add(spanProcessor: spanProcessor)
-      }
+      builder = builder.add(spanProcessor: spanProcessor)
       let provider = builder.build()
       OpenTelemetry.registerTracerProvider(tracerProvider: provider)
       return provider

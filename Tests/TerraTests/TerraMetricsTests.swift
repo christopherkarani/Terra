@@ -4,7 +4,6 @@ import OpenTelemetrySdk
 import XCTest
 
 final class TerraMetricsTests: XCTestCase {
-
   // MARK: - Spy infrastructure
 
   /// Records all counter.add() and histogram.record() calls for verification.
@@ -45,5 +44,21 @@ final class TerraMetricsTests: XCTestCase {
     // Should be a safe no-op.
     metrics.recordInference(durationMs: 0)
     metrics.recordInference(durationMs: 999.9)
+  }
+
+  func testInstall_withoutExplicitMeterProvider_usesGlobalMeterProvider() {
+    let meterProvider = MeterProviderSdk.builder().build()
+    let previousMeterProvider = OpenTelemetry.instance.meterProvider
+    OpenTelemetry.registerMeterProvider(meterProvider: meterProvider)
+    defer {
+      OpenTelemetry.registerMeterProvider(meterProvider: previousMeterProvider)
+      Terra.install(.init(meterProvider: nil, registerProvidersAsGlobal: false))
+    }
+
+    Terra.install(.init(meterProvider: nil, registerProvidersAsGlobal: false))
+
+    let metricsMirror = Mirror(reflecting: Runtime.shared.metrics)
+    XCTAssertNotNil(metricsMirror.descendant("inferenceCount"))
+    XCTAssertNotNil(metricsMirror.descendant("inferenceDurationMs"))
   }
 }

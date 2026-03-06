@@ -30,13 +30,13 @@ extension Terra {
     public func recordError(_ error: any Error, captureMessage: Bool = true) {
       let message = String(describing: error)
       let exceptionType = String(reflecting: type(of: error))
-      underlyingSpan.status = .error(description: captureMessage ? message : exceptionType)
+      underlyingSpan.status = .error(description: exceptionType)
 
       var attributes: [String: AttributeValue] = [
         "exception.type": .string(exceptionType),
       ]
       if captureMessage {
-        attributes["exception.message"] = .string(message)
+        attributes.merge(redactedErrorAttributes(message: message, privacy: Runtime.shared.privacy)) { _, new in new }
       }
 
       underlyingSpan.addEvent(
@@ -49,5 +49,36 @@ extension Terra {
     public func setAttributes(_ attributes: [String: AttributeValue]) {
       underlyingSpan.setAttributes(attributes)
     }
+  }
+}
+
+private func redactedErrorAttributes(message: String, privacy: Terra.Privacy) -> [String: AttributeValue] {
+  switch privacy.redaction {
+  case .drop:
+    return [:]
+  case .lengthOnly:
+    return [Terra.Keys.Terra.errorMessageLength: .int(message.count)]
+  case .hashHMACSHA256:
+    var attributes: [String: AttributeValue] = [
+      Terra.Keys.Terra.errorMessageLength: .int(message.count),
+    ]
+    if Runtime.isHMACSHA256Available, let digest = Runtime.shared.hmacSHA256Hex(message) {
+      attributes[Terra.Keys.Terra.errorMessageHMACSHA256] = .string(digest)
+      if let keyID = Runtime.shared.anonymizationKeyIDValue {
+        attributes[Terra.Keys.Terra.anonymizationKeyID] = .string(keyID)
+      }
+    }
+    if privacy.emitLegacySHA256Attributes, Runtime.isSHA256Available, let legacyDigest = Runtime.sha256Hex(message) {
+      attributes[Terra.Keys.Terra.errorMessageSHA256] = .string(legacyDigest)
+    }
+    return attributes
+  case .hashSHA256:
+    var attributes: [String: AttributeValue] = [
+      Terra.Keys.Terra.errorMessageLength: .int(message.count),
+    ]
+    if Runtime.isSHA256Available, let digest = Runtime.sha256Hex(message) {
+      attributes[Terra.Keys.Terra.errorMessageSHA256] = .string(digest)
+    }
+    return attributes
   }
 }

@@ -61,12 +61,8 @@ final class Runtime {
       anonymizationKey = providedAnonymizationKey
       anonymizationKeyID = Runtime.deriveAnonymizationKeyID(from: providedAnonymizationKey)
     }
-    if let tracerProvider = installation.tracerProvider {
-      tracerProviderOverride = tracerProvider
-    }
-    if let loggerProvider = installation.loggerProvider {
-      loggerProviderOverride = loggerProvider
-    }
+    tracerProviderOverride = installation.tracerProvider
+    loggerProviderOverride = installation.loggerProvider
 
     if installation.registerProvidersAsGlobal {
       if let tracerProvider = installation.tracerProvider {
@@ -80,9 +76,7 @@ final class Runtime {
       }
     }
 
-    if let meterProvider = installation.meterProvider {
-      metrics.configure(meterProvider: meterProvider)
-    }
+    metrics.configure(meterProvider: installation.meterProvider ?? OpenTelemetry.instance.meterProvider)
   }
 
   var privacy: Terra.Privacy {
@@ -277,8 +271,6 @@ final class TerraMetrics {
     inferenceDurationMs = meter.histogramBuilder(name: Terra.MetricNames.inferenceDurationMs).build()
   }
 
-  private static let emptyAttributes: [String: OpenTelemetryApi.AttributeValue] = [:]
-
   func recordInference(durationMs: Double) {
     // Copy references under the lock. OTel SDK instruments are thread-safe,
     // so we release the lock before calling add/record to avoid holding it
@@ -289,7 +281,7 @@ final class TerraMetrics {
     var inferenceDurationMs = inferenceDurationMs
     lock.unlock()
 
-    inferenceCount?.add(value: 1, attributes: Self.emptyAttributes)
-    inferenceDurationMs?.record(value: durationMs, attributes: Self.emptyAttributes)
+    inferenceCount?.add(value: 1, attributes: [:])
+    inferenceDurationMs?.record(value: durationMs, attributes: [:])
   }
 }

@@ -196,4 +196,42 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
       XCTFail("Expected alreadyInstalled but got: \(installError)")
     }
   }
+
+  func testInstallOpenTelemetry_failureDoesNotBlockFutureInstall() {
+    let failingConfig = Terra.OpenTelemetryConfiguration(
+      enableMetrics: false,
+      enableLogs: false,
+      enableSignposts: false,
+      enableSessions: false,
+      persistence: .init(storageURL: URL(fileURLWithPath: "/dev/null/terra"))
+    )
+    XCTAssertThrowsError(try Terra.installOpenTelemetry(failingConfig))
+
+    let validConfig = Terra.OpenTelemetryConfiguration(
+      enableMetrics: false,
+      enableLogs: false,
+      enableSignposts: false,
+      enableSessions: false,
+      otlpTracesEndpoint: URL(string: "http://localhost:4333/v1/traces")!
+    )
+    XCTAssertNoThrow(try Terra.installOpenTelemetry(validConfig))
+  }
+
+  func testInstallOpenTelemetry_whenTracesDisabled_createsNoSpans() async throws {
+    let support = TerraTestSupport()
+    defer { support.reset() }
+
+    let config = Terra.OpenTelemetryConfiguration(
+      enableTraces: false,
+      enableMetrics: false,
+      enableLogs: false,
+      enableSignposts: false,
+      enableSessions: false
+    )
+    try Terra.installOpenTelemetry(config)
+
+    await Terra.withInferenceSpan(.init(model: "local/llama-3.2-1b")) { _ in }
+
+    XCTAssertTrue(support.finishedSpans().isEmpty)
+  }
 }
