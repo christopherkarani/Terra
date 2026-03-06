@@ -17,6 +17,7 @@
 - Preserved PR #4 value in `5fefb8b` by porting request/response parser hardening and skipping stale TraceMacApp-only changes.
 - Reconciled overlapping telemetry/install audit value from PRs #3, #5, #6, #8, #9, and #10 in `8b2717d`, then followed up by preserving prior partial-install override semantics so tracer/logger overrides are not cleared by unrelated `Terra.install(.init(...))` calls.
 - Selectively salvaged still-relevant TraceKit filename/discovery behavior from PR #11 in `4fdfe86` and intentionally skipped stale app/UI/artifact churn.
+- Opened replacement GitHub PR `#15` from `pr-consolidation-main` and closed superseded PRs `#2` through `#12` with a reference back to `#15`.
 - Verification: `swift build` passes and full `swift test` passes on the consolidation branch.
 - Residual risk is limited to intentionally skipped stale branch content that no longer matches the current repo layout or would regress current runtime behavior.
 
