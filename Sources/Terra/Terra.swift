@@ -233,6 +233,8 @@ public enum Terra {
       do {
         return try await body(scope)
       } catch let cancellation as CancellationError {
+        span.addEvent(name: "cancelled")
+        span.status = .error(description: "CancellationError")
         throw cancellation
       } catch {
         scope.recordError(error, captureMessage: allowErrorMessageCapture)

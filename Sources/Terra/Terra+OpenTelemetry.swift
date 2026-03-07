@@ -170,6 +170,13 @@ extension Terra {
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
     } catch {
+      // Shut down any providers that were partially registered before the failure.
+      // The OTel global registry doesn't support unregistration, but shutting down
+      // ensures the half-configured providers stop exporting and release resources.
+      if ownsInstalledTracerProvider { installedTracerProvider?.shutdown() }
+      _ = installedMeterProvider?.shutdown()
+      _ = installedLogProcessor?.shutdown()
+
       installedOpenTelemetryConfiguration = nil
       installedTracerProvider = nil
       installedMeterProvider = nil
@@ -386,12 +393,21 @@ extension Terra {
 
     // Flush and shut down outside the lock — these are potentially blocking I/O.
     // We already own the refs exclusively; the lock is not needed here.
-    tracerProvider?.forceFlush()           // safe regardless of ownership
-    if tracerOwned { tracerProvider?.shutdown() }
-    _ = meterProvider?.forceFlush()
-    _ = meterProvider?.shutdown()
-    _ = logProcessor?.forceFlush()
-    _ = logProcessor?.shutdown()
+    // Use a bounded timeout to prevent indefinite blocking if an exporter is hung.
+    let flushTimeout: DispatchTimeInterval = .seconds(5)
+    let flushGroup = DispatchGroup()
+
+    flushGroup.enter()
+    DispatchQueue.global(qos: .utility).async {
+      tracerProvider?.forceFlush()
+      if tracerOwned { tracerProvider?.shutdown() }
+      _ = meterProvider?.forceFlush()
+      _ = meterProvider?.shutdown()
+      _ = logProcessor?.forceFlush()
+      _ = logProcessor?.shutdown()
+      flushGroup.leave()
+    }
+    _ = flushGroup.wait(timeout: .now() + flushTimeout)
 
     Runtime.shared.markStopped()
   }

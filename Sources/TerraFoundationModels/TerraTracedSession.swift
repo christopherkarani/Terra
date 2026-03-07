@@ -1,6 +1,7 @@
 #if canImport(FoundationModels)
 import FoundationModels
 import TerraCore
+import os.log
 
 @available(macOS 26.0, iOS 26.0, *)
 internal struct TerraTracedSessionStreamChunk: Sendable {
@@ -76,12 +77,23 @@ internal final class FoundationModelsBackend: TerraTracedSessionBackend, @unchec
     Self.extractGenerationOptionAttributes(from: session)
   }
 
+  private static var hasLoggedTokenFieldWarning = false
+
   private func explicitOutputTokenCount(from partial: Any) -> Int? {
-    for child in Mirror(reflecting: partial).children {
+    let children = Mirror(reflecting: partial).children
+    for child in children {
       guard let label = child.label, Self.supportedTokenCountNames.contains(label) else { continue }
       if let intValue = child.value as? Int, intValue >= 0 {
         return intValue
       }
+    }
+    if !children.isEmpty, !Self.hasLoggedTokenFieldWarning {
+      Self.hasLoggedTokenFieldWarning = true
+      os_log(
+        .info,
+        log: .default,
+        "Terra: FoundationModels response has no recognized token count fields. Token metrics will be unavailable."
+      )
     }
     return nil
   }

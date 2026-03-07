@@ -98,7 +98,6 @@ extension Terra {
         ),
         instrumentations: instrumentations,
         openClaw: openClaw,
-        proxy: nil,
         aiAPIHosts: HTTPAIInstrumentation.defaultAIHosts,
         excludedCoreMLModels: excludedCoreMLModels,
         profiling: profiling
@@ -358,12 +357,7 @@ extension Terra {
       )
     }
 
-    // 5. Preserve config-level intent for proxy instrumentation.
-    if config.instrumentations.contains(.proxy), config.proxy == nil {
-      assertionFailure("Proxy instrumentation requested but no proxy configuration was supplied.")
-    }
-
-    // 6. Optional OpenClaw diagnostics export mode.
+    // 5. Optional OpenClaw diagnostics export mode.
     let shouldEnableDiagnostics =
       config.instrumentations.contains(.openClawDiagnostics)
       || config.openClaw.shouldEnableDiagnosticsExport
@@ -383,7 +377,6 @@ extension Terra {
     var openTelemetry: OpenTelemetryConfiguration
     var instrumentations: Instrumentations
     var openClaw: OpenClawConfiguration
-    var proxy: ProxyConfiguration?
     var aiAPIHosts: Set<String>
     var excludedCoreMLModels: Set<String>
     var profiling: Profiling

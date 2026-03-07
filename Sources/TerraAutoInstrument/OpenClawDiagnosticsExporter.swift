@@ -101,13 +101,13 @@ private final class DiagnosticsJSONLSpanExporter: SpanExporter {
   }
 
   private func isRelevantOpenClawSpan(_ span: SpanData) -> Bool {
+    // Require the explicit gateway marker or gateway runtime attribute.
+    // Provider name alone is not sufficient — regular inference spans routed through
+    // the OpenClaw provider would be incorrectly exported to the diagnostics path.
     if span.attributes[Terra.Keys.Terra.openClawGateway] == .bool(true) {
       return true
     }
     if span.attributes[Terra.Keys.Terra.runtime] == .string("openclaw_gateway") {
-      return true
-    }
-    if span.attributes[Terra.Keys.GenAI.providerName] == .string("openclaw") {
       return true
     }
     return false

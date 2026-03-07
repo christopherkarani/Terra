@@ -113,6 +113,8 @@ public enum HTTPAIInstrumentation {
                     spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestStream, value: stream)
                 }
             },
+            // TODO: Add streaming SSE/NDJSON response support via AIResponseStreamParser
+            // for TTFT, TPS, and token count metrics on streaming API calls.
             receivedResponse: { _, dataOrFile, span in
                 guard let data = dataOrFile as? Data,
                       let parsed = AIResponseParser.parse(data: data) else { return }

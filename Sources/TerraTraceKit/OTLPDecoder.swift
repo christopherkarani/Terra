@@ -43,19 +43,25 @@ public struct OTLPRequestDecoder: Sendable {
     public var maxSpansPerRequest: Int
     public var maxAttributesPerSpan: Int
     public var maxAnyValueDepth: Int
+    public var maxArrayElements: Int
+    public var maxKVListElements: Int
 
     public init(
       maxBodyBytes: Int,
       maxDecompressedBytes: Int,
       maxSpansPerRequest: Int = 10_000,
       maxAttributesPerSpan: Int = 256,
-      maxAnyValueDepth: Int = 8
+      maxAnyValueDepth: Int = 8,
+      maxArrayElements: Int = 1_000,
+      maxKVListElements: Int = 1_000
     ) {
       self.maxBodyBytes = maxBodyBytes
       self.maxDecompressedBytes = maxDecompressedBytes
       self.maxSpansPerRequest = maxSpansPerRequest
       self.maxAttributesPerSpan = maxAttributesPerSpan
       self.maxAnyValueDepth = maxAnyValueDepth
+      self.maxArrayElements = maxArrayElements
+      self.maxKVListElements = maxKVListElements
     }
 
     public static let `default` = Limits(
@@ -63,7 +69,9 @@ public struct OTLPRequestDecoder: Sendable {
       maxDecompressedBytes: 50 * 1024 * 1024,
       maxSpansPerRequest: 10_000,
       maxAttributesPerSpan: 256,
-      maxAnyValueDepth: 8
+      maxAnyValueDepth: 8,
+      maxArrayElements: 1_000,
+      maxKVListElements: 1_000
     )
   }
 
@@ -297,7 +305,7 @@ public struct OTLPRequestDecoder: Sendable {
     from value: Opentelemetry_Proto_Common_V1_AnyValue,
     depth: Int
   ) throws -> AttributeValue {
-    guard depth <= limits.maxAnyValueDepth else {
+    guard depth < limits.maxAnyValueDepth else {
       throw OTLPRequestDecoderError.malformedData(
         reason: "AnyValue nesting depth exceeded limit \(limits.maxAnyValueDepth)"
       )
@@ -313,9 +321,19 @@ public struct OTLPRequestDecoder: Sendable {
     case .doubleValue(let double):
       return .double(double)
     case .arrayValue(let array):
+      guard array.values.count <= limits.maxArrayElements else {
+        throw OTLPRequestDecoderError.malformedData(
+          reason: "Array has \(array.values.count) elements (limit \(limits.maxArrayElements))"
+        )
+      }
       let values = try array.values.map { try attributeValue(from: $0, depth: depth + 1) }
       return .array(values)
     case .kvlistValue(let kvlist):
+      guard kvlist.values.count <= limits.maxKVListElements else {
+        throw OTLPRequestDecoderError.malformedData(
+          reason: "KV list has \(kvlist.values.count) elements (limit \(limits.maxKVListElements))"
+        )
+      }
       let attributes = try kvlist.values.map {
         Attribute(key: $0.key, value: try attributeValue(from: $0.value, depth: depth + 1))
       }

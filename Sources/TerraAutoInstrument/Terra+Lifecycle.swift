@@ -45,14 +45,20 @@ extension Terra {
     }
 
     func reconfigure(_ config: Terra.Configuration) throws {
-      guard activeConfiguration != nil else {
+      guard let previousConfig = activeConfiguration else {
         throw Terra._invalidLifecycleStateError(
           transition: "reconfigure",
           state: Terra._lifecycleState
         )
       }
       shutdown()
-      try start(config)
+      do {
+        try start(config)
+      } catch {
+        // Rollback: restore the previous configuration so Terra isn't left dead
+        try? start(previousConfig)
+        throw error
+      }
     }
 
     func reset() {

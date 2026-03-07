@@ -14,6 +14,14 @@ import TerraSystemProfiler
 /// Call `CoreMLInstrumentation.install()` once at app startup (e.g., in `applicationDidFinishLaunching`).
 /// Spans created by swizzling include `terra.auto_instrumented = true` and will be skipped if
 /// a Terra span is already active (dedup guard).
+///
+/// - Important: **Known limitation — duplicate spans under concurrency.**
+///   The dedup guard checks `activeSpan == nil` without synchronization. In rare
+///   highly-concurrent prediction patterns (e.g., batch predictions on multiple threads),
+///   two threads can both observe no active span and each create a span, producing duplicates.
+///   This is intentional to avoid lock overhead on the prediction hot path. If you observe
+///   duplicate spans in batch scenarios, use `excludedModels` to skip auto-tracing and
+///   instrument those models manually.
 public enum CoreMLInstrumentation {
 
   /// Configuration for the auto-instrumentation.

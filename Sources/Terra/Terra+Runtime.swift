@@ -1,5 +1,6 @@
 import Foundation
 import OpenTelemetryApi
+import os.log
 
 #if canImport(CryptoKit)
   import CryptoKit
@@ -115,6 +116,10 @@ final class Runtime {
     anonymizationKeyID = Runtime.deriveAnonymizationKeyID(from: key)
   }
 
+  /// Installs Terra configuration.
+  ///
+  /// - Important: Repeated calls overwrite privacy settings. This is expected when called
+  ///   from `_performStart` but should not be called independently while Terra is running.
   func install(_ installation: Terra.Installation) {
     lock.lock()
     defer { lock.unlock() }
@@ -225,19 +230,41 @@ final class Runtime {
     #endif
   }
 
+  private static let thermalStateLock = NSLock()
+  private static var cachedThermalStateLabel: String = "nominal"
+  private static var thermalStateCacheTime: ContinuousClock.Instant = .now
+
   static func thermalStateLabel() -> String {
+    thermalStateLock.lock()
+    let cached = cachedThermalStateLabel
+    let cacheAge = thermalStateCacheTime.duration(to: .now)
+    thermalStateLock.unlock()
+
+    // Return cached value if fresh (< 5 seconds)
+    if cacheAge < .seconds(5) {
+      return cached
+    }
+
+    let label: String
     switch ProcessInfo.processInfo.thermalState {
     case .nominal:
-      return "nominal"
+      label = "nominal"
     case .fair:
-      return "fair"
+      label = "fair"
     case .serious:
-      return "serious"
+      label = "serious"
     case .critical:
-      return "critical"
+      label = "critical"
     @unknown default:
-      return "unknown"
+      label = "unknown"
     }
+
+    thermalStateLock.lock()
+    cachedThermalStateLabel = label
+    thermalStateCacheTime = .now
+    thermalStateLock.unlock()
+
+    return label
   }
 }
 
@@ -251,7 +278,13 @@ private extension Runtime {
       return existing
     }
     let generated = generateAnonymizationKey()
-    _ = storeAnonymizationKeyToKeychain(generated)
+    if !storeAnonymizationKeyToKeychain(generated) {
+      os_log(
+        .error,
+        log: .default,
+        "Terra: Failed to store anonymization key to Keychain. HMAC correlations will not persist across app launches."
+      )
+    }
     return generated
   }
 
@@ -268,8 +301,13 @@ private extension Runtime {
         return Data(bytes)
       }
     #endif
-    let seed = UUID().uuidString + UUID().uuidString
-    return Data(Data(seed.utf8).prefix(anonymizationKeyLengthBytes))
+    // Fallback: use SystemRandomNumberGenerator (CSPRNG on all Swift platforms)
+    var rng = SystemRandomNumberGenerator()
+    var bytes = [UInt8](repeating: 0, count: anonymizationKeyLengthBytes)
+    for i in bytes.indices {
+      bytes[i] = UInt8.random(in: 0...255, using: &rng)
+    }
+    return Data(bytes)
   }
 
   static func readAnonymizationKeyFromKeychain() -> Data? {

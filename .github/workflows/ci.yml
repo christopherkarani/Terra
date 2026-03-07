@@ -38,6 +38,11 @@ jobs:
           set -euo pipefail
           swift test
 
+      - name: SwiftPM tests (Thread Sanitizer)
+        run: |
+          set -euo pipefail
+          swift test --sanitize=thread
+
       - name: API breaking changes (SDK targets, PRs only)
         if: github.event_name == 'pull_request'
         run: |

@@ -96,38 +96,4 @@ extension Terra {
     }
   }
 
-  /// Proxy configuration reserved for low-level proxy instrumentation paths.
-  public struct ProxyConfiguration: Sendable, Equatable {
-    public struct Upstream: Sendable, Hashable {
-      public var host: String
-      public var port: Int
-
-      public init(host: String, port: Int) {
-        self.host = host
-        self.port = port
-      }
-
-      public static func ollama(host: String = "127.0.0.1", port: Int = 11434) -> Upstream {
-        Upstream(host: host, port: port)
-      }
-
-      public static func lmStudio(host: String = "127.0.0.1", port: Int = 1234) -> Upstream {
-        Upstream(host: host, port: port)
-      }
-    }
-
-    public var listenHost: String
-    public var listenPort: Int
-    public var upstreams: [Upstream]
-
-    public init(
-      listenHost: String = "127.0.0.1",
-      listenPort: Int = 11435,
-      upstreams: [Upstream] = [.ollama(), .lmStudio()]
-    ) {
-      self.listenHost = listenHost
-      self.listenPort = listenPort
-      self.upstreams = upstreams
-    }
-  }
 }
