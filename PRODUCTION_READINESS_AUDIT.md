@@ -409,20 +409,33 @@ unauthenticated OTLP endpoint to the network.
 
 ## 7. Testing Review
 
+**Stats:** 53 test files, ~250+ test functions, 8 test targets.
+
 ### 7.1 Coverage Gaps
 
-**Untested modules:**
-- `TerraMetalProfiler` — no dedicated test target
-- `TerraSystemProfiler` — no dedicated test target
-- `TerraAccelerate` — no dedicated test target
-- `OpenClawDiagnosticsExporter` — tested only via integration in `TerraAutoInstrumentTests`
+**Modules with 0% test coverage (no dedicated tests):**
 
-**Untested code paths:**
+| Module | Critical Untested Functions |
+|--------|---------------------------|
+| `TerraMetalProfiler` | `install()`, `isInstalled`, `attributes()` |
+| `TerraSystemProfiler` | `installMemoryProfiler()`, `captureMemorySnapshot()`, `memoryDeltaAttributes()` |
+| `TerraAccelerate` | `attributes(backend:operation:durationMS:)` |
+| `OpenClawDiagnosticsExporter` | `configure()`, export behavior, file writing |
+
+**Modules with < 50% coverage:**
+
+| Module | Tests | Gap |
+|--------|-------|-----|
+| `TerraLlama` | 1 file, 1 test (~5%) | `applyDecodeStats()`, `recordLayerMetrics()` untested |
+| `TerraMetrics` | 3 tests (~20%) | No actual metric values verified; only crash-absence |
+| `OpenClawConfiguration` | Partial via StartTests (~40%) | Gateway auth, mode transitions, URL validation |
+
+**Untested code paths in well-covered modules:**
 - `Terra+OpenTelemetry.swift`: `installOpenTelemetry` error/cleanup path (partial install then throw)
 - `Terra+OpenTelemetry.swift`: `augmentExisting` strategy (line 229-240)
 - `Compression.swift`: gzip FEXTRA, FNAME, FCOMMENT, FHCRC flag combinations
 - `OTLPHTTPServer.swift`: slow client timeout behavior, connection limit exhaustion
-- `TraceStore.swift`: compact operation trigger (insertionHead > count/2)
+- `TraceStore.swift`: LRU eviction verification, compact operation trigger, dedup by traceID+spanID
 - `Runtime.generateAnonymizationKey()`: UUID fallback path
 - `Runtime.storeAnonymizationKeyToKeychain()`: update vs create paths
 
@@ -435,6 +448,9 @@ unauthenticated OTLP endpoint to the network.
 - No test for `TraceStore` at exactly `maxSpans` capacity
 - No fuzz testing for `AIRequestParser` or `AIResponseParser` with malformed JSON
 - No test for `OTLPHTTPServer` with concurrent connections at the limit
+- No test for privacy redaction with empty strings or non-ASCII/Unicode characters
+- No test for streaming TPS calculation at boundary conditions (0 tokens, < 1ms TTFT)
+- No test for `AIRequestParser` with conflicting fields (both `max_tokens` and `max_completion_tokens`)
 
 ### 7.3 Test Quality Issues
 
@@ -450,13 +466,35 @@ Several tests call `Terra.install()` or `Terra.resetOpenTelemetryForTesting()` w
 modifies global singleton state. Test isolation relies on explicit teardown. Parallel
 test execution could produce flaky results.
 
-### 7.4 CI Gaps
+**[Minor] `TerraMetricsTests` assertions are too weak**
+
+Tests call `recordInference()` but only verify no crash occurs — never assert that
+metric instruments were actually created or that recorded values match expectations.
+
+### 7.4 Flaky Test Risks
+
+**[Minor] Time-dependent streaming tests** — `TerraStreamingSpanTests.swift`
+
+TTFT and TPS calculations depend on `ContinuousClock.now` without time mocking.
+On slow CI machines, timing assertions could be non-deterministic.
+
+**[Minor] Global state leakage between tests**
+
+`resetOpenTelemetryForTesting()` resets OTel state but `OpenTelemetry.instance`
+global providers may retain stale references. Test execution order can affect results.
+
+### 7.5 CI Gaps
 
 **[Minor] No iOS/watchOS/tvOS/visionOS build verification**
 
 CI runs on `macos-latest` with `swift test` only. SPM tests do not exercise platform
 conditionals (`#if canImport(CoreML)`, `#if canImport(Security)`). Platform-specific
 code (Keychain, CoreML swizzling, Metal profiler) is untested in CI.
+
+**[Minor] No code coverage reporting**
+
+No `--enable-code-coverage` flag in CI. No coverage thresholds enforced. No visibility
+into which lines are actually exercised.
 
 **[Minor] No memory leak detection or sanitizer runs**
 
