@@ -142,6 +142,20 @@ drops valid JSON responses that use non-object top-level shapes.
 `ProcessInfo.processInfo.thermalState` is called synchronously for every span creation.
 On watchOS this can be expensive. Consider caching with a timer.
 
+**[Major] HTTP AI instrumentation lacks streaming response support** — `HTTPAIInstrumentation.swift`
+
+The HTTP auto-instrumentation captures request bodies (model, max_tokens, temperature)
+and response bodies (token counts, model) via `URLSessionInstrumentation` callbacks.
+However, `receivedResponse` and `receivedData` only handle **complete JSON** responses.
+When an AI API returns SSE (`text/event-stream`) or NDJSON streaming responses, the
+callback receives the response in chunks. The current implementation calls
+`JSONSerialization.jsonObject(with:)` on each chunk, which fails for partial JSON.
+The dedicated `AIResponseStreamParser` in `TerraHTTPInstrument` handles streaming,
+but the integration path from `URLSessionInstrumentation` callbacks does not route
+streaming responses through it. This means streaming API calls (the most common
+production pattern) get request instrumentation but **no response token counts,
+no TTFT, and no throughput metrics** from the HTTP auto-instrumentation path.
+
 ### 2.5 Silent Failure Paths
 
 **[Major] Anonymization key Keychain failure is silent** — `Terra+Runtime.swift:254`
@@ -191,7 +205,34 @@ protocol with default implementations.
 each). Only the selector and parameter list differ. A shared closure factory would
 eliminate this duplication.
 
-### 3.2 Tight Coupling
+### 3.2 Brittle Runtime Reflection
+
+**[Major] FoundationModels token extraction relies on Mirror reflection** — `TerraTracedSession.swift:79-87, 486-494`
+
+`TerraTracedSession` uses `Mirror(reflecting:)` to discover token counts and generation
+options from Apple's `LanguageModelSession` response objects. Field discovery uses
+substring matching:
+
+```swift
+private static let tokenCountFieldNames = ["tokenCount", "inputTokenCount", "outputTokenCount", ...]
+// ...
+for child in mirror.children {
+    if let label = child.label, knownNames.contains(where: { label.contains($0) }) { ... }
+}
+```
+
+This is fragile in two ways:
+1. **Apple can rename internal fields** between OS releases — the Mirror labels are
+   implementation details, not API contracts. A rename silently returns zero tokens.
+2. **Substring matching produces false positives** — a field named `maxTokenCountLimit`
+   would match `tokenCount`. The `contains()` check is too permissive.
+3. **`isGuardrailError()` uses string matching on type names** (line 376-384) which will
+   break if Apple refactors the error type hierarchy.
+
+This is acceptable for a best-effort approach but should degrade visibly (log a warning
+when no fields are found) rather than silently reporting zero tokens.
+
+### 3.3 Tight Coupling
 
 **[Major] `Runtime.shared` singleton accessed throughout**
 
@@ -208,7 +249,7 @@ The server class handles TCP connections, HTTP request parsing, OTLP decoding, a
 trace store ingestion in a single 554-line file. Extracting the HTTP parser and
 connection manager would improve testability.
 
-### 3.3 API Design Issues
+### 3.4 API Design Issues
 
 **[Minor] `package` access level used pervasively for internal types**
 
@@ -578,22 +619,24 @@ requires 6.0+.
 5. Add rollback to `reconfigure()` — restore previous config if `start()` fails
 6. Consolidate three state-tracking systems into single source of truth
 7. Add `Deque` or circular buffer to TraceStore eviction
-8. Document CoreML swizzle dedup limitation prominently in public API docs
-9. Add TSan CI job for concurrency safety verification
-10. Test `installOpenTelemetry` error/cleanup paths
-11. Add timeout to `_performShutdown()` flush operations
+8. Route streaming HTTP responses through `AIResponseStreamParser` for TTFT/TPS/token counts
+9. Add visible degradation (warning log) when FoundationModels Mirror reflection finds no token fields
+10. Document CoreML swizzle dedup limitation prominently in public API docs
+11. Add TSan CI job for concurrency safety verification
+12. Test `installOpenTelemetry` error/cleanup paths
+13. Add timeout to `_performShutdown()` flush operations
 
 ### Minor (Fix in Next Sprint)
 
-12. Extract generic `TelemetryCall` builder to reduce FluentAPI duplication
-13. Remove `ProxyConfiguration` dead code
-14. Fix AnyValue depth guard off-by-one
-15. Fix OpenClaw diagnostics span filter (OR → more specific conditions)
-16. Add platform-specific CI builds (iOS, watchOS)
-17. Standardize on `swift-testing` or `XCTest` (not both)
-18. Cache `thermalState` reads with a timer
-19. Consider recording `CancellationError` on spans per OTel spec
-20. Validate request model/agent/tool names are non-empty
+14. Extract generic `TelemetryCall` builder to reduce FluentAPI duplication
+15. Remove `ProxyConfiguration` dead code
+16. Fix AnyValue depth guard off-by-one
+17. Fix OpenClaw diagnostics span filter (OR → more specific conditions)
+18. Add platform-specific CI builds (iOS, watchOS)
+19. Standardize on `swift-testing` or `XCTest` (not both)
+20. Cache `thermalState` reads with a timer
+21. Consider recording `CancellationError` on spans per OTel spec
+22. Validate request model/agent/tool names are non-empty
 
 ---
 
