@@ -87,7 +87,22 @@ The `recordToken()` method reads `firstTokenAt` under lock, sets the flag, unloc
 emits the event outside the lock. If two concurrent `recordToken()` calls race, the event
 emission order is non-deterministic (acceptable for OTel events, but noted).
 
-### 2.3 Unsafe Assumptions
+### 2.3 Missing Input Validation
+
+**[Minor] No validation for empty model string** — `Terra+Requests.swift:15`
+
+`InferenceRequest.model` accepts any `String` including empty. An empty model name
+creates a span with `gen_ai.request.model = ""` — semantically meaningless. Similarly,
+`AgentRequest.name`, `ToolRequest.name`, and `SafetyCheckRequest.name` accept empty strings.
+
+**[Minor] `Runtime.install()` has no once-only guard** — `Terra+Runtime.swift:118`
+
+`install()` can be called multiple times, overwriting privacy settings, crypto keys,
+and provider overrides without warning. While `_LifecycleController` actor serializes
+public API calls, package-level code can call `install()` directly, silently changing
+privacy configuration mid-flight.
+
+### 2.4 Unsafe Assumptions
 
 **[Major] `JSONSerialization` used without options validation** — `AIRequestParser.swift`, `AIResponseParser.swift`
 
@@ -101,7 +116,7 @@ drops valid JSON responses that use non-object top-level shapes.
 `ProcessInfo.processInfo.thermalState` is called synchronously for every span creation.
 On watchOS this can be expensive. Consider caching with a timer.
 
-### 2.4 Silent Failure Paths
+### 2.5 Silent Failure Paths
 
 **[Major] Anonymization key Keychain failure is silent** — `Terra+Runtime.swift:254`
 
