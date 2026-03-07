@@ -55,6 +55,32 @@ to nil but **does not unregister the global tracer provider**. The OTel SDK's gl
 registry retains the provider. On retry, `augmentExisting` will find the half-configured
 provider.
 
+**[Major] `reconfigure()` leaves Terra in broken state on partial failure** — `Terra+Lifecycle.swift:47-56`
+
+```swift
+func reconfigure(_ config: Terra.Configuration) throws {
+  guard activeConfiguration != nil else { ... }
+  shutdown()        // Succeeds — Terra is now stopped
+  try start(config) // If this throws, Terra is shut down with no active config
+}
+```
+
+If `start(config)` fails after `shutdown()` completes, Terra is left in `.stopped` state
+with `activeConfiguration = nil`. There is no rollback to the previous configuration.
+The caller receives an error but Terra is silently dead with no recovery path except
+manually calling `start()` again.
+
+**[Major] Three desynchronized state-tracking systems** — Cross-module
+
+Three independent systems track whether Terra is running:
+1. `_LifecycleController.activeConfiguration` (actor-isolated, nullable)
+2. `Terra.installedOpenTelemetryConfiguration` (NSLock-protected static)
+3. `Runtime.shared.lifecycleStateValue` (NSLock-protected instance)
+
+These can desynchronize if: (a) `install()` is called directly bypassing the controller,
+(b) partial failure during `_performStart`, or (c) `installOpenTelemetry` is called
+independently. The root cause is split ownership of "is Terra running?" across modules.
+
 **[Minor] OTLPDecoder AnyValue depth guard off-by-one** — `OTLPDecoder.swift:300`
 
 ```swift
@@ -127,6 +153,19 @@ _ = storeAnonymizationKeyToKeychain(generated)
 The return value is discarded. If Keychain storage fails (sandboxed app, CI, Linux),
 every launch generates a new key, breaking HMAC correlations across sessions.
 No warning is logged.
+
+**[Minor] OpenClaw diagnostics span filter uses OR logic** — `OpenClawDiagnosticsExporter.swift`
+
+`isRelevantOpenClawSpan()` matches on `openClawGateway == true` OR
+`runtime == "openclaw_gateway"` OR `providerName == "openclaw"`. A non-gateway span
+with `providerName == "openclaw"` from a regular inference call would be incorrectly
+exported to the diagnostics path. Should use more specific AND conditions.
+
+**[Minor] No shutdown timeout** — `Terra+OpenTelemetry.swift:389-394`
+
+`_performShutdown()` calls `forceFlush()` on tracer, meter, and log providers with no
+deadline. If an exporter is hung (network timeout, DNS failure), the entire shutdown
+blocks indefinitely. Should pass a timeout to flush operations.
 
 **[Minor] `installSignposts` silently ignores unavailability** — `Terra+OpenTelemetry.swift:267-269`
 
@@ -498,20 +537,25 @@ requires 6.0+.
 ### Major (Should Fix Before Release)
 
 4. Add breadth limits to OTLPDecoder array/kvlist parsing
-5. Add `Deque` or circular buffer to TraceStore eviction
-6. Document CoreML swizzle dedup limitation prominently in public API docs
-7. Add TSan CI job for concurrency safety verification
-8. Test `installOpenTelemetry` error/cleanup paths
+5. Add rollback to `reconfigure()` — restore previous config if `start()` fails
+6. Consolidate three state-tracking systems into single source of truth
+7. Add `Deque` or circular buffer to TraceStore eviction
+8. Document CoreML swizzle dedup limitation prominently in public API docs
+9. Add TSan CI job for concurrency safety verification
+10. Test `installOpenTelemetry` error/cleanup paths
+11. Add timeout to `_performShutdown()` flush operations
 
 ### Minor (Fix in Next Sprint)
 
-9. Extract generic `TelemetryCall` builder to reduce FluentAPI duplication
-10. Remove `ProxyConfiguration` dead code
-11. Fix AnyValue depth guard off-by-one
-12. Add platform-specific CI builds (iOS, watchOS)
-13. Standardize on `swift-testing` or `XCTest` (not both)
-14. Cache `thermalState` reads with a timer
-15. Consider recording `CancellationError` on spans per OTel spec
+12. Extract generic `TelemetryCall` builder to reduce FluentAPI duplication
+13. Remove `ProxyConfiguration` dead code
+14. Fix AnyValue depth guard off-by-one
+15. Fix OpenClaw diagnostics span filter (OR → more specific conditions)
+16. Add platform-specific CI builds (iOS, watchOS)
+17. Standardize on `swift-testing` or `XCTest` (not both)
+18. Cache `thermalState` reads with a timer
+19. Consider recording `CancellationError` on spans per OTel spec
+20. Validate request model/agent/tool names are non-empty
 
 ---
 
