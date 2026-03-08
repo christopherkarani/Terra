@@ -78,8 +78,8 @@
 - [x] Fix OpenTelemetry install wiring so Terra spans always use the newly installed tracer provider.
 - [x] Fix `Trace.rootSpans` semantics for partial traces and add tests.
 - [x] Run targeted test suites, then full `swift test` and `swift build`.
-- [ ] Commit with detailed remediation summary.
-- [ ] Attempt push + PR creation with detailed PR body.
+- [x] Commit with detailed remediation summary.
+- [x] Attempt push + PR creation with detailed PR body.
 
 ## Mission-Critical Audit Review (2026-03-08)
 
@@ -87,3 +87,4 @@
 - Added regression coverage for URL sanitization, inferred operation naming, excluded OTLP endpoints, reconfiguration after install, stale tracer override replacement, and orphan-root behavior in partial traces.
 - Added fail-fast `Terra.start` validation for proxy mode and stabilized cross-suite test concurrency via a DEBUG global test lock shared by start/runtime-sensitive tests.
 - Validation complete: `swift test -q` and `swift build -q` both pass.
+- Delivery status: branch pushed to `origin/codex/mission-critical-audit-20260308` at commit `ef3c2ac`; automatic PR creation via `gh` was attempted but blocked by GitHub API connectivity in this environment.
