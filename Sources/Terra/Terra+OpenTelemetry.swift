@@ -142,13 +142,15 @@ extension Terra {
       }
 
       let tracerProviderSdk = try installTracing(configuration: configuration)
+      var meterProvider: (any MeterProvider)?
+      var loggerProvider: (any LoggerProvider)?
 
       if configuration.enableSignposts {
         installSignposts(tracerProviderSdk: tracerProviderSdk)
       }
 
       if configuration.enableLogs {
-        _ = try installLogs(configuration: configuration)
+        loggerProvider = try installLogs(configuration: configuration)
       }
 
       if configuration.enableSessions {
@@ -157,9 +159,16 @@ extension Terra {
       }
 
       if configuration.enableMetrics {
-        let meterProvider = try installMetrics(configuration: configuration)
-        Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
+        meterProvider = try installMetrics(configuration: configuration)
       }
+
+      Terra.install(.init(
+        privacy: Runtime.shared.privacy,
+        meterProvider: meterProvider,
+        tracerProvider: tracerProviderSdk,
+        loggerProvider: loggerProvider,
+        registerProvidersAsGlobal: false
+      ))
     } catch {
       installedOpenTelemetryConfiguration = nil
       throw error

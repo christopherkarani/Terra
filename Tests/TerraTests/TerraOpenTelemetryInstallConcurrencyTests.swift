@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import TerraCore
+import OpenTelemetrySdk
 
 final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
   override func setUp() {
@@ -181,5 +182,22 @@ final class TerraOpenTelemetryInstallConcurrencyTests: XCTestCase {
       if case .alreadyInstalled = installError { return }
       XCTFail("Expected alreadyInstalled but got: \(installError)")
     }
+  }
+
+  func testInstallOpenTelemetryReplacesRuntimeTracerProviderOverride() throws {
+    let staleProvider = TracerProviderSdk()
+    Terra.install(.init(tracerProvider: staleProvider, registerProvidersAsGlobal: false))
+
+    let config = makeConfig(endpoint: URL(string: "http://localhost:4390/v1/traces")!)
+    try Terra.installOpenTelemetry(config)
+
+    guard let runtimeProvider = Runtime.shared.tracerProvider as? TracerProviderSdk else {
+      XCTFail("Expected runtime tracer provider override to be set.")
+      return
+    }
+    XCTAssertFalse(
+      runtimeProvider === staleProvider,
+      "installOpenTelemetry should replace stale tracer provider overrides."
+    )
   }
 }

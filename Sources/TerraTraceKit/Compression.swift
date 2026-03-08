@@ -1,5 +1,8 @@
 import Compression
 import Foundation
+#if canImport(zlib)
+import zlib
+#endif
 
 enum OTLPContentEncoding: String, Sendable {
   case gzip
@@ -22,8 +25,12 @@ struct OTLPDecompressor {
     case .deflate:
       return try decompressZlib(data, maxOutputBytes: maxOutputBytes)
     case .gzip:
+      #if canImport(zlib)
+      return try decompressGzip(data, maxOutputBytes: maxOutputBytes)
+      #else
       let deflatePayload = try extractGzipDeflatePayload(from: data)
       return try decompressZlib(deflatePayload, maxOutputBytes: maxOutputBytes)
+      #endif
     }
   }
 
@@ -149,4 +156,59 @@ struct OTLPDecompressor {
       return data.subdata(in: index..<(bytes.count - trailerLength))
     }
   }
+
+  #if canImport(zlib)
+  private static func decompressGzip(_ data: Data, maxOutputBytes: Int) throws -> Data {
+    if data.isEmpty { return Data() }
+
+    var stream = z_stream()
+    let initResult = inflateInit2_(&stream, MAX_WBITS + 16, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size))
+    guard initResult == Z_OK else {
+      throw OTLPRequestDecoderError.decompressionFailed(reason: "Unable to initialize gzip stream")
+    }
+    defer { inflateEnd(&stream) }
+
+    let chunkSize = 64 * 1024
+    var output = Data()
+    output.reserveCapacity(min(maxOutputBytes, chunkSize))
+
+    return try data.withUnsafeBytes { rawBuffer in
+      guard let inputBase = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+        return Data()
+      }
+
+      stream.next_in = UnsafeMutablePointer(mutating: inputBase)
+      stream.avail_in = uInt(rawBuffer.count)
+
+      var outBuffer = [UInt8](repeating: 0, count: chunkSize)
+      while true {
+        let result = outBuffer.withUnsafeMutableBytes { outRawBuffer -> Int32 in
+          guard let outBase = outRawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+            return Z_BUF_ERROR
+          }
+          stream.next_out = outBase
+          stream.avail_out = uInt(chunkSize)
+          return inflate(&stream, Z_NO_FLUSH)
+        }
+
+        let produced = chunkSize - Int(stream.avail_out)
+        if produced > 0 {
+          if output.count + produced > maxOutputBytes {
+            throw OTLPRequestDecoderError.decompressedSizeLimitExceeded(max: maxOutputBytes)
+          }
+          output.append(outBuffer, count: produced)
+        }
+
+        if result == Z_STREAM_END {
+          break
+        }
+        if result != Z_OK {
+          throw OTLPRequestDecoderError.decompressionFailed(reason: "Gzip decompression error (\(result))")
+        }
+      }
+
+      return output
+    }
+  }
+  #endif
 }

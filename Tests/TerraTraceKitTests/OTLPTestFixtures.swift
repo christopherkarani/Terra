@@ -204,6 +204,9 @@ extension String {
 }
 
 #if canImport(Compression)
+#if canImport(zlib)
+import zlib
+#endif
 enum OTLPTestCompression {
   enum CompressionError: Error {
     case encodingFailed
@@ -226,6 +229,12 @@ enum OTLPTestCompression {
   }
 
   static func gzip(_ data: Data, timestamp: UInt32 = 0) throws -> Data {
+    #if canImport(zlib)
+    if let encoded = gzipWithZlib(data) {
+      return encoded
+    }
+    #endif
+
     var header = Data([0x1f, 0x8b, 0x08, 0x00])
     var time = timestamp.littleEndian
     header.append(Data(bytes: &time, count: MemoryLayout<UInt32>.size))
@@ -244,6 +253,62 @@ enum OTLPTestCompression {
 
     return result
   }
+
+  #if canImport(zlib)
+  private static func gzipWithZlib(_ data: Data) -> Data? {
+    var stream = z_stream()
+    let initResult = deflateInit2_(
+      &stream,
+      Z_DEFAULT_COMPRESSION,
+      Z_DEFLATED,
+      MAX_WBITS + 16,
+      MAX_MEM_LEVEL,
+      Z_DEFAULT_STRATEGY,
+      ZLIB_VERSION,
+      Int32(MemoryLayout<z_stream>.size)
+    )
+    guard initResult == Z_OK else { return nil }
+    defer { deflateEnd(&stream) }
+
+    let chunkSize = 64 * 1024
+    var output = Data()
+
+    let result = data.withUnsafeBytes { rawBuffer -> Data? in
+      guard let inputBase = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+        return Data()
+      }
+
+      stream.next_in = UnsafeMutablePointer(mutating: inputBase)
+      stream.avail_in = uInt(rawBuffer.count)
+
+      var buffer = [UInt8](repeating: 0, count: chunkSize)
+      while true {
+        let deflateStatus = buffer.withUnsafeMutableBytes { outRawBuffer -> Int32 in
+          guard let outBase = outRawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+            return Z_BUF_ERROR
+          }
+          stream.next_out = outBase
+          stream.avail_out = uInt(chunkSize)
+          return zlib.deflate(&stream, Z_FINISH)
+        }
+
+        let produced = chunkSize - Int(stream.avail_out)
+        if produced > 0 {
+          output.append(buffer, count: produced)
+        }
+
+        if deflateStatus == Z_STREAM_END {
+          return output
+        }
+        if deflateStatus != Z_OK {
+          return nil
+        }
+      }
+    }
+
+    return result
+  }
+  #endif
 
   private static func perform(
     operation: compression_stream_operation,

@@ -7,6 +7,10 @@ import TerraSystemProfiler
 import OpenTelemetrySdk
 
 extension Terra {
+  public enum StartError: Error, Equatable {
+    case proxyConfigurationRequired
+  }
+
   /// Configuration for `Terra.start()` auto-instrumentation.
   public struct AutoInstrumentConfiguration: Sendable {
     /// Privacy settings for all auto-instrumented spans.
@@ -113,6 +117,11 @@ extension Terra {
   /// Foundation Models and MLX wrappers are used independently via their
   /// respective modules (`TerraFoundationModels`, `TerraMLX`).
   public static func start(_ config: AutoInstrumentConfiguration = .init()) throws {
+    // Fail fast on invalid proxy config before mutating global OpenTelemetry/Terra runtime state.
+    if config.instrumentations.contains(.proxy), config.proxy == nil {
+      throw StartError.proxyConfigurationRequired
+    }
+
     // 1. Set up OpenTelemetry providers (traces, metrics, signposts, sessions)
     var openTelemetryConfig = config.openTelemetry
     if openTelemetryConfig.serviceName == nil {
@@ -152,19 +161,20 @@ extension Terra {
     }
 
     if config.instrumentations.contains(.httpAIAPIs) || shouldEnableOpenClawGateway {
+      let excludedEndpoints: Set<URL> = [
+        openTelemetryConfig.otlpTracesEndpoint,
+        openTelemetryConfig.otlpMetricsEndpoint,
+        openTelemetryConfig.otlpLogsEndpoint,
+      ]
       HTTPAIInstrumentation.install(
         hosts: monitoredHosts,
         openClawGatewayHosts: openClawGatewayHosts,
-        openClawMode: config.openClaw.modeString
+        openClawMode: config.openClaw.modeString,
+        excludedEndpoints: excludedEndpoints
       )
     }
 
-    // 5. Preserve config-level intent for proxy instrumentation.
-    if config.instrumentations.contains(.proxy), config.proxy == nil {
-      assertionFailure("Proxy instrumentation requested but no proxy configuration was supplied.")
-    }
-
-    // 6. Optional OpenClaw diagnostics export mode.
+    // 5. Optional OpenClaw diagnostics export mode.
     let shouldEnableDiagnostics =
       config.instrumentations.contains(.openClawDiagnostics)
       || config.openClaw.shouldEnableDiagnosticsExport

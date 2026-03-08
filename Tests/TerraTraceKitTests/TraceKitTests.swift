@@ -178,6 +178,24 @@ func traceComputesBoundariesCorrectly() throws {
   #expect(trace.duration == 200.0)
 }
 
+@Test("Trace treats spans with missing parent IDs as roots")
+func traceTreatsOrphanedSpansAsRoots() throws {
+  let traceID = TraceId()
+  let missingParentID = SpanId.random()
+  let orphan = makeSpan(
+    name: "orphan-child",
+    traceId: traceID,
+    parentSpanId: missingParentID,
+    start: Date(timeIntervalSince1970: 100),
+    end: Date(timeIntervalSince1970: 101)
+  )
+
+  let trace = try Trace(fileName: "123456", spans: [orphan])
+  #expect(trace.rootSpans.count == 1)
+  #expect(trace.rootSpans.first?.name == "orphan-child")
+  #expect(trace.displayName == "orphan-child")
+}
+
 // MARK: - TraceLoader Tests
 
 @Test("TraceLoader returns empty for empty directory")

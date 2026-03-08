@@ -35,6 +35,12 @@ extension Terra {
   }
 }
 
+#if DEBUG
+extension Terra {
+  static let globalTestLock = NSLock()
+}
+#endif
+
 final class Runtime {
   static let shared = Runtime()
 

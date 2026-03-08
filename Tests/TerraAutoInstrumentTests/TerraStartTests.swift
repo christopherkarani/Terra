@@ -110,6 +110,9 @@ struct TerraStartTests {
 
   @Test("Terra.start() with .none instrumentations does not crash")
   func terraStartWithNoneInstrumentationsDoesNotCrash() throws {
+    Terra.globalTestLock.lock()
+    defer { Terra.globalTestLock.unlock() }
+
     // Reset any prior install state from other tests or runs
     Terra.resetOpenTelemetryForTesting()
     defer { Terra.resetOpenTelemetryForTesting() }
@@ -131,6 +134,9 @@ struct TerraStartTests {
 
   @Test("Terra.start() throws alreadyInstalled when called twice with different config")
   func terraStartThrowsAlreadyInstalledOnSecondCall() throws {
+    Terra.globalTestLock.lock()
+    defer { Terra.globalTestLock.unlock() }
+
     Terra.resetOpenTelemetryForTesting()
     defer { Terra.resetOpenTelemetryForTesting() }
 
@@ -156,6 +162,9 @@ struct TerraStartTests {
 
   @Test("Terra.start() is idempotent when called twice with identical config")
   func terraStartIsIdempotentWithSameConfig() throws {
+    Terra.globalTestLock.lock()
+    defer { Terra.globalTestLock.unlock() }
+
     Terra.resetOpenTelemetryForTesting()
     defer { Terra.resetOpenTelemetryForTesting() }
 
@@ -173,5 +182,30 @@ struct TerraStartTests {
     // Two calls with the same config should not throw
     try Terra.start(config)
     try Terra.start(config)
+  }
+
+  @Test("Terra.start() throws when proxy instrumentation is enabled without proxy config")
+  func terraStartThrowsWhenProxyConfigMissing() {
+    Terra.globalTestLock.lock()
+    defer { Terra.globalTestLock.unlock() }
+
+    Terra.resetOpenTelemetryForTesting()
+    defer { Terra.resetOpenTelemetryForTesting() }
+
+    let config = Terra.AutoInstrumentConfiguration(
+      openTelemetry: .init(
+        enableTraces: false,
+        enableMetrics: false,
+        enableLogs: false,
+        enableSignposts: false,
+        enableSessions: false
+      ),
+      instrumentations: [.proxy],
+      proxy: nil
+    )
+
+    #expect(throws: Terra.StartError.proxyConfigurationRequired) {
+      try Terra.start(config)
+    }
   }
 }

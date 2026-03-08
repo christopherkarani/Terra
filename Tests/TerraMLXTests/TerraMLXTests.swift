@@ -1,6 +1,6 @@
 import Testing
 import TerraMLX
-import TerraCore
+@testable import TerraCore
 import OpenTelemetryApi
 import OpenTelemetrySdk
 import InMemoryExporter
@@ -16,6 +16,7 @@ private struct SpanTestHarness {
   let tracerProvider: TracerProviderSdk
 
   init() {
+    Terra.globalTestLock.lock()
     previousTracerProvider = OpenTelemetry.instance.tracerProvider
     spanExporter = InMemoryExporter()
     tracerProvider = TracerProviderSdk()
@@ -32,6 +33,7 @@ private struct SpanTestHarness {
 
   func tearDown() {
     OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+    Terra.globalTestLock.unlock()
   }
 }
 

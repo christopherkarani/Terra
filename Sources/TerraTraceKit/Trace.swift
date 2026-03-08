@@ -61,6 +61,7 @@ public struct Trace {
     }
 
     // Single-pass extraction of start, end, roots, hasError
+    let spanIDs = Set(ordered.map(\.spanId))
     var start = ordered[0].startTime
     var end = ordered[0].endTime
     var roots: [SpanData] = []
@@ -68,7 +69,13 @@ public struct Trace {
     for span in ordered {
       if span.startTime < start { start = span.startTime }
       if span.endTime > end { end = span.endTime }
-      if span.parentSpanId == nil { roots.append(span) }
+      if let parentSpanID = span.parentSpanId {
+        if !spanIDs.contains(parentSpanID) {
+          roots.append(span)
+        }
+      } else {
+        roots.append(span)
+      }
       if span.status.isError { hasError = true }
     }
 

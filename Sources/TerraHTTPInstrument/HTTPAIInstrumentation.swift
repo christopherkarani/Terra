@@ -27,33 +27,44 @@ public enum HTTPAIInstrumentation {
     public static func install(
         hosts: Set<String> = defaultAIHosts,
         openClawGatewayHosts: Set<String> = [],
-        openClawMode: String = "disabled"
+        openClawMode: String = "disabled",
+        excludedEndpoints: Set<URL> = []
     ) {
         lock.lock()
         defer { lock.unlock() }
 
-        guard instance == nil else { return }
+        let excludedNormalizedEndpoints = Set(excludedEndpoints.compactMap(NormalizedEndpoint.init(url:)))
 
         let config = URLSessionInstrumentationConfiguration(
             shouldInstrument: { request in
-                guard let host = request.url?.host else { return false }
+                guard let url = request.url, let host = url.host else { return false }
+                if isEndpointExcluded(url, excludedEndpoints: excludedNormalizedEndpoints) {
+                    return false
+                }
                 return isHostMatched(host, hosts: hosts)
                     || isHostMatched(host, hosts: openClawGatewayHosts)
             },
             nameSpan: { request in
                 guard let host = request.url?.host else { return nil }
+                let operation = inferredOperationName(from: request)
                 if isHostMatched(host, hosts: openClawGatewayHosts) {
-                    return "chat openclaw.gateway"
+                    return "\(operation) openclaw.gateway"
                 }
                 for aiHost in hosts where isHostBoundaryMatch(host: host, target: aiHost) {
-                    return "chat \(host)"
+                    return "\(operation) \(host)"
                 }
                 return nil
             },
             spanCustomization: { request, spanBuilder in
                 spanBuilder.setAttribute(key: Terra.Keys.Terra.autoInstrumented, value: true)
                 spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: "http_api")
-                spanBuilder.setAttribute(key: Terra.Keys.GenAI.operationName, value: "chat")
+                spanBuilder.setAttribute(key: Terra.Keys.GenAI.operationName, value: inferredOperationName(from: request))
+
+                if let sanitizedURL = sanitizedRequestURL(request.url) {
+                    // Override URLSessionInstrumentation's default full URL capture with a query/fragment-free URL.
+                    spanBuilder.setAttribute(key: "http.url", value: sanitizedURL)
+                    spanBuilder.setAttribute(key: "url.full", value: sanitizedURL)
+                }
 
                 if let host = request.url?.host {
                     let isOpenClawGateway = isHostMatched(host, hosts: openClawGatewayHosts)
@@ -99,7 +110,11 @@ public enum HTTPAIInstrumentation {
             semanticConvention: .old
         )
 
-        instance = URLSessionInstrumentation(configuration: config)
+        if let instance {
+            instance.configuration = config
+        } else {
+            instance = URLSessionInstrumentation(configuration: config)
+        }
     }
 
     static func resetForTesting() {
@@ -134,5 +149,57 @@ public enum HTTPAIInstrumentation {
         if isHostBoundaryMatch(host: host, target: "api.cohere.com") { return "cohere" }
         if isHostBoundaryMatch(host: host, target: "api.fireworks.ai") { return "fireworks" }
         return host
+    }
+
+    private static func inferredOperationName(from request: URLRequest) -> String {
+        let path = request.url?.path.lowercased() ?? ""
+        if path.contains("/embeddings") {
+            return Terra.OperationName.embeddings.rawValue
+        }
+        if path.contains("/moderations") {
+            return Terra.OperationName.safetyCheck.rawValue
+        }
+        if path.contains("/chat/completions") || path.contains("/responses") || path.contains("/messages") {
+            return Terra.OperationName.chat.rawValue
+        }
+        if path.contains("/completions") {
+            return Terra.OperationName.textCompletion.rawValue
+        }
+        return Terra.OperationName.inference.rawValue
+    }
+
+    private static func sanitizedRequestURL(_ url: URL?) -> String? {
+        guard let url, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        components.query = nil
+        components.fragment = nil
+        components.user = nil
+        components.password = nil
+        return components.string
+    }
+
+    private static func isEndpointExcluded(_ url: URL, excludedEndpoints: Set<NormalizedEndpoint>) -> Bool {
+        guard let normalizedURL = NormalizedEndpoint(url: url) else { return false }
+        return excludedEndpoints.contains(normalizedURL)
+    }
+
+    private struct NormalizedEndpoint: Hashable {
+        let scheme: String
+        let host: String
+        let port: Int?
+        let path: String
+
+        init?(url: URL) {
+            guard let scheme = url.scheme?.lowercased(),
+                  let host = url.host?.lowercased() else {
+                return nil
+            }
+            self.scheme = scheme
+            self.host = host
+            self.port = url.port
+            let normalizedPath = url.path.isEmpty ? "/" : url.path
+            self.path = normalizedPath
+        }
     }
 }

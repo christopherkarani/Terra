@@ -69,3 +69,21 @@
 - Added trace file max-size guard in `TraceFileReader` with oversize failure test coverage.
 - Strengthened privacy defaults by making legacy SHA attributes opt-in (`emitLegacySHA256Attributes: false`), with updated redaction tests and README notes.
 - Validation: `swift test --filter TerraRedactionPolicyTests` and full `swift test` both pass.
+
+## Mission-Critical Audit Remediation (2026-03-08)
+
+- [x] Add regression tests for HTTP instrumentation privacy and operation correctness (`http.url` sanitization, OpenClaw/endpoint exclusion behavior).
+- [x] Fix HTTP auto-instrumentation correctness gaps (reconfiguration-safe install, excluded endpoint filtering, operation inference, URL sanitization).
+- [x] Add regression test proving `installOpenTelemetry` updates Terra runtime tracer provider override.
+- [x] Fix OpenTelemetry install wiring so Terra spans always use the newly installed tracer provider.
+- [x] Fix `Trace.rootSpans` semantics for partial traces and add tests.
+- [x] Run targeted test suites, then full `swift test` and `swift build`.
+- [ ] Commit with detailed remediation summary.
+- [ ] Attempt push + PR creation with detailed PR body.
+
+## Mission-Critical Audit Review (2026-03-08)
+
+- Fixed correctness defects in Terra runtime/provider wiring, TraceKit root-span derivation, and HTTP instrumentation lifecycle/endpoint filtering.
+- Added regression coverage for URL sanitization, inferred operation naming, excluded OTLP endpoints, reconfiguration after install, stale tracer override replacement, and orphan-root behavior in partial traces.
+- Added fail-fast `Terra.start` validation for proxy mode and stabilized cross-suite test concurrency via a DEBUG global test lock shared by start/runtime-sensitive tests.
+- Validation complete: `swift test -q` and `swift build -q` both pass.
