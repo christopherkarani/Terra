@@ -5,8 +5,28 @@ import OpenTelemetryApi
 
 @available(macOS 26.0, iOS 26.0, *)
 public final class TerraTracedSession: @unchecked Sendable {
+  public enum SessionConcurrencyError: Error, Sendable, Equatable {
+    case concurrentOperationNotAllowed
+  }
+
+  private actor RequestGate {
+    private var inFlight = false
+
+    func enter() throws {
+      if inFlight {
+        throw SessionConcurrencyError.concurrentOperationNotAllowed
+      }
+      inFlight = true
+    }
+
+    func leave() {
+      inFlight = false
+    }
+  }
+
   private let session: LanguageModelSession
   public let modelIdentifier: String
+  private let requestGate = RequestGate()
 
   public init(
     model: SystemLanguageModel = .default,
@@ -23,18 +43,21 @@ public final class TerraTracedSession: @unchecked Sendable {
 
   /// Respond to a prompt with auto-tracing.
   public func respond(to prompt: String, promptCapture: Terra.CaptureIntent = .default) async throws -> String {
-    let request = Terra.InferenceRequest(
-      model: modelIdentifier,
-      prompt: prompt,
-      promptCapture: promptCapture
-    )
-    return try await Terra.withInferenceSpan(request) { scope in
-      scope.setAttributes([
-        Terra.Keys.Terra.runtime: .string("foundation_models"),
-        Terra.Keys.Terra.autoInstrumented: .bool(true)
-      ])
-      let response = try await session.respond(to: prompt)
-      return response.content
+    try await withExclusiveSessionAccess {
+      let request = Terra.InferenceRequest(
+        model: modelIdentifier,
+        prompt: prompt,
+        promptCapture: promptCapture
+      )
+      let output = try await Terra.withInferenceSpan(request) { scope in
+        scope.setAttributes([
+          Terra.Keys.Terra.runtime: .string("foundation_models"),
+          Terra.Keys.Terra.autoInstrumented: .bool(true)
+        ])
+        let response = try await session.respond(to: prompt)
+        return response.content
+      }
+      return output
     }
   }
 
@@ -44,18 +67,21 @@ public final class TerraTracedSession: @unchecked Sendable {
     generating type: T.Type,
     promptCapture: Terra.CaptureIntent = .default
   ) async throws -> T {
-    let request = Terra.InferenceRequest(
-      model: modelIdentifier,
-      prompt: prompt,
-      promptCapture: promptCapture
-    )
-    return try await Terra.withInferenceSpan(request) { scope in
-      scope.setAttributes([
-        Terra.Keys.Terra.runtime: .string("foundation_models"),
-        Terra.Keys.Terra.autoInstrumented: .bool(true),
-        "terra.foundation_models.response_type": .string(String(describing: T.self))
-      ])
-      return try await session.respond(to: prompt, generating: type).content
+    try await withExclusiveSessionAccess {
+      let request = Terra.InferenceRequest(
+        model: modelIdentifier,
+        prompt: prompt,
+        promptCapture: promptCapture
+      )
+      let output: T = try await Terra.withInferenceSpan(request) { scope in
+        scope.setAttributes([
+          Terra.Keys.Terra.runtime: .string("foundation_models"),
+          Terra.Keys.Terra.autoInstrumented: .bool(true),
+          "terra.foundation_models.response_type": .string(String(describing: T.self))
+        ])
+        return try await session.respond(to: prompt, generating: type).content
+      }
+      return output
     }
   }
 
@@ -66,26 +92,33 @@ public final class TerraTracedSession: @unchecked Sendable {
 
     return AsyncThrowingStream { continuation in
       let task = Task { [weak self] in
-        let request = Terra.InferenceRequest(
-          model: modelIdentifier,
-          prompt: prompt,
-          promptCapture: promptCapture,
-          stream: true
-        )
+        guard let self else {
+          continuation.finish(throwing: CancellationError())
+          return
+        }
+
         do {
-          try await Terra.withStreamingInferenceSpan(request) { streamScope in
-            streamScope.setAttributes([
-              Terra.Keys.Terra.runtime: .string("foundation_models"),
-              Terra.Keys.Terra.autoInstrumented: .bool(true)
-            ])
-            let stream = session.streamResponse(to: prompt)
-            for try await partial in stream {
-              try Task.checkCancellation()
-              streamScope.recordChunk()
-              if let explicitCount = self?.explicitOutputTokenCount(from: partial) {
-                streamScope.recordOutputTokenCount(explicitCount)
+          try await self.withExclusiveSessionAccess {
+            let request = Terra.InferenceRequest(
+              model: modelIdentifier,
+              prompt: prompt,
+              promptCapture: promptCapture,
+              stream: true
+            )
+            try await Terra.withStreamingInferenceSpan(request) { streamScope in
+              streamScope.setAttributes([
+                Terra.Keys.Terra.runtime: .string("foundation_models"),
+                Terra.Keys.Terra.autoInstrumented: .bool(true)
+              ])
+              let stream = session.streamResponse(to: prompt)
+              for try await partial in stream {
+                try Task.checkCancellation()
+                streamScope.recordChunk()
+                if let explicitCount = self.explicitOutputTokenCount(from: partial) {
+                  streamScope.recordOutputTokenCount(explicitCount)
+                }
+                continuation.yield(partial.content)
               }
-              continuation.yield(partial.content)
             }
           }
           continuation.finish()
@@ -106,21 +139,33 @@ public final class TerraTracedSession: @unchecked Sendable {
     "tokensGenerated",
   ]
 
-  /// Tracks whether we've already probed for a token count field and found none.
-  private var tokenCountFieldChecked = false
-
   private func explicitOutputTokenCount(from partial: Any) -> Int? {
-    // After first nil result, skip Mirror reflection entirely
-    if tokenCountFieldChecked { return nil }
-
     for child in Mirror(reflecting: partial).children {
       guard let label = child.label, Self.supportedTokenCountNames.contains(label) else { continue }
       if let intValue = child.value as? Int, intValue >= 0 {
         return intValue
       }
     }
-    tokenCountFieldChecked = true
     return nil
+  }
+
+  private func withExclusiveSessionAccess<T>(_ operation: () async throws -> T) async throws -> T {
+    try await requestGate.enter()
+    do {
+      let value = try await operation()
+      await requestGate.leave()
+      return value
+    } catch {
+      await requestGate.leave()
+      throw error
+    }
+  }
+
+  func _holdExclusiveAccessForTesting(nanoseconds: UInt64) async throws {
+    _ = try await withExclusiveSessionAccess {
+      try await Task.sleep(nanoseconds: nanoseconds)
+      return ()
+    }
   }
 }
 

@@ -279,3 +279,36 @@ func loaderReportsOversizedFileFailures() throws {
     }
   }
 }
+
+@Test("TraceFileReader enforces max size using bounded handle reads")
+func traceFileReaderRejectsOversizedFile() throws {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  let fileURL = dir.appendingPathComponent("12345")
+  let oversized = Data(repeating: 0x42, count: 257)
+  try oversized.write(to: fileURL)
+
+  let file = TraceFileReference(
+    url: fileURL,
+    fileName: "12345",
+    timestamp: Date(timeIntervalSince1970: 12345)
+  )
+  let reader = TraceFileReader(maxFileSizeBytes: 256)
+
+  do {
+    _ = try reader.read(file: file)
+    Issue.record("Expected fileTooLarge error")
+  } catch let error as TraceFileError {
+    if case let .fileTooLarge(_, actualBytes, maxBytes) = error {
+      #expect(actualBytes >= 257)
+      #expect(maxBytes == 256)
+    } else {
+      Issue.record("Expected fileTooLarge, got \(error)")
+    }
+  } catch {
+    Issue.record("Unexpected error type: \(error)")
+  }
+}

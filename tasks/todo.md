@@ -69,3 +69,29 @@
 - Added trace file max-size guard in `TraceFileReader` with oversize failure test coverage.
 - Strengthened privacy defaults by making legacy SHA attributes opt-in (`emitLegacySHA256Attributes: false`), with updated redaction tests and README notes.
 - Validation: `swift test --filter TerraRedactionPolicyTests` and full `swift test` both pass.
+
+## Mission-Critical Audit Remediation (2026-03-10)
+
+- [x] Validate baseline (`swift test`) and capture candidate P1 issues.
+- [x] Fix OTLPHTTPServer shared-state synchronization hazards.
+- [x] Fix TerraTracedSession shared mutable state race in concurrent streams.
+- [x] Harden TraceFileReader against TOCTOU oversize-read bypass.
+- [x] Add/expand regression tests for each fix.
+- [x] Run `swift test` and `swift build` to verify no regressions.
+- [ ] Commit, push branch, and open PR with detailed notes.
+
+## Mission-Critical Review Notes (2026-03-10)
+
+- `OTLPHTTPServer` now synchronizes all listener/connection state reads and writes through its dedicated queue, including `port`, `start`, `stop`, and `deinit`.
+- `TerraTracedSession` now enforces single in-flight session operations with a request gate and returns a deterministic concurrency error for overlap attempts.
+- `TraceFileReader` now uses same-handle size check + bounded read (`max + 1`) to block TOCTOU oversized reads.
+- Added regression tests:
+  - `testOTLPHTTPServerConcurrentPortReadDuringLifecycleIsStable`
+  - `traceFileReaderRejectsOversizedFile`
+  - `tracedSessionRejectsConcurrentOperations`
+- Validation:
+  - `swift test --filter TerraTracedSessionTests`
+  - `swift test --filter OTLPHTTPServerTests`
+  - `swift test --filter traceFileReaderRejectsOversizedFile`
+  - full `swift test`
+  - `swift build`

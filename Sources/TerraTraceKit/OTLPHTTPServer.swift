@@ -43,13 +43,17 @@ public final class OTLPHTTPServer: @unchecked Sendable {
   private static let maxActiveConnections = 64
 
   private let queue = DispatchQueue(label: "terra.trace.otlp.httpserver")
+  private let queueKey = DispatchSpecificKey<UInt8>()
+  private let queueIdentity: UInt8 = 1
   private var listener: NWListener?
   private var activeConnections: [ObjectIdentifier: NWConnection] = [:]
   private var readTimeoutTimers: [ObjectIdentifier: DispatchSourceTimer] = [:]
   private var decodeTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
   public var port: UInt16 {
-    listener?.port?.rawValue ?? configuredPort
+    withQueueSync {
+      listener?.port?.rawValue ?? configuredPort
+    }
   }
 
   public init(
@@ -66,55 +70,52 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     self.traceStore = traceStore
     self.limits = limits
     self.onSpans = onSpans
+    queue.setSpecific(key: queueKey, value: queueIdentity)
   }
 
   public func start() throws {
-    guard listener == nil else { return }
+    try withQueueSync {
+      guard listener == nil else { return }
 
-    let parameters = NWParameters.tcp
-    let listener: NWListener
-    if configuredPort == 0 {
-      listener = try NWListener(using: parameters)
-    } else if let port = NWEndpoint.Port(rawValue: configuredPort) {
-      if shouldBindToHost(host) {
-        parameters.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host(host), port: port)
+      let parameters = NWParameters.tcp
+      let listener: NWListener
+      if configuredPort == 0 {
         listener = try NWListener(using: parameters)
+      } else if let port = NWEndpoint.Port(rawValue: configuredPort) {
+        if shouldBindToHost(host) {
+          parameters.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host(host), port: port)
+          listener = try NWListener(using: parameters)
+        } else {
+          listener = try NWListener(using: parameters, on: port)
+        }
       } else {
-        listener = try NWListener(using: parameters, on: port)
+        throw NSError(domain: "OTLPHTTPServer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])
       }
-    } else {
-      throw NSError(domain: "OTLPHTTPServer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])
-    }
 
-    listener.stateUpdateHandler = { [weak self] (state: NWListener.State) in
-      if case .failed = state {
-        self?.stop()
+      listener.stateUpdateHandler = { [weak self] (state: NWListener.State) in
+        if case .failed = state {
+          self?.stop()
+        }
       }
-    }
 
-    listener.newConnectionHandler = { [weak self] connection in
-      self?.handle(connection)
-    }
+      listener.newConnectionHandler = { [weak self] connection in
+        self?.handle(connection)
+      }
 
-    self.listener = listener
-    listener.start(queue: queue)
+      self.listener = listener
+      listener.start(queue: queue)
+    }
   }
 
   public func stop() {
     queue.async {
-      self.listener?.cancel()
-      self.listener = nil
-      for id in Array(self.activeConnections.keys) {
-        self.cleanupConnection(id: id)
-      }
+      self.stopLocked()
     }
   }
 
   deinit {
-    listener?.cancel()
-    listener = nil
-    for id in Array(activeConnections.keys) {
-      cleanupConnection(id: id)
+    withQueueSync {
+      self.stopLocked()
     }
   }
 
@@ -408,6 +409,22 @@ public final class OTLPHTTPServer: @unchecked Sendable {
   private func shouldBindToHost(_ host: String) -> Bool {
     let lowered = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     return !lowered.isEmpty && lowered != "0.0.0.0" && lowered != "::"
+  }
+
+  private func stopLocked() {
+    listener?.cancel()
+    listener = nil
+    for id in Array(activeConnections.keys) {
+      cleanupConnection(id: id)
+    }
+  }
+
+  @discardableResult
+  private func withQueueSync<T>(_ body: () throws -> T) rethrows -> T {
+    if DispatchQueue.getSpecific(key: queueKey) == queueIdentity {
+      return try body()
+    }
+    return try queue.sync(execute: body)
   }
 
   private func parseRequestHead(_ data: Data) -> Result<HTTPRequestHead, HTTPParseError> {

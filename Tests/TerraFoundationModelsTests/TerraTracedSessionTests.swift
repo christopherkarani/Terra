@@ -1,7 +1,7 @@
 import Testing
 
 #if canImport(FoundationModels)
-import TerraFoundationModels
+@testable import TerraFoundationModels
 import TerraCore
 
 @available(macOS 26.0, iOS 26.0, *)
@@ -16,6 +16,30 @@ func tracedSessionInitializesWithDefaultIdentifier() {
 func tracedSessionInitializesWithCustomIdentifier() {
   let session = TerraTracedSession(modelIdentifier: "apple/custom-model")
   #expect(session.modelIdentifier == "apple/custom-model")
+}
+
+@available(macOS 26.0, iOS 26.0, *)
+@Test("TerraTracedSession rejects concurrent in-flight operations")
+func tracedSessionRejectsConcurrentOperations() async throws {
+  let session = TerraTracedSession()
+
+  let holdingTask = Task {
+    try await session._holdExclusiveAccessForTesting(nanoseconds: 300_000_000)
+  }
+  defer { holdingTask.cancel() }
+
+  try await Task.sleep(nanoseconds: 50_000_000)
+
+  do {
+    try await session._holdExclusiveAccessForTesting(nanoseconds: 10_000_000)
+    Issue.record("Expected concurrentOperationNotAllowed error")
+  } catch let error as TerraTracedSession.SessionConcurrencyError {
+    #expect(error == .concurrentOperationNotAllowed)
+  } catch {
+    Issue.record("Unexpected error type: \(error)")
+  }
+
+  try await holdingTask.value
 }
 
 #else

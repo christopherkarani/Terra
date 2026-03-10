@@ -147,6 +147,32 @@ final class OTLPHTTPServerTests: XCTestCase {
     let snapshot = await store.snapshot(filter: nil)
     XCTAssertTrue(snapshot.allSpans.isEmpty)
   }
+
+  func testOTLPHTTPServerConcurrentPortReadDuringLifecycleIsStable() async {
+    let store = TraceStore(maxSpans: 5)
+    let server = OTLPHTTPServer(host: "127.0.0.1", port: 0, traceStore: store)
+    defer { server.stop() }
+
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask {
+        for _ in 0..<200 {
+          _ = server.port
+          try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+      }
+
+      group.addTask {
+        for _ in 0..<50 {
+          try? server.start()
+          _ = server.port
+          server.stop()
+          try? await Task.sleep(nanoseconds: 2_000_000)
+        }
+      }
+    }
+
+    XCTAssertTrue(true)
+  }
 }
 
 private func waitForBoundPort(
