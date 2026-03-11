@@ -78,7 +78,7 @@
 - [x] Prioritize findings (P0-P2), implement production-grade fixes with minimal impact.
 - [x] Add/adjust regression tests first (TDD-style) for each confirmed issue.
 - [x] Re-run targeted tests, then full `swift test` and `swift build`.
-- [ ] Prepare commit(s) with detailed messages and open PR.
+- [x] Prepare commit(s) with detailed messages and open PR.
 - [x] Add review summary and residual risks under this section.
 
 ### Review
@@ -96,6 +96,9 @@
   - `swift test --filter TerraRuntimeInstallTests`
   - `swift test --no-parallel` (full pass; avoids known global-state flake in parallel Swift Testing mode)
   - `swift build`
+- Branch/PR:
+  - Branch: `automation/check-frameworks-audit-20260311`
+  - PR: `https://github.com/christopherkarani/Terra/pull/17`
 - Residual risk: `installOpenTelemetry` partial-install rollback and HTTP instrumentation reconfiguration semantics remain as follow-up work outside this patch set.
 
 ## Terra Source Review Audit (2026-03-11)
