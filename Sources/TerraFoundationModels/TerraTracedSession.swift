@@ -65,6 +65,7 @@ public final class TerraTracedSession: @unchecked Sendable {
     let session = self.session
 
     return AsyncThrowingStream { continuation in
+      var tokenCountFieldChecked = false
       let task = Task { [weak self] in
         let request = Terra.InferenceRequest(
           model: modelIdentifier,
@@ -82,7 +83,7 @@ public final class TerraTracedSession: @unchecked Sendable {
             for try await partial in stream {
               try Task.checkCancellation()
               streamScope.recordChunk()
-              if let explicitCount = self?.explicitOutputTokenCount(from: partial) {
+              if let explicitCount = self?.explicitOutputTokenCount(from: partial, tokenCountFieldChecked: &tokenCountFieldChecked) {
                 streamScope.recordOutputTokenCount(explicitCount)
               }
               continuation.yield(partial.content)
@@ -106,10 +107,7 @@ public final class TerraTracedSession: @unchecked Sendable {
     "tokensGenerated",
   ]
 
-  /// Tracks whether we've already probed for a token count field and found none.
-  private var tokenCountFieldChecked = false
-
-  private func explicitOutputTokenCount(from partial: Any) -> Int? {
+  private func explicitOutputTokenCount(from partial: Any, tokenCountFieldChecked: inout Bool) -> Int? {
     // After first nil result, skip Mirror reflection entirely
     if tokenCountFieldChecked { return nil }
 

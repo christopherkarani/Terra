@@ -69,3 +69,44 @@
 - Added trace file max-size guard in `TraceFileReader` with oversize failure test coverage.
 - Strengthened privacy defaults by making legacy SHA attributes opt-in (`emitLegacySHA256Attributes: false`), with updated redaction tests and README notes.
 - Validation: `swift test --filter TerraRedactionPolicyTests` and full `swift test` both pass.
+
+## Mission-Critical Framework Audit (2026-03-11)
+
+- [x] Read prior automation memory + current audit artifacts to avoid duplicate work.
+- [x] Run baseline `swift build` and `swift test` to detect current regressions.
+- [x] Perform static audit for correctness/safety issues (concurrency, parsing, lifecycle, dead paths).
+- [x] Prioritize findings (P0-P2), implement production-grade fixes with minimal impact.
+- [x] Add/adjust regression tests first (TDD-style) for each confirmed issue.
+- [x] Re-run targeted tests, then full `swift test` and `swift build`.
+- [ ] Prepare commit(s) with detailed messages and open PR.
+- [x] Add review summary and residual risks under this section.
+
+### Review
+
+- Fixed a request-lifecycle correctness bug in `OTLPHTTPServer`: once a response path begins (especially timeout/error), later queued reads/decode cannot ingest spans for that connection.
+- Added resource-attribute budget enforcement in `OTLPRequestDecoder.Limits` (`maxResourceAttributes`) to prevent unbounded resource metadata fan-out across spans.
+- Fixed sticky runtime install state in `Runtime.install(_:)` by clearing tracer/logger overrides when omitted and resetting metrics instruments when `meterProvider` is nil.
+- Removed shared mutable stream token-probe state from `TerraTracedSession` and scoped it per stream to avoid cross-stream races.
+- Added regression coverage:
+  - `OTLPHTTPServerTests.testOTLPHTTPServer_timeoutIgnoresLateBodyData`
+  - `OTLPRequestDecoderTests.testDecodeRejectsWhenResourceAttributesExceedLimit`
+  - `TerraRuntimeInstallTests.testInstallClearsTracerProviderOverrideWhenUnset`
+- Verification:
+  - `swift test --filter OTLPHTTPServerTests --filter OTLPRequestDecoderTests`
+  - `swift test --filter TerraRuntimeInstallTests`
+  - `swift test --no-parallel` (full pass; avoids known global-state flake in parallel Swift Testing mode)
+  - `swift build`
+- Residual risk: `installOpenTelemetry` partial-install rollback and HTTP instrumentation reconfiguration semantics remain as follow-up work outside this patch set.
+
+## Terra Source Review Audit (2026-03-11)
+
+- [x] Record review-only scope for `Sources/Terra`, `Sources/TerraHTTPInstrument`, and `Sources/TerraFoundationModels`.
+- [x] Inspect target sources plus adjacent tests/usages for correctness, concurrency, and lifecycle failures.
+- [x] Rank the top 3-5 concrete findings with break scenarios and patch suggestions.
+- [x] Add review summary and residual risk notes under this section.
+
+### Review
+
+- Top findings: sticky `Runtime.install` state leaks provider/key configuration across installs; `installOpenTelemetry` can leave a half-installed global stack on failure; `TerraTracedSession` shares an unsynchronized token-count probe flag across streams; `HTTPAIInstrumentation.resetForTesting()` only drops the wrapper reference, so repeated install/reset cycles do not cleanly tear down instrumentation; `HTTPAIInstrumentation.install()` silently ignores later host/mode changes.
+- Adjacent tests cover happy paths for tracing/context propagation and basic HTTP instrumentation, but they do not currently exercise reconfiguration, rollback, or repeated install/reset behavior.
+- Full verification now succeeds with `swift test --no-parallel` and `swift build`.

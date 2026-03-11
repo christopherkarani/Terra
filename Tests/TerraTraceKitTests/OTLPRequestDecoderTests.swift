@@ -115,6 +115,35 @@ final class OTLPRequestDecoderTests: XCTestCase {
     )
   }
 
+  func testDecodeRejectsWhenResourceAttributesExceedLimit() throws {
+    var request = OTLPTestFixtures.makeExportRequest()
+    guard var firstResourceSpan = request.resourceSpans.first else {
+      XCTFail("Missing resource spans")
+      return
+    }
+
+    firstResourceSpan.resource.attributes = (0..<3).map { index in
+      OTLPTestFixtures.makeKeyValue(key: "resource-\(index)", stringValue: "value-\(index)")
+    }
+    request.resourceSpans[0] = firstResourceSpan
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(
+        maxBodyBytes: body.count + 64,
+        maxDecompressedBytes: body.count + 64,
+        maxSpansPerRequest: 10,
+        maxAttributesPerSpan: 256,
+        maxResourceAttributes: 2,
+        maxAnyValueDepth: 8
+      )
+    )
+
+    XCTAssertThrowsError(
+      try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    )
+  }
+
   func testDecodeRejectsWhenAnyValueNestingExceedsLimit() throws {
     var request = OTLPTestFixtures.makeExportRequest()
     guard var firstScope = request.resourceSpans.first?.scopeSpans.first else {

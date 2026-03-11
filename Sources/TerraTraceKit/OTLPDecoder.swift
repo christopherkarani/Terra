@@ -42,6 +42,7 @@ public struct OTLPRequestDecoder: Sendable {
     public var maxDecompressedBytes: Int
     public var maxSpansPerRequest: Int
     public var maxAttributesPerSpan: Int
+    public var maxResourceAttributes: Int
     public var maxAnyValueDepth: Int
 
     public init(
@@ -49,12 +50,14 @@ public struct OTLPRequestDecoder: Sendable {
       maxDecompressedBytes: Int,
       maxSpansPerRequest: Int = 10_000,
       maxAttributesPerSpan: Int = 256,
+      maxResourceAttributes: Int = 128,
       maxAnyValueDepth: Int = 8
     ) {
       self.maxBodyBytes = maxBodyBytes
       self.maxDecompressedBytes = maxDecompressedBytes
       self.maxSpansPerRequest = maxSpansPerRequest
       self.maxAttributesPerSpan = maxAttributesPerSpan
+      self.maxResourceAttributes = maxResourceAttributes
       self.maxAnyValueDepth = maxAnyValueDepth
     }
 
@@ -63,6 +66,7 @@ public struct OTLPRequestDecoder: Sendable {
       maxDecompressedBytes: 50 * 1024 * 1024,
       maxSpansPerRequest: 10_000,
       maxAttributesPerSpan: 256,
+      maxResourceAttributes: 128,
       maxAnyValueDepth: 8
     )
   }
@@ -161,6 +165,11 @@ public struct OTLPRequestDecoder: Sendable {
 
     var seenSpanCount = 0
     for resourceSpans in request.resourceSpans {
+      guard resourceSpans.resource.attributes.count <= limits.maxResourceAttributes else {
+        throw OTLPRequestDecoderError.malformedData(
+          reason: "Resource has \(resourceSpans.resource.attributes.count) attributes (limit \(limits.maxResourceAttributes))"
+        )
+      }
       let resourceAttributesDict = try attributesDictionary(from: resourceSpans.resource.attributes)
       let resourceAttributes = Attributes(dictionary: resourceAttributesDict)
       let resource = Resource(attributes: resourceAttributes)

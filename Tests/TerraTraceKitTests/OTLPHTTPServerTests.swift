@@ -147,6 +147,59 @@ final class OTLPHTTPServerTests: XCTestCase {
     let snapshot = await store.snapshot(filter: nil)
     XCTAssertTrue(snapshot.allSpans.isEmpty)
   }
+
+  func testOTLPHTTPServer_timeoutIgnoresLateBodyData() async throws {
+    let fullBody = try OTLPTestFixtures.serializedRequest()
+    let prefixCount = max(1, fullBody.count / 3)
+    let partialBody = Data(fullBody.prefix(prefixCount))
+    let lateBody = Data(fullBody.dropFirst(prefixCount))
+
+    let store = TraceStore(maxSpans: 50)
+    let server = OTLPHTTPServer(
+      host: "127.0.0.1",
+      port: 0,
+      traceStore: store,
+      limits: .init(
+        maxHeaderBytes: 32 * 1024,
+        maxBodyBytes: 10 * 1024 * 1024,
+        headerReadTimeout: 2,
+        bodyReadTimeout: 0.2
+      )
+    )
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = try await waitForBoundPort(server, timeout: 2.0)
+    XCTAssertGreaterThan(actualPort, 0)
+    guard actualPort > 0 else {
+      XCTFail("Server did not bind to an ephemeral port within timeout")
+      return
+    }
+
+    let requestBytes = makeRawRequestWithContentLength(
+      host: "127.0.0.1",
+      port: actualPort,
+      declaredContentLength: fullBody.count,
+      body: partialBody
+    )
+
+    let response = try await sendRawRequestWithDelayedAppend(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      initialRequest: requestBytes,
+      delayedChunk: lateBody,
+      delayNanoseconds: 400_000_000
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 408, "Response body: \(parseBody(from: response))")
+    let snapshot = await store.snapshot(filter: nil)
+    XCTAssertTrue(snapshot.allSpans.isEmpty, "Timed-out requests must not ingest spans even if client sends late bytes.")
+  }
 }
 
 private func waitForBoundPort(
@@ -234,6 +287,67 @@ private func sendRawRequest(
             resumeOnce(.failure(error))
             return
           }
+          receiveResponse(on: connection, buffer: Data(), resumeOnce: resumeOnce)
+        })
+      case .failed(let error):
+        connection.cancel()
+        resumeOnce(.failure(error))
+      default:
+        break
+      }
+    }
+
+    connection.start(queue: .global())
+  }
+}
+
+private func sendRawRequestWithDelayedAppend(
+  host: String,
+  port: UInt16,
+  initialRequest: Data,
+  delayedChunk: Data,
+  delayNanoseconds: UInt64
+) async throws -> Data {
+  try await withCheckedThrowingContinuation { continuation in
+    let lock = NSLock()
+    var didResume = false
+    func resumeOnce(_ result: Result<Data, Error>) {
+      lock.lock()
+      if didResume {
+        lock.unlock()
+        return
+      }
+      didResume = true
+      lock.unlock()
+      switch result {
+      case .success(let data):
+        continuation.resume(returning: data)
+      case .failure(let error):
+        continuation.resume(throwing: error)
+      }
+    }
+
+    let connection = NWConnection(
+      host: NWEndpoint.Host(host),
+      port: NWEndpoint.Port(rawValue: port)!,
+      using: .tcp
+    )
+
+    connection.stateUpdateHandler = { state in
+      switch state {
+      case .ready:
+        connection.send(content: initialRequest, completion: .contentProcessed { error in
+          if let error {
+            connection.cancel()
+            resumeOnce(.failure(error))
+            return
+          }
+
+          Task.detached {
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
+            connection.send(content: delayedChunk, completion: .contentProcessed { _ in })
+          }
+
           receiveResponse(on: connection, buffer: Data(), resumeOnce: resumeOnce)
         })
       case .failed(let error):

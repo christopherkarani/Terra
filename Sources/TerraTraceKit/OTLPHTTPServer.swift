@@ -45,6 +45,7 @@ public final class OTLPHTTPServer: @unchecked Sendable {
   private let queue = DispatchQueue(label: "terra.trace.otlp.httpserver")
   private var listener: NWListener?
   private var activeConnections: [ObjectIdentifier: NWConnection] = [:]
+  private var terminalConnections: Set<ObjectIdentifier> = []
   private var readTimeoutTimers: [ObjectIdentifier: DispatchSourceTimer] = [:]
   private var decodeTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
@@ -141,8 +142,10 @@ public final class OTLPHTTPServer: @unchecked Sendable {
   }
 
   private func receiveHeaders(on connection: NWConnection, connectionID: ObjectIdentifier, buffer: Data) {
+    guard isConnectionActive(connectionID) else { return }
+
     if buffer.count > limits.maxHeaderBytes {
-      sendError(on: connection, status: .headerTooLarge, message: "Request headers too large")
+      sendError(on: connection, connectionID: connectionID, status: .headerTooLarge, message: "Request headers too large")
       return
     }
 
@@ -156,9 +159,10 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     let remaining = max(1, limits.maxHeaderBytes - buffer.count)
     connection.receive(minimumIncompleteLength: 1, maximumLength: remaining) { [weak self] data, _, isComplete, error in
       guard let self else { return }
+      guard self.isConnectionActive(connectionID) else { return }
 
       if let error {
-        self.sendError(on: connection, status: .internalServerError, message: "Network error: \(error.localizedDescription)")
+        self.sendError(on: connection, connectionID: connectionID, status: .internalServerError, message: "Network error: \(error.localizedDescription)")
         return
       }
 
@@ -180,7 +184,7 @@ public final class OTLPHTTPServer: @unchecked Sendable {
       }
 
       if isComplete {
-        self.sendError(on: connection, status: .badRequest, message: "Incomplete HTTP request")
+        self.sendError(on: connection, connectionID: connectionID, status: .badRequest, message: "Incomplete HTTP request")
         return
       }
 
@@ -194,13 +198,15 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     on connection: NWConnection,
     connectionID: ObjectIdentifier
   ) {
+    guard isConnectionActive(connectionID) else { return }
+
     let parseResult = parseRequestHead(data)
     switch parseResult {
     case .failure(let error):
-      sendError(on: connection, status: error.status, message: error.message, extraHeaders: error.extraHeaders)
+      sendError(on: connection, connectionID: connectionID, status: error.status, message: error.message, extraHeaders: error.extraHeaders)
     case .success(let head):
       if head.contentLength > limits.maxBodyBytes {
-        sendError(on: connection, status: .payloadTooLarge, message: "Payload exceeds max body size")
+        sendError(on: connection, connectionID: connectionID, status: .payloadTooLarge, message: "Payload exceeds max body size")
         return
       }
       if initialBody.count >= head.contentLength {
@@ -225,6 +231,8 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     buffer: Data,
     head: HTTPRequestHead
   ) {
+    guard isConnectionActive(connectionID) else { return }
+
     var buffer = buffer
     if buffer.count >= expectedLength {
       handleBody(Data(buffer.prefix(expectedLength)), head: head, on: connection, connectionID: connectionID)
@@ -242,9 +250,10 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     let maxRead = min(remaining, 64 * 1024)
     connection.receive(minimumIncompleteLength: 1, maximumLength: maxRead) { [weak self] data, _, isComplete, error in
       guard let self else { return }
+      guard self.isConnectionActive(connectionID) else { return }
 
       if let error {
-        self.sendError(on: connection, status: .internalServerError, message: "Network error: \(error.localizedDescription)")
+        self.sendError(on: connection, connectionID: connectionID, status: .internalServerError, message: "Network error: \(error.localizedDescription)")
         return
       }
 
@@ -258,7 +267,7 @@ public final class OTLPHTTPServer: @unchecked Sendable {
       }
 
       if isComplete {
-        self.sendError(on: connection, status: .badRequest, message: "Unexpected end of request body")
+        self.sendError(on: connection, connectionID: connectionID, status: .badRequest, message: "Unexpected end of request body")
         return
       }
 
@@ -278,6 +287,7 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     on connection: NWConnection,
     connectionID: ObjectIdentifier
   ) {
+    guard isConnectionActive(connectionID) else { return }
     cancelReadTimeout(for: connectionID)
     let task = Task { [weak self] in
       guard let self else { return }
@@ -291,15 +301,15 @@ public final class OTLPHTTPServer: @unchecked Sendable {
           onSpans(accepted)
         }
         self.queue.async {
-          guard self.activeConnections[connectionID] != nil else { return }
-          self.sendSuccess(on: connection)
+          guard self.isConnectionActive(connectionID) else { return }
+          self.sendSuccess(on: connection, connectionID: connectionID)
         }
       } catch is CancellationError {
         return
       } catch {
         self.queue.async {
-          guard self.activeConnections[connectionID] != nil else { return }
-          self.sendError(on: connection, status: .badRequest, message: "Invalid OTLP payload")
+          guard self.isConnectionActive(connectionID) else { return }
+          self.sendError(on: connection, connectionID: connectionID, status: .badRequest, message: "Invalid OTLP payload")
         }
       }
     }
@@ -307,10 +317,11 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     decodeTasks[connectionID] = task
   }
 
-  private func sendSuccess(on connection: NWConnection) {
+  private func sendSuccess(on connection: NWConnection, connectionID: ObjectIdentifier) {
     let body = otlpSuccessBody()
     sendResponse(
       on: connection,
+      connectionID: connectionID,
       status: .ok,
       headers: [
         "Content-Type": "application/x-protobuf",
@@ -323,6 +334,7 @@ public final class OTLPHTTPServer: @unchecked Sendable {
 
   private func sendError(
     on connection: NWConnection,
+    connectionID: ObjectIdentifier,
     status: HTTPStatus,
     message: String,
     extraHeaders: [String: String] = [:]
@@ -332,15 +344,19 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     headers["Content-Type"] = "text/plain; charset=utf-8"
     headers["Connection"] = "close"
     headers["Content-Length"] = "\(body.count)"
-    sendResponse(on: connection, status: status, headers: headers, body: body)
+    sendResponse(on: connection, connectionID: connectionID, status: status, headers: headers, body: body)
   }
 
   private func sendResponse(
     on connection: NWConnection,
+    connectionID: ObjectIdentifier,
     status: HTTPStatus,
     headers: [String: String],
     body: Data
   ) {
+    guard isConnectionActive(connectionID) else { return }
+    terminalConnections.insert(connectionID)
+
     var responseLines: [String] = ["HTTP/1.1 \(status.code) \(status.reason)"]
     for (key, value) in headers {
       responseLines.append("\(key): \(value)")
@@ -368,6 +384,7 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     if let connection = activeConnections.removeValue(forKey: id) {
       connection.cancel()
     }
+    terminalConnections.remove(id)
   }
 
   private func cancelReadTimeout(for id: ObjectIdentifier) {
@@ -390,10 +407,14 @@ public final class OTLPHTTPServer: @unchecked Sendable {
     timer.setEventHandler { [weak self] in
       guard let self else { return }
       guard self.activeConnections[id] != nil else { return }
-      self.sendError(on: connection, status: .requestTimeout, message: message)
+      self.sendError(on: connection, connectionID: id, status: .requestTimeout, message: message)
     }
     readTimeoutTimers[id] = timer
     timer.resume()
+  }
+
+  private func isConnectionActive(_ id: ObjectIdentifier) -> Bool {
+    activeConnections[id] != nil && !terminalConnections.contains(id)
   }
 
   private func otlpSuccessBody() -> Data {
