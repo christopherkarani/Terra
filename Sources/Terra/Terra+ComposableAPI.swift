@@ -171,6 +171,12 @@ extension Terra {
       return self
     }
 
+    /// Attaches a span attribute using the string representation of `value`.
+    ///
+    /// All values are stored as OpenTelemetry string attributes regardless of their
+    /// Swift type, so numeric aggregation (sum, avg, percentile) on backend dashboards
+    /// will not work on values added via `tag`. Use `.tokens(input:output:)` and
+    /// `.responseModel(_:)` for structured numeric and identifier attributes.
     @discardableResult
     public func tag<T: CustomStringConvertible & Sendable>(_ key: StaticString, _ value: T) -> Self {
       onAttribute(key.description, .string(value.description))
