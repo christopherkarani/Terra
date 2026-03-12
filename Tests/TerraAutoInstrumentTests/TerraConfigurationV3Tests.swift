@@ -1,173 +1,58 @@
+import Foundation
 import Testing
 @testable import Terra
 @testable import TerraCore
 
-@Test("Configuration has sensible defaults")
-func configurationDefaults() {
-  let config = Terra.Configuration()
-  #expect(config.privacy == .redacted)
-  #expect(config.serviceName == nil)
-  #expect(config.samplingRatio == nil)
-  #expect(config.metricsInterval == 60)
-  #expect(config.enableSignposts == true)
-  #expect(config.enableSessions == true)
-}
+@Suite struct TerraConfigurationV3Tests {
 
-@Test("Configuration default profiling has both profilers disabled")
-func configurationDefaultProfilingDisabled() {
-  let config = Terra.Configuration()
-  #expect(config.profiling.enableMemoryProfiler == false)
-  #expect(config.profiling.enableMetalProfiler == false)
-}
-
-@Test("Configuration default openClaw mode is disabled")
-func configurationDefaultOpenClawDisabled() {
-  let config = Terra.Configuration()
-  #expect(config.openClaw.mode == .disabled)
-}
-
-@Test("Configuration default excludedCoreMLModels is empty")
-func configurationDefaultExcludedCoreMLModelsEmpty() {
-  let config = Terra.Configuration()
-  #expect(config.excludedCoreMLModels.isEmpty)
-}
-
-@Test("Configuration default enableLogs is false")
-func configurationDefaultEnableLogsFalse() {
-  let config = Terra.Configuration()
-  #expect(config.enableLogs == false)
-}
-
-@Test("Preset.quickstart creates correct configuration")
-func quickstartPreset() {
-  let config = Terra.Configuration(preset: .quickstart)
-  #expect(config.privacy == .redacted)
-  #expect(config.persistence == nil)
-}
-
-@Test("Preset.production enables persistence")
-func productionPreset() {
-  let config = Terra.Configuration(preset: .production)
-  #expect(config.persistence != nil)
-}
-
-@Test("Preset.diagnostics enables diagnostics instrumentation")
-func diagnosticsPreset() {
-  let config = Terra.Configuration(preset: .diagnostics)
-  #expect(config.persistence != nil)
-  #expect(config.instrumentations.contains(.openClawDiagnostics))
-  #expect(config.resourceAttributes["terra.profile"] == "diagnostics")
-}
-
-@Test("Diagnostics preset enables both profilers")
-func diagnosticsPresetEnablesProfilers() {
-  let config = Terra.Configuration(preset: .diagnostics)
-  #expect(config.profiling.enableMemoryProfiler == true)
-  #expect(config.profiling.enableMetalProfiler == true)
-}
-
-@Test("Diagnostics preset sets openClaw mode to diagnosticsOnly")
-func diagnosticsPresetSetsOpenClawDiagnostics() {
-  let config = Terra.Configuration(preset: .diagnostics)
-  #expect(config.openClaw.mode == .diagnosticsOnly)
-}
-
-@Test("Diagnostics preset sets enableLogs to true")
-func diagnosticsPresetEnablesLogs() {
-  let config = Terra.Configuration(preset: .diagnostics)
-  #expect(config.enableLogs == true)
-}
-
-@Test("Quickstart preset keeps profilers disabled")
-func quickstartPresetKeepsProfilersDisabled() {
-  let config = Terra.Configuration(preset: .quickstart)
-  #expect(config.profiling.enableMemoryProfiler == false)
-  #expect(config.profiling.enableMetalProfiler == false)
-}
-
-@Test("Quickstart preset keeps openClaw disabled")
-func quickstartPresetKeepsOpenClawDisabled() {
-  let config = Terra.Configuration(preset: .quickstart)
-  #expect(config.openClaw.mode == .disabled)
-}
-
-@Test("Production preset keeps profilers disabled")
-func productionPresetKeepsProfilersDisabled() {
-  let config = Terra.Configuration(preset: .production)
-  #expect(config.profiling.enableMemoryProfiler == false)
-  #expect(config.profiling.enableMetalProfiler == false)
-}
-
-@Test("Production preset keeps openClaw disabled")
-func productionPresetKeepsOpenClawDisabled() {
-  let config = Terra.Configuration(preset: .production)
-  #expect(config.openClaw.mode == .disabled)
-}
-
-// MARK: - Conversion Tests
-
-@Test("Custom profiling value survives start configuration conversion")
-func profilingSurvivesConversion() {
-  var config = Terra.Configuration()
-  config.profiling = .init(enableMemoryProfiler: true, enableMetalProfiler: true)
-  let resolved = config.asAutoInstrumentConfiguration()
-  #expect(resolved.profiling.enableMemoryProfiler == true)
-  #expect(resolved.profiling.enableMetalProfiler == true)
-}
-
-@Test("Custom openClaw value survives start configuration conversion")
-func openClawSurvivesConversion() {
-  var config = Terra.Configuration()
-  config.openClaw = .init(mode: .diagnosticsOnly)
-  let resolved = config.asAutoInstrumentConfiguration()
-  #expect(resolved.openClaw.mode == .diagnosticsOnly)
-}
-
-@Test("Custom excludedCoreMLModels survives start configuration conversion")
-func excludedCoreMLModelsSurvivesConversion() {
-  var config = Terra.Configuration()
-  config.excludedCoreMLModels = ["MyModel", "OtherModel"]
-  let resolved = config.asAutoInstrumentConfiguration()
-  #expect(resolved.excludedCoreMLModels == ["MyModel", "OtherModel"])
-}
-
-@Test("enableLogs = true maps to OpenTelemetry enableLogs = true")
-func enableLogsMapsCorrectly() {
-  var config = Terra.Configuration()
-  config.enableLogs = true
-  let resolved = config.asAutoInstrumentConfiguration()
-  #expect(resolved.openTelemetry.enableLogs == true)
-}
-
-@Test("enableLogs = false maps to OpenTelemetry enableLogs = false")
-func enableLogsFalseMapsCorrectly() {
-  let config = Terra.Configuration()
-  let resolved = config.asAutoInstrumentConfiguration()
-  #expect(resolved.openTelemetry.enableLogs == false)
-}
-
-@Suite("Configuration canonical start", .serialized)
-final class ConfigurationCanonicalStartTests {
-  init() {
-    Terra.lockTestingIsolation()
-    Terra.resetOpenTelemetryForTesting()
+  @Test func quickstartDefaults() {
+    let config = Terra.Configuration(preset: .quickstart)
+    #expect(config.privacy == .redacted)
+    #expect(config.features.contains(.coreML))
+    #expect(config.features.contains(.http))
+    #expect(config.features.contains(.sessions))
+    #expect(config.features.contains(.signposts))
+    #expect(!config.features.contains(.logs))
+    if case .localDashboard = config.destination { } else { Issue.record("Expected .localDashboard") }
+    if case .off = config.persistence { } else { Issue.record("Expected .off persistence") }
+    if case .off = config.profiling { } else { Issue.record("Expected .off profiling") }
   }
 
-  deinit {
-    Terra.resetOpenTelemetryForTesting()
-    Terra.unlockTestingIsolation()
+  @Test func productionPresetEnablesPersistence() {
+    let config = Terra.Configuration(preset: .production)
+    if case .balanced = config.persistence { } else { Issue.record("Expected .balanced persistence") }
+    if case .off = config.profiling { } else { Issue.record("Expected .off profiling in production") }
+    #expect(!config.features.contains(.logs))
   }
 
-  @Test("start with Configuration delegates correctly")
-  func startWithConfiguration() async throws {
-    Terra.resetOpenTelemetryForTesting()
-    await Terra.reset()
-    defer { Terra.resetOpenTelemetryForTesting() }
-    var config = Terra.Configuration()
-    config.instrumentations = .none
-    config.enableSignposts = false
-    config.enableSessions = false
-    try await Terra.start(config)
-    await Terra.reset()
+  @Test func diagnosticsPresetEnablesAll() {
+    let config = Terra.Configuration(preset: .diagnostics)
+    if case .all = config.profiling { } else { Issue.record("Expected .all profiling") }
+    if case .balanced = config.persistence { } else { Issue.record("Expected .balanced persistence") }
+    #expect(config.features.contains(.logs))
+    #expect(config.features.contains(.signposts))
+    #expect(config.features.contains(.sessions))
+  }
+
+  @Test func destinationLocalDashboard() {
+    let config = Terra.Configuration(preset: .quickstart)
+    if case .localDashboard = config.destination { } else { Issue.record("Expected .localDashboard") }
+  }
+
+  @Test func destinationCustomEndpoint() {
+    var config = Terra.Configuration(preset: .quickstart)
+    config.destination = .endpoint(URL(string: "http://my-collector:4318")!)
+    if case .endpoint(let url) = config.destination {
+      #expect(url.host == "my-collector")
+    } else {
+      Issue.record("Expected .endpoint")
+    }
+  }
+
+  @Test func featuresAreCustomizable() {
+    var config = Terra.Configuration(preset: .quickstart)
+    config.features = [.coreML]
+    #expect(config.features.contains(.coreML))
+    #expect(!config.features.contains(.http))
   }
 }

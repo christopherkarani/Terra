@@ -99,17 +99,26 @@ extension Terra {
 
 extension Terra {
   static func _validateLifecycleConfiguration(_ config: Terra.Configuration) throws {
-    let scheme = config.endpoint.scheme?.lowercased()
+    // Derive the endpoint URL from the destination enum
+    let endpointURL: URL
+    switch config.destination {
+    case .localDashboard:
+      endpointURL = URL(string: "http://127.0.0.1:4318")!
+    case .endpoint(let url):
+      endpointURL = url
+    }
+
+    let scheme = endpointURL.scheme?.lowercased()
     guard
       let scheme,
       scheme == "http" || scheme == "https",
-      config.endpoint.host != nil
+      endpointURL.host != nil
     else {
       throw Terra.TerraError(
         code: .invalid_endpoint,
-        message: "Terra.Configuration.endpoint must use http/https and include a host.",
+        message: "Terra.Configuration destination endpoint must use http/https and include a host.",
         context: [
-          "endpoint": config.endpoint.absoluteString,
+          "endpoint": endpointURL.absoluteString,
         ]
       )
     }
@@ -138,8 +147,12 @@ extension Terra {
 
     if _isPersistenceSetupFailure(error, config: config) {
       var context: [String: String] = ["transition": transition]
-      if let storageURL = config.persistence?.storageURL {
-        context["storage_url"] = storageURL.absoluteString
+      // Extract storage URL from persistence enum for error context
+      switch config.persistence {
+      case .balanced(let url), .instant(let url):
+        context["storage_url"] = url.absoluteString
+      case .off:
+        break
       }
       return Terra.TerraError(
         code: .persistence_setup_failed,
@@ -175,7 +188,16 @@ extension Terra {
     _ error: any Error,
     config: Terra.Configuration
   ) -> Bool {
-    guard config.persistence != nil else { return false }
+    // Extract storage URL from persistence enum if set
+    let persistenceURL: URL?
+    switch config.persistence {
+    case .off:
+      persistenceURL = nil
+    case .balanced(let url), .instant(let url):
+      persistenceURL = url
+    }
+
+    guard persistenceURL != nil else { return false }
     let nsError = error as NSError
     if nsError.domain == NSCocoaErrorDomain {
       return true
@@ -186,7 +208,7 @@ extension Terra {
       return true
     }
 
-    if let path = config.persistence?.storageURL.path.lowercased(), !path.isEmpty {
+    if let path = persistenceURL?.path.lowercased(), !path.isEmpty {
       return description.contains(path)
     }
     return false

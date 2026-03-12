@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Terra
 @testable import TerraCore
@@ -22,10 +23,8 @@ final class TerraLifecycleAPITests {
     #expect(Terra.lifecycleState == .stopped)
     #expect(!Terra.isRunning)
 
-    var config = Terra.Configuration()
-    config.instrumentations = .none
-    config.enableSignposts = false
-    config.enableSessions = false
+    var config = Terra.Configuration(preset: .quickstart)
+    config.features = []
     try await Terra.start(config)
 
     #expect(Terra.lifecycleState == .running)
@@ -54,14 +53,12 @@ final class TerraLifecycleAPITests {
     Terra.resetOpenTelemetryForTesting()
     await Terra.reset()
 
-    var config1 = Terra.Configuration()
-    config1.instrumentations = .none
-    config1.enableSignposts = false
-    config1.enableSessions = false
+    var config1 = Terra.Configuration(preset: .quickstart)
+    config1.features = []
     try await Terra.start(config1)
 
     var config2 = config1
-    config2.serviceName = "com.example.changed"
+    config2.destination = .endpoint(URL(string: "http://other-collector:4318")!)
     try await Terra.reconfigure(config2)
 
     // Same-config start is idempotent.
@@ -83,10 +80,8 @@ final class TerraLifecycleAPITests {
     Terra.resetOpenTelemetryForTesting()
     await Terra.reset()
 
-    var base = Terra.Configuration()
-    base.instrumentations = .none
-    base.enableSignposts = false
-    base.enableSessions = false
+    var base = Terra.Configuration(preset: .quickstart)
+    base.features = []
 
     await withTaskGroup(of: Void.self) { group in
       for i in 0..<30 {
@@ -98,7 +93,7 @@ final class TerraLifecycleAPITests {
             await Terra.shutdown()
           default:
             var config = base
-            config.serviceName = "com.example.\(i)"
+            config.destination = .endpoint(URL(string: "http://collector-\(i):4318")!)
             try? await Terra.reconfigure(config)
           }
         }

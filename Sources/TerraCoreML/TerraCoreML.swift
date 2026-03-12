@@ -11,6 +11,16 @@ public enum TerraCoreML {
     public static let runtime = "terra.runtime"
     /// The configured Core ML compute units (from `MLModelConfiguration`).
     public static let computeUnits = "terra.coreml.compute_units"
+
+    // MARK: - Compute Plan keys (package-scoped)
+    package static let computePlanCaptureStatus = "terra.coreml.compute_plan.capture_status"
+    package static let computePlanModelStructure = "terra.coreml.compute_plan.model_structure"
+    package static let computePlanEstimatedPrimaryDevice = "terra.coreml.compute_plan.estimated_primary_device"
+    package static let computePlanSupportedDevices = "terra.coreml.compute_plan.supported_devices"
+    package static let computePlanNodeCount = "terra.coreml.compute_plan.node_count"
+    package static let computePlanCaptureDurationMs = "terra.coreml.compute_plan.capture_duration_ms"
+    package static let computePlanEstimatedOperations = "terra.coreml.compute_plan.estimated_operations"
+    package static let computePlanErrorType = "terra.coreml.compute_plan.error_type"
   }
 
   public static func attributes(computeUnits: MLComputeUnits) -> [String: AttributeValue] {
@@ -22,6 +32,27 @@ public enum TerraCoreML {
 
   public static func attributes(configuration: MLModelConfiguration) -> [String: AttributeValue] {
     attributes(computeUnits: configuration.computeUnits)
+  }
+
+  /// Builds route-evidence attributes for a Core ML compute-units selection.
+  package static func routeEvidence(
+    computeUnits: MLComputeUnits,
+    captureMode: Terra.ExecutionRouteCaptureMode,
+    confidence: Terra.ExecutionRouteConfidence
+  ) -> Terra.ExecutionRouteEvidence {
+    let requested: String
+    switch computeUnits {
+    case .all: requested = "all"
+    case .cpuOnly: requested = "cpu"
+    case .cpuAndGPU: requested = "cpu_gpu"
+    case .cpuAndNeuralEngine: requested = "cpu_ane"
+    @unknown default: requested = "unknown"
+    }
+    return Terra.ExecutionRouteEvidence(
+      requested: requested,
+      captureMode: captureMode,
+      confidence: confidence
+    )
   }
 }
 

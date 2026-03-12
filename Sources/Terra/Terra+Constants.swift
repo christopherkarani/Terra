@@ -1,16 +1,18 @@
 import Foundation
 
 extension Terra {
-  enum SpanNames {
-    static let inference = "gen_ai.inference"
-    static let embedding = "gen_ai.embeddings"
-    static let agentInvocation = "gen_ai.agent"
-    static let toolExecution = "gen_ai.tool"
-    static let safetyCheck = "terra.safety_check"
+  package enum SpanNames {
+    package static let inference = "gen_ai.inference"
+    package static let embedding = "gen_ai.embeddings"
+    package static let agentInvocation = "gen_ai.agent"
+    package static let toolExecution = "gen_ai.tool"
+    package static let safetyCheck = "terra.safety_check"
+    package static let session = "terra.session"
+    package static let modelLoad = "terra.coreml.model_load"
 
-    static func isTerraSpanName(_ name: String) -> Bool {
+    package static func isTerraSpanName(_ name: String) -> Bool {
       switch name {
-      case inference, embedding, agentInvocation, toolExecution, safetyCheck:
+      case inference, embedding, agentInvocation, toolExecution, safetyCheck, session, modelLoad:
         return true
       default:
         return false
@@ -106,6 +108,10 @@ extension Terra {
       package static let thermalState = "terra.process.thermal_state"
       package static let processMemoryResidentDeltaMB = "process.memory.resident_delta_mb"
       package static let processMemoryPeakMB = "process.memory.peak_mb"
+
+      // MARK: Latency attributes
+      package static let latencyModelLoadMs = "terra.coreml.load.duration_ms"
+      package static let latencyE2EMs = "terra.latency.e2e_ms"
 
       // MARK: Execution route diagnostics
       package static let execRouteRequested = "terra.exec.route.requested"

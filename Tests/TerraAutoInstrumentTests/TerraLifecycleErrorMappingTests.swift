@@ -21,7 +21,7 @@ final class TerraLifecycleErrorMappingTests {
     await Terra.reset()
 
     var config = makeConfig()
-    config.endpoint = URL(string: "ftp://127.0.0.1:4318")!
+    config.destination = .endpoint(URL(string: "ftp://127.0.0.1:4318")!)
 
     do {
       try await Terra.start(config)
@@ -44,7 +44,7 @@ final class TerraLifecycleErrorMappingTests {
     defer { try? FileManager.default.removeItem(at: fileURL) }
 
     var config = makeConfig()
-    config.persistence = .init(storageURL: fileURL)
+    config.persistence = .balanced(fileURL)
 
     do {
       try await Terra.start(config)
@@ -62,11 +62,11 @@ final class TerraLifecycleErrorMappingTests {
     await Terra.reset()
 
     var config = makeConfig()
-    config.serviceName = "com.example.a"
+    config.destination = .endpoint(URL(string: "http://collector-a:4318")!)
     try await Terra.start(config)
 
     var different = config
-    different.serviceName = "com.example.b"
+    different.destination = .endpoint(URL(string: "http://collector-b:4318")!)
 
     do {
       try await Terra.start(different)
@@ -95,9 +95,7 @@ final class TerraLifecycleErrorMappingTests {
 }
 
 private func makeConfig() -> Terra.Configuration {
-  var config = Terra.Configuration()
-  config.instrumentations = .none
-  config.enableSignposts = false
-  config.enableSessions = false
+  var config = Terra.Configuration(preset: .quickstart)
+  config.features = []
   return config
 }
