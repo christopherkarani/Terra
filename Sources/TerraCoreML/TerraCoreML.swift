@@ -6,11 +6,11 @@ import CoreML
 
 /// Optional helpers for attaching Core ML metadata to Terra spans without polluting Terra's core API.
 public enum TerraCoreML {
-  public enum Keys {
+  package enum Keys {
     /// Backend/runtime identifier for the active span.
-    public static let runtime = "terra.runtime"
+    package static let runtime = "terra.runtime"
     /// The configured Core ML compute units (from `MLModelConfiguration`).
-    public static let computeUnits = "terra.coreml.compute_units"
+    package static let computeUnits = "terra.coreml.compute_units"
 
     // MARK: - Compute Plan keys (package-scoped)
     package static let computePlanCaptureStatus = "terra.coreml.compute_plan.capture_status"
