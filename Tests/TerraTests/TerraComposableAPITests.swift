@@ -5,7 +5,7 @@ import Testing
 struct TerraComposableAPITests {
   @Test("Factory methods return a uniform call type")
   func factoryMethodsReturnUniformCallType() {
-    let calls: [Terra.Call] = [
+    let calls: [Terra.Operation] = [
       Terra.infer(Terra.ModelID("model")),
       Terra.stream(Terra.ModelID("model")),
       Terra.embed(Terra.ModelID("model")),
@@ -21,7 +21,7 @@ struct TerraComposableAPITests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    let transformedCalls: [Terra.Call] = [
+    let transformedCalls: [Terra.Operation] = [
       Terra.infer(Terra.ModelID("model-a"), prompt: "hello"),
       Terra.stream(Terra.ModelID("model-b"), prompt: "world"),
     ]
