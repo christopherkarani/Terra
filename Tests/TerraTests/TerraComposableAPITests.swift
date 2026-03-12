@@ -29,11 +29,13 @@ struct TerraComposableAPITests {
       .map { index, call in
         call
           .capture(index == 0 ? .includeContent : .default)
-          .attr(.init("terra.collection.index"), index)
       }
 
-    for call in transformedCalls {
-      _ = try await call.run { "ok" }
+    for (index, call) in transformedCalls.enumerated() {
+      _ = try await call.run { trace in
+        trace.tag("terra.collection.index", index)
+        return "ok"
+      }
     }
 
     let spans = support.finishedSpans().filter { span in
@@ -52,12 +54,12 @@ struct TerraComposableAPITests {
 
     let value = await Terra
       .infer(Terra.ModelID("local/composable"), prompt: "hello")
-      .attr(.init("terra.custom.string"), "value")
-      .attr(.init("terra.custom.int"), 7)
-      .attr(.init("terra.custom.double"), 0.5)
-      .attr(.init("terra.custom.bool"), true)
       .run { trace in
-        trace.attr(.init("terra.trace.string"), "trace-value")
+        trace.tag("terra.custom.string", "value")
+        trace.tag("terra.custom.int", 7)
+        trace.tag("terra.custom.double", 0.5)
+        trace.tag("terra.custom.bool", true)
+        trace.tag("terra.trace.string", "trace-value")
         trace.tokens(input: 3, output: 4)
         trace.responseModel(Terra.ModelID("trace-model"))
         return "ok"
@@ -86,16 +88,16 @@ struct TerraComposableAPITests {
 
     _ = try await Terra
       .infer(Terra.ModelID("builder/model"), prompt: "hello")
-      .metadata {
-        Terra.attr(.init("builder.attr.base"), "base")
+      .run { trace in
+        trace.tag("builder.attr.base", "base")
         if includeFlag {
-          Terra.attr(.init("builder.attr.conditional"), 1)
+          trace.tag("builder.attr.conditional", 1)
         }
         for phase in phases {
-          Terra.event("builder.event.\(phase)")
+          trace.event("builder.event.\(phase)")
         }
+        return "ok"
       }
-      .run { "ok" }
 
     let span = try #require(support.finishedSpans().first(where: { $0.name == Terra.SpanNames.inference }))
     #expect(span.attributes["builder.attr.base"]?.description == "base")
@@ -111,11 +113,9 @@ struct TerraComposableAPITests {
     _ = try await Terra
       .infer(Terra.ModelID("builder/model"), prompt: "hello")
       .run { trace in
-        trace.metadata {
-          Terra.event("trace.event.1")
-          Terra.attr(.init("trace.attr.1"), "v1")
-          Terra.event("trace.event.2")
-        }
+        trace.event("trace.event.1")
+        trace.tag("trace.attr.1", "v1")
+        trace.event("trace.event.2")
         return "ok"
       }
 
@@ -131,9 +131,7 @@ struct TerraComposableAPITests {
 
     _ = try await Terra
       .infer(Terra.ModelID("builder/model"), prompt: "hello")
-      .metadata { }
-      .run { trace in
-        trace.metadata { }
+      .run { _ in
         return "ok"
       }
 

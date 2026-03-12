@@ -172,21 +172,8 @@ extension Terra {
     }
 
     @discardableResult
-    public func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Self {
-      onAttribute(key.name, value.traceScalar)
-      return self
-    }
-
-    @discardableResult
-    public func metadata(@MetadataBuilder _ build: () -> [Metadata]) -> Self {
-      for item in build() {
-        switch item {
-        case .event(let name):
-          onEvent(name)
-        case .attribute(let attribute):
-          onAttribute(attribute.name, attribute.value)
-        }
-      }
+    public func tag<T: CustomStringConvertible & Sendable>(_ key: StaticString, _ value: T) -> Self {
+      onAttribute(key.description, .string(value.description))
       return self
     }
 
@@ -238,18 +225,6 @@ extension Terra {
     public func capture(_ policy: CapturePolicy) -> Self {
       var copy = self
       copy.capturePolicy = policy
-      return copy
-    }
-
-    public func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Self {
-      var copy = self
-      copy.attributes.append(.init(name: key.name, value: value.traceScalar))
-      return copy
-    }
-
-    public func metadata(@MetadataBuilder _ build: () -> [Metadata]) -> Self {
-      var copy = self
-      copy.metadataEntries.append(contentsOf: build())
       return copy
     }
 
@@ -378,9 +353,6 @@ extension Terra {
       }
     }
   }
-
-  @available(*, deprecated, renamed: "Operation")
-  public typealias Call = Operation
 
   public static func infer(
     _ model: ModelID,

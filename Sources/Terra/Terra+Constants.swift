@@ -106,6 +106,14 @@ extension Terra {
       package static let thermalState = "terra.process.thermal_state"
       package static let processMemoryResidentDeltaMB = "process.memory.resident_delta_mb"
       package static let processMemoryPeakMB = "process.memory.peak_mb"
+
+      // MARK: Execution route diagnostics
+      package static let execRouteRequested = "terra.exec.route.requested"
+      package static let execRouteObserved = "terra.exec.route.observed"
+      package static let execRouteEstimatedPrimary = "terra.exec.route.estimated_primary"
+      package static let execRouteSupported = "terra.exec.route.supported"
+      package static let execRouteCaptureMode = "terra.exec.route.capture_mode"
+      package static let execRouteConfidence = "terra.exec.route.confidence"
     }
   }
 }
