@@ -39,17 +39,17 @@ extension Terra {
 }
 
 extension Terra.ModelID: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .string(rawValue) }
+  package var traceScalar: Terra.TraceScalar { .string(rawValue) }
 }
 
 extension Terra.ProviderID: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .string(rawValue) }
+  package var traceScalar: Terra.TraceScalar { .string(rawValue) }
 }
 
 extension Terra.RuntimeID: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .string(rawValue) }
+  package var traceScalar: Terra.TraceScalar { .string(rawValue) }
 }
 
 extension Terra.ToolCallID: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .string(rawValue) }
+  package var traceScalar: Terra.TraceScalar { .string(rawValue) }
 }

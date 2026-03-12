@@ -6,71 +6,71 @@ extension Terra {
     case includeContent
   }
 
-  public protocol ScalarValue: Sendable {
+  package protocol ScalarValue: Sendable {
     var traceScalar: TraceScalar { get }
   }
 
-  public enum TraceScalar: Sendable, Hashable {
+  package enum TraceScalar: Sendable, Hashable {
     case string(String)
     case int(Int)
     case double(Double)
     case bool(Bool)
   }
 
-  public struct TraceKey<Value: ScalarValue>: Sendable, Hashable {
-    public let name: String
+  package struct TraceKey<Value: ScalarValue>: Sendable, Hashable {
+    package let name: String
 
-    public init(_ name: String) {
+    package init(_ name: String) {
       self.name = name
     }
   }
 
-  public struct TraceAttribute: Sendable, Hashable {
-    public let name: String
-    public let value: TraceScalar
+  package struct TraceAttribute: Sendable, Hashable {
+    package let name: String
+    package let value: TraceScalar
 
-    public init(name: String, value: TraceScalar) {
+    package init(name: String, value: TraceScalar) {
       self.name = name
       self.value = value
     }
   }
 
-  public enum Metadata: Sendable, Hashable {
+  package enum Metadata: Sendable, Hashable {
     case event(String)
     case attribute(TraceAttribute)
   }
 
   @resultBuilder
-  public enum MetadataBuilder {
-    public static func buildBlock(_ components: [Metadata]...) -> [Metadata] {
+  package enum MetadataBuilder {
+    package static func buildBlock(_ components: [Metadata]...) -> [Metadata] {
       components.flatMap { $0 }
     }
 
-    public static func buildExpression(_ expression: Metadata) -> [Metadata] {
+    package static func buildExpression(_ expression: Metadata) -> [Metadata] {
       [expression]
     }
 
-    public static func buildExpression(_ expression: [Metadata]) -> [Metadata] {
+    package static func buildExpression(_ expression: [Metadata]) -> [Metadata] {
       expression
     }
 
-    public static func buildOptional(_ component: [Metadata]?) -> [Metadata] {
+    package static func buildOptional(_ component: [Metadata]?) -> [Metadata] {
       component ?? []
     }
 
-    public static func buildEither(first component: [Metadata]) -> [Metadata] {
+    package static func buildEither(first component: [Metadata]) -> [Metadata] {
       component
     }
 
-    public static func buildEither(second component: [Metadata]) -> [Metadata] {
+    package static func buildEither(second component: [Metadata]) -> [Metadata] {
       component
     }
 
-    public static func buildArray(_ components: [[Metadata]]) -> [Metadata] {
+    package static func buildArray(_ components: [[Metadata]]) -> [Metadata] {
       components.flatMap { $0 }
     }
 
-    public static func buildLimitedAvailability(_ component: [Metadata]) -> [Metadata] {
+    package static func buildLimitedAvailability(_ component: [Metadata]) -> [Metadata] {
       component
     }
   }
@@ -109,7 +109,7 @@ extension Terra {
     }
   }
 
-  public protocol TelemetryEngine: Sendable {
+  package protocol TelemetryEngine: Sendable {
     func run<R: Sendable>(
       context: TelemetryContext,
       attributes: [TraceAttribute],
@@ -117,11 +117,11 @@ extension Terra {
     ) async throws -> R
   }
 
-  public static func event(_ name: String) -> Metadata {
+  package static func event(_ name: String) -> Metadata {
     .event(name)
   }
 
-  public static func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Metadata {
+  package static func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Metadata {
     .attribute(.init(name: key.name, value: value.traceScalar))
   }
 
@@ -145,7 +145,7 @@ extension Terra {
     private let onOutputTokens: @Sendable (Int) -> Void
     private let onFirstToken: @Sendable () -> Void
 
-    public init(
+    package init(
       onEvent: @escaping @Sendable (String) -> Void,
       onAttribute: @escaping @Sendable (String, TraceScalar) -> Void,
       onError: @escaping @Sendable (any Error) -> Void,
@@ -248,7 +248,7 @@ extension Terra {
     }
 
     @discardableResult
-    public func run<R: Sendable, Engine: TelemetryEngine>(
+    package func run<R: Sendable, Engine: TelemetryEngine>(
       using engine: Engine,
       _ body: @escaping @Sendable () async throws -> R
     ) async throws -> R {
@@ -258,7 +258,7 @@ extension Terra {
     }
 
     @discardableResult
-    public func run<R: Sendable, Engine: TelemetryEngine>(
+    package func run<R: Sendable, Engine: TelemetryEngine>(
       using engine: Engine,
       _ body: @escaping @Sendable (TraceHandle) async throws -> R
     ) async throws -> R {
@@ -436,19 +436,19 @@ extension Terra {
 }
 
 extension String: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .string(self) }
+  package var traceScalar: Terra.TraceScalar { .string(self) }
 }
 
 extension Int: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .int(self) }
+  package var traceScalar: Terra.TraceScalar { .int(self) }
 }
 
 extension Double: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .double(self) }
+  package var traceScalar: Terra.TraceScalar { .double(self) }
 }
 
 extension Bool: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .bool(self) }
+  package var traceScalar: Terra.TraceScalar { .bool(self) }
 }
 
 private extension Terra.TraceScalar {
