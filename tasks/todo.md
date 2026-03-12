@@ -77,7 +77,7 @@
 - [x] Add failing/targeted regression tests for confirmed issues.
 - [x] Implement minimal production-grade fixes.
 - [x] Run focused tests + full `swift test` and verify clean behavior.
-- [ ] Commit with detailed message, push branch, and open PR.
+- [x] Commit with detailed message, push branch, and open PR.
 - [x] Document findings/results in this section's review notes.
 
 ## Review (2026-03-12)
