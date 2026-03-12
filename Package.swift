@@ -6,7 +6,7 @@ let package = Package(
   name: "Terra",
   platforms: [
     .macOS(.v14),
-    .iOS(.v13),
+    .iOS(.v16),
     .tvOS(.v13),
     .watchOS(.v6),
     .visionOS(.v1)
@@ -15,22 +15,21 @@ let package = Package(
     .library(name: "Terra", targets: ["Terra"]),
     .library(name: "TerraCore", targets: ["TerraCore"]),
     .library(name: "TerraCoreML", targets: ["TerraCoreML"]),
-    .library(name: "TerraTraceKit", targets: ["TerraTraceKit"]),
     .library(name: "TerraHTTPInstrument", targets: ["TerraHTTPInstrument"]),
     .library(name: "TerraFoundationModels", targets: ["TerraFoundationModels"]),
     .library(name: "TerraMLX", targets: ["TerraMLX"]),
     .library(name: "TerraMetalProfiler", targets: ["TerraMetalProfiler"]),
     .library(name: "TerraSystemProfiler", targets: ["TerraSystemProfiler"]),
-    .library(name: "TerraLlama", targets: ["TerraLlama"]),
     .library(name: "TerraAccelerate", targets: ["TerraAccelerate"]),
     .library(name: "TerraTracedMacro", targets: ["TerraTracedMacro"]),
-    .executable(name: "TerraSample", targets: ["TerraSample"])
+    .executable(name: "TerraSample", targets: ["TerraSample"]),
+    .executable(name: "TerraSDKBenchmarks", targets: ["TerraSDKBenchmarks"])
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.25.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", from: "2.3.0"),
-    .package(url: "https://github.com/apple/swift-crypto.git", from: "4.2.0"),
+    .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
     .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0")
   ],
   targets: [
@@ -151,6 +150,17 @@ let package = Package(
       ],
       path: "Sources/TerraAccelerate"
     ),
+    .executableTarget(
+      name: "TerraSDKBenchmarks",
+      dependencies: [
+        "Terra",
+        "TerraCore",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+        .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+        .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
+      ],
+      path: "Benchmarks/TerraSDKBenchmarks"
+    ),
 
     // MARK: - @Traced Macro
 
@@ -240,8 +250,10 @@ let package = Package(
       dependencies: [
         "Terra",
         "TerraCore",
+        "TerraCoreML",
         "TerraMetalProfiler",
         "TerraSystemProfiler",
+        "TerraTraceKit",
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
