@@ -73,6 +73,25 @@ func locatorExcludesNonNumericFiles() throws {
   #expect(files[0].fileName == "1000000")
 }
 
+@Test("TraceFileLocator excludes numeric directories")
+func locatorExcludesNumericDirectories() throws {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  try Data("[]".utf8).write(to: dir.appendingPathComponent("1000000"))
+  try FileManager.default.createDirectory(
+    at: dir.appendingPathComponent("2000000", isDirectory: true),
+    withIntermediateDirectories: true
+  )
+
+  let locator = TraceFileLocator(tracesDirectoryURL: dir)
+  let files = try locator.listTraceFiles()
+  #expect(files.count == 1)
+  #expect(files[0].fileName == "1000000")
+}
+
 @Test("TraceFileLocator returns files sorted by timestamp ascending")
 func locatorSortsByTimestamp() throws {
   let dir = FileManager.default.temporaryDirectory

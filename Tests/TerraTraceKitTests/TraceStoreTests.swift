@@ -14,6 +14,20 @@ import XCTest
 @testable import TerraTraceKit
 
 final class TraceStoreTests: XCTestCase {
+  func testIngestWithZeroMaxSpansKeepsNoSpans() async throws {
+    let decoder = OTLPRequestDecoder(maxBodyBytes: 1_000_000, maxDecompressedBytes: 1_000_000)
+    let body = try OTLPTestFixtures.serializedRequest()
+    let spans = try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+
+    let store = TraceStore(maxSpans: 0)
+    let accepted = await store.ingest(spans)
+    let snapshot = await store.snapshot(filter: nil)
+
+    XCTAssertTrue(accepted.isEmpty)
+    XCTAssertTrue(snapshot.allSpans.isEmpty)
+    XCTAssertTrue(snapshot.traces.isEmpty)
+  }
+
   func testIngestSnapshotGroupsByTraceID() async throws {
     let decoder = OTLPRequestDecoder(maxBodyBytes: 1_000_000, maxDecompressedBytes: 1_000_000)
     let primaryBody = try OTLPTestFixtures.serializedRequest()

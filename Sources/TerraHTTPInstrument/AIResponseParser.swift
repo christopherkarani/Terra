@@ -4,7 +4,14 @@ import os
 private let logger = Logger(subsystem: "io.opentelemetry.terra", category: "AIResponseParser")
 
 struct AIResponseParser {
+    static let maxBodySizeBytes = 10 * 1_048_576 // 10 MiB
+
     static func parse(data: Data) -> ParsedResponse? {
+        guard data.count <= maxBodySizeBytes else {
+            logger.debug("Response body exceeds max size: \(data.count) bytes")
+            return nil
+        }
+
         let json: [String: Any]
         do {
             guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {

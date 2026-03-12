@@ -155,6 +155,15 @@ func responseWithOnlyModelField() throws {
   #expect(result.outputTokens == nil)
 }
 
+@Test("Response body larger than 10 MiB is rejected")
+func oversizedResponseBodyReturnsNil() throws {
+  let model = String(repeating: "a", count: (10 * 1_048_576) + 128)
+  let body = #"{"model": "\#(model)"}"#
+  let data = try #require(body.data(using: .utf8))
+  let result = AIResponseParser.parse(data: data)
+  #expect(result == nil)
+}
+
 @Test("Anthropic tokens override OpenAI tokens when both present in usage")
 func anthropicTokensOverrideOpenAI() throws {
   let body = #"{"model": "m", "usage": {"prompt_tokens": 10, "completion_tokens": 20, "input_tokens": 15, "output_tokens": 25}}"#

@@ -19,6 +19,11 @@ public actor TraceStore {
 
   public func ingest(_ spans: [SpanRecord]) -> [SpanRecord] {
     guard !spans.isEmpty else { return [] }
+    guard maxSpans > 0 else {
+      snapshotDirty = true
+      cachedSnapshot = nil
+      return []
+    }
 
     var accepted: [SpanRecord] = []
     accepted.reserveCapacity(spans.count)

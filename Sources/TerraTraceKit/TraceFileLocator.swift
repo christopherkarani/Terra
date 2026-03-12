@@ -23,6 +23,10 @@ public struct TraceFileLocator {
     )
 
     let files = urls.compactMap { url -> TraceFileReference? in
+      let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+      guard values?.isRegularFile == true else {
+        return nil
+      }
       let name = url.lastPathComponent
       guard let milliseconds = UInt64(name) else {
         return nil

@@ -69,3 +69,21 @@
 - Added trace file max-size guard in `TraceFileReader` with oversize failure test coverage.
 - Strengthened privacy defaults by making legacy SHA attributes opt-in (`emitLegacySHA256Attributes: false`), with updated redaction tests and README notes.
 - Validation: `swift test --filter TerraRedactionPolicyTests` and full `swift test` both pass.
+
+## Mission-Critical Audit Remediation (2026-03-12)
+
+- [x] Capture baseline and scope for this run.
+- [x] Audit high-risk modules (`Terra`, `TerraHTTPInstrument`, `TerraTraceKit`) for correctness/safety gaps.
+- [x] Add failing/targeted regression tests for confirmed issues.
+- [x] Implement minimal production-grade fixes.
+- [x] Run focused tests + full `swift test` and verify clean behavior.
+- [ ] Commit with detailed message, push branch, and open PR.
+- [x] Document findings/results in this section's review notes.
+
+## Review (2026-03-12)
+
+- Confirmed and fixed `TraceStore(maxSpans: 0)` retention bug: store now accepts no spans and avoids unbounded growth (`Sources/TerraTraceKit/TraceStore.swift`) with regression coverage in `TraceStoreTests`.
+- Confirmed and fixed `TraceFileLocator` directory classification gap: numeric directory names are now excluded so loaders only process regular files (`Sources/TerraTraceKit/TraceFileLocator.swift`) with regression coverage in `TraceKitTests`.
+- Confirmed and fixed `AIResponseParser` unbounded payload parse risk by enforcing a 10 MiB cap before JSON decode (`Sources/TerraHTTPInstrument/AIResponseParser.swift`) with regression coverage in `AIRequestParserTests`.
+- Verification: targeted regression run, full `swift build`, and full `swift test` all pass.
+- Residual warnings are external dependency/plugin deprecation warnings only; no new Terra-owned warnings introduced by this patch set.
