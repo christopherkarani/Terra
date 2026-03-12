@@ -75,8 +75,8 @@ extension Terra {
     }
   }
 
-  public struct TelemetryContext: Sendable, Hashable {
-    public enum Operation: String, Sendable, Hashable {
+  package struct TelemetryContext: Sendable, Hashable {
+    package enum Operation: String, Sendable, Hashable {
       case inference
       case streaming
       case embedding
@@ -85,14 +85,14 @@ extension Terra {
       case safety
     }
 
-    public let operation: Operation
-    public let model: ModelID?
-    public let name: String?
-    public let provider: ProviderID?
-    public let runtime: RuntimeID?
-    public let capturePolicy: CapturePolicy
+    package let operation: Operation
+    package let model: ModelID?
+    package let name: String?
+    package let provider: ProviderID?
+    package let runtime: RuntimeID?
+    package let capturePolicy: CapturePolicy
 
-    public init(
+    package init(
       operation: Operation,
       model: ModelID? = nil,
       name: String? = nil,
