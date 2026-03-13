@@ -1,8 +1,8 @@
 # Metadata Builder
 
-Use ``Terra/Call/metadata(_:)`` to build structured events and attributes with ``Terra/MetadataBuilder``.
+Use ``Terra/TraceHandle`` methods inside ``Terra/Operation/run(_:)-swift.method`` to attach events and attributes to spans.
 
-## Call-Level Metadata
+## Trace Annotations Inside run
 
 ```swift
 import Terra
@@ -11,20 +11,20 @@ let includeDebug = true
 
 _ = try await Terra
   .tool("search", callID: Terra.ToolCallID("call-1"), type: "web_search")
-  .metadata {
-    Terra.event("tool.invoked")
-    Terra.attr(.init("tool.name"), "search")
+  .run { trace in
+    trace.event("tool.invoked")
+    trace.tag("tool.name", "search")
 
     if includeDebug {
-      Terra.attr(.init("tool.debug"), true)
+      trace.tag("tool.debug", "true")
     }
+    return ["result"]
   }
-  .run { ["result"] }
 ```
 
-## Trace-Level Metadata
+## Streaming with Incremental Updates
 
-Inside ``Terra/Call/run(_:)``, use ``Terra/TraceHandle/metadata(_:)`` for incremental updates:
+Inside ``Terra/Operation/run(_:)-swift.method``, annotate streaming progress directly on the trace:
 
 ```swift
 import Terra
@@ -32,15 +32,16 @@ import Terra
 _ = try await Terra
   .stream(Terra.ModelID("gpt-4o-mini"), prompt: "Explain OTLP quickly")
   .run { trace in
-    trace.metadata {
-      Terra.event("stream.first_chunk")
-      Terra.attr(.init("stream.chunk_index"), 0)
-    }
+    trace.event("stream.first_chunk")
+    trace.tag("stream.chunk_index", "0")
     trace.chunk(8)
     trace.outputTokens(64)
     trace.firstToken()
     return "chunked-output"
   }
 ```
+
+> Note: All values passed to ``Terra/TraceHandle/tag(_:_:)`` are stored as OpenTelemetry string attributes.
+> For numeric aggregation (sums, percentiles) use ``Terra/TraceHandle/tokens(input:output:)`` instead.
 
 Use <doc:TelemetryEngine-Injection> when you need deterministic test seams.

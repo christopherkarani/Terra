@@ -11,17 +11,15 @@ Use the composable call API as the canonical path.
 - ``Terra/tool(_:callID:type:provider:runtime:)``
 - ``Terra/safety(_:subject:provider:runtime:)``
 
-## Shared Call Pipeline
+## Shared Operation Pipeline
 
-All factories return ``Terra/Call``.
+All factories return ``Terra/Operation``.
 
 Common composition methods:
 
-- ``Terra/Call/capture(_:)``
-- ``Terra/Call/attr(_:_:)``
-- ``Terra/Call/metadata(_:)``
-- ``Terra/Call/run(_:)``
-- ``Terra/Call/run(using:_:)``
+- ``Terra/Operation/capture(_:)``
+- ``Terra/Operation/run(_:)-6bghi``
+- ``Terra/Operation/run(_:)-swift.method``
 
 ## Lifecycle Entry Points
 
@@ -63,12 +61,10 @@ let results = try await Terra
     provider: Terra.ProviderID("openai"),
     runtime: Terra.RuntimeID("http_api")
   )
-  .metadata {
-    Terra.event("tool.invoked")
-    Terra.attr(.init("sample.kind"), "tool")
-  }
-  .run { _ in
-    ["result for query"]
+  .run { trace in
+    trace.event("tool.invoked")
+    trace.tag("sample.kind", "tool")
+    return ["result for query"]
   }
 ```
 

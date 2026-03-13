@@ -41,7 +41,7 @@ enum TerraRecipeSnippets {
       .run { trace in
         trace.event("tool.invoked")
         trace.tag("sample.kind", "tool")
-        trace.tag("tool.query.length", query.count)
+        trace.tag("tool.query.length", "\(query.count)")
         return ["result for \(query)"]
       }
   }

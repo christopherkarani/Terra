@@ -17,8 +17,6 @@ try await Terra.start(.init(preset: .quickstart))
 ```swift
 import Terra
 
-let userTierKey = Terra.TraceKey<String>("app.user_tier")
-
 let answer = try await Terra
   .infer(
     Terra.ModelID("gpt-4o-mini"),
@@ -26,12 +24,10 @@ let answer = try await Terra
     provider: Terra.ProviderID("openai"),
     runtime: Terra.RuntimeID("http_api")
   )
-  .metadata {
-    Terra.event("infer.request")
-    Terra.attr(.init("sample.kind"), "infer")
-  }
   .run { trace in
-    trace.attr(userTierKey, "free")
+    trace.event("infer.request")
+    trace.tag("sample.kind", "infer")
+    trace.tag("app.user_tier", "free")
     trace.tokens(input: 32, output: 14)
     return "Status: all systems healthy."
   }
@@ -48,7 +44,7 @@ await Terra.shutdown()
 ## What You Just Used
 
 - Setup: ``Terra/start(_:)`` and ``Terra/shutdown()``
-- Factory + execution: ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)`` and ``Terra/Call/run(_:)``
-- Metadata APIs: ``Terra/event(_:)``, ``Terra/attr(_:_:)``, and ``Terra/Call/metadata(_:)``
+- Factory + execution: ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)`` and ``Terra/Operation/run(_:)-swift.method``
+- Trace annotations: ``Terra/TraceHandle/event(_:)``, ``Terra/TraceHandle/tag(_:_:)``, ``Terra/TraceHandle/tokens(input:output:)``
 
 For deeper patterns, continue with <doc:Canonical-API>.
