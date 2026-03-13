@@ -1,32 +1,43 @@
 # ``Terra``
 
-@Metadata {
-  @TechnologyRoot
-}
-
 OpenTelemetry-native observability for on-device GenAI workloads on Apple platforms.
 
-## Overview
+Terra's canonical surface is task-oriented: build an operation with ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``, ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``, ``Terra/embed(_:inputCount:provider:runtime:)``, ``Terra/agent(_:id:provider:runtime:)``, ``Terra/tool(_:callID:type:provider:runtime:)``, or ``Terra/safety(_:subject:provider:runtime:)``, then execute with ``Terra/Call/run(_:)``.
 
-Use Terra to instrument inference, streaming, agents, tools, embeddings, and safety checks with privacy-safe defaults.
+## Start Here
+
+- New to Terra: <doc:Quickstart-90s>
+- Want the complete canonical API map: <doc:Canonical-API>
+
+## Learning Progression
+
+- Beginner: <doc:Canonical-API>, <doc:Typed-IDs>
+- Intermediate: <doc:Metadata-Builder>, <doc:TerraError-Model>
+- Advanced: <doc:TelemetryEngine-Injection>
+
+## Core Symbols
+
+- ``Terra/start(_:)``
+- ``Terra/shutdown()``
+- ``Terra/Call``
+- ``Terra/TraceHandle``
 
 ## Topics
 
-### Getting Started
+### Quickstart
+
+- <doc:Quickstart-90s>
+
+### Beginner
 
 - <doc:Canonical-API>
+- <doc:Typed-IDs>
+
+### Intermediate
+
+- <doc:Metadata-Builder>
+- <doc:TerraError-Model>
 
 ### Advanced
 
 - <doc:TelemetryEngine-Injection>
-
-### Core Symbols
-
-- ``Terra/start(_:)``
-- ``Terra/shutdown()``
-- ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``
-- ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``
-- ``Terra/embed(_:inputCount:provider:runtime:)``
-- ``Terra/agent(_:id:provider:runtime:)``
-- ``Terra/tool(_:callID:type:provider:runtime:)``
-- ``Terra/safety(_:subject:provider:runtime:)``

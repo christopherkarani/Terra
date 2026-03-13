@@ -16,10 +16,10 @@ struct TerraProtocolSeamsTests {
         provider: Terra.ProviderID("mock-provider"),
         runtime: Terra.RuntimeID("mock-runtime")
       )
-      .attr(.init("app.request.id"), "req-1")
       .run(using: engine) { trace in
+        trace.tag("app.request.id", "req-1")
         trace.event("request.start")
-        trace.attr(.init("app.phase"), "decode")
+        trace.tag("app.phase", "decode")
         trace.tokens(input: 5, output: 7)
         trace.responseModel(Terra.ModelID("gpt-test-response"))
         return "ok"

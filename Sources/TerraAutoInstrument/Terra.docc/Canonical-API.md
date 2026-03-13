@@ -1,6 +1,8 @@
 # Canonical API
 
-Terra’s primary surface is the composable call API:
+Use the composable call API as the canonical path.
+
+## Operation Factories
 
 - ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``
 - ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``
@@ -9,39 +11,66 @@ Terra’s primary surface is the composable call API:
 - ``Terra/tool(_:callID:type:provider:runtime:)``
 - ``Terra/safety(_:subject:provider:runtime:)``
 
-## Quickstart
+## Shared Operation Pipeline
+
+All factories return ``Terra/Operation``.
+
+Common composition methods:
+
+- ``Terra/Operation/capture(_:)``
+- ``Terra/Operation/run(_:)-6bghi``
+- ``Terra/Operation/run(_:)-swift.method``
+
+## Lifecycle Entry Points
+
+- ``Terra/start(_:)``
+- ``Terra/shutdown()``
+- ``Terra/reconfigure(_:)``
+
+## Quick Example
 
 ```swift
 import Terra
 
 try await Terra.start(.init(preset: .quickstart))
 let answer = try await Terra
-  .infer(Terra.ModelID("gpt-4o-mini"), prompt: "Say hello")
-  .run { "Hello" }
+  .infer(
+    Terra.ModelID("gpt-4o-mini"),
+    prompt: "Summarize this changelog in one sentence.",
+    provider: Terra.ProviderID("openai"),
+    runtime: Terra.RuntimeID("http_api")
+  )
+  .run {
+    "Release summary"
+  }
 await Terra.shutdown()
 ```
 
-## Shared Call Composition
+## Reusable Examples
 
-All canonical factories return ``Terra/Call``.
+These recipes are directly reusable from `Examples/Terra Sample/RecipeSnippets.swift`.
 
-Use:
+```swift
+import Terra
 
-- ``Terra/Call/capture(_:)``
-- ``Terra/Call/attr(_:_:)``
-- ``Terra/Call/metadata(_:)``
-- ``Terra/Call/run(_:)``
-- ``Terra/Call/run(using:_:)``
+let results = try await Terra
+  .tool(
+    "search",
+    callID: Terra.ToolCallID("tool-call-1"),
+    type: "web_search",
+    provider: Terra.ProviderID("openai"),
+    runtime: Terra.RuntimeID("http_api")
+  )
+  .run { trace in
+    trace.event("tool.invoked")
+    trace.tag("sample.kind", "tool")
+    return ["result for query"]
+  }
+```
 
-## Typed Identifiers
+## Next Guides
 
-Prefer typed IDs across public API calls:
-
-- ``Terra/ModelID``
-- ``Terra/ProviderID``
-- ``Terra/RuntimeID``
-- ``Terra/ToolCallID``
-
-## Stable Public Errors
-
-Lifecycle public throws use ``Terra/TerraError`` and deterministic ``Terra/TerraError/Code`` values.
+- Typed IDs: <doc:Typed-IDs>
+- Metadata builder patterns: <doc:Metadata-Builder>
+- Stable lifecycle errors: <doc:TerraError-Model>
+- Protocol seams and deterministic engines: <doc:TelemetryEngine-Injection>

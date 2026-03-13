@@ -6,77 +6,77 @@ extension Terra {
     case includeContent
   }
 
-  public protocol ScalarValue: Sendable {
+  package protocol ScalarValue: Sendable {
     var traceScalar: TraceScalar { get }
   }
 
-  public enum TraceScalar: Sendable, Hashable {
+  package enum TraceScalar: Sendable, Hashable {
     case string(String)
     case int(Int)
     case double(Double)
     case bool(Bool)
   }
 
-  public struct TraceKey<Value: ScalarValue>: Sendable, Hashable {
-    public let name: String
+  package struct TraceKey<Value: ScalarValue>: Sendable, Hashable {
+    package let name: String
 
-    public init(_ name: String) {
+    package init(_ name: String) {
       self.name = name
     }
   }
 
-  public struct TraceAttribute: Sendable, Hashable {
-    public let name: String
-    public let value: TraceScalar
+  package struct TraceAttribute: Sendable, Hashable {
+    package let name: String
+    package let value: TraceScalar
 
-    public init(name: String, value: TraceScalar) {
+    package init(name: String, value: TraceScalar) {
       self.name = name
       self.value = value
     }
   }
 
-  public enum Metadata: Sendable, Hashable {
+  package enum Metadata: Sendable, Hashable {
     case event(String)
     case attribute(TraceAttribute)
   }
 
   @resultBuilder
-  public enum MetadataBuilder {
-    public static func buildBlock(_ components: [Metadata]...) -> [Metadata] {
+  package enum MetadataBuilder {
+    package static func buildBlock(_ components: [Metadata]...) -> [Metadata] {
       components.flatMap { $0 }
     }
 
-    public static func buildExpression(_ expression: Metadata) -> [Metadata] {
+    package static func buildExpression(_ expression: Metadata) -> [Metadata] {
       [expression]
     }
 
-    public static func buildExpression(_ expression: [Metadata]) -> [Metadata] {
+    package static func buildExpression(_ expression: [Metadata]) -> [Metadata] {
       expression
     }
 
-    public static func buildOptional(_ component: [Metadata]?) -> [Metadata] {
+    package static func buildOptional(_ component: [Metadata]?) -> [Metadata] {
       component ?? []
     }
 
-    public static func buildEither(first component: [Metadata]) -> [Metadata] {
+    package static func buildEither(first component: [Metadata]) -> [Metadata] {
       component
     }
 
-    public static func buildEither(second component: [Metadata]) -> [Metadata] {
+    package static func buildEither(second component: [Metadata]) -> [Metadata] {
       component
     }
 
-    public static func buildArray(_ components: [[Metadata]]) -> [Metadata] {
+    package static func buildArray(_ components: [[Metadata]]) -> [Metadata] {
       components.flatMap { $0 }
     }
 
-    public static func buildLimitedAvailability(_ component: [Metadata]) -> [Metadata] {
+    package static func buildLimitedAvailability(_ component: [Metadata]) -> [Metadata] {
       component
     }
   }
 
-  public struct TelemetryContext: Sendable, Hashable {
-    public enum Operation: String, Sendable, Hashable {
+  package struct TelemetryContext: Sendable, Hashable {
+    package enum Operation: String, Sendable, Hashable {
       case inference
       case streaming
       case embedding
@@ -85,14 +85,14 @@ extension Terra {
       case safety
     }
 
-    public let operation: Operation
-    public let model: ModelID?
-    public let name: String?
-    public let provider: ProviderID?
-    public let runtime: RuntimeID?
-    public let capturePolicy: CapturePolicy
+    package let operation: Operation
+    package let model: ModelID?
+    package let name: String?
+    package let provider: ProviderID?
+    package let runtime: RuntimeID?
+    package let capturePolicy: CapturePolicy
 
-    public init(
+    package init(
       operation: Operation,
       model: ModelID? = nil,
       name: String? = nil,
@@ -109,7 +109,7 @@ extension Terra {
     }
   }
 
-  public protocol TelemetryEngine: Sendable {
+  package protocol TelemetryEngine: Sendable {
     func run<R: Sendable>(
       context: TelemetryContext,
       attributes: [TraceAttribute],
@@ -117,11 +117,11 @@ extension Terra {
     ) async throws -> R
   }
 
-  public static func event(_ name: String) -> Metadata {
+  package static func event(_ name: String) -> Metadata {
     .event(name)
   }
 
-  public static func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Metadata {
+  package static func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Metadata {
     .attribute(.init(name: key.name, value: value.traceScalar))
   }
 
@@ -145,7 +145,7 @@ extension Terra {
     private let onOutputTokens: @Sendable (Int) -> Void
     private let onFirstToken: @Sendable () -> Void
 
-    public init(
+    package init(
       onEvent: @escaping @Sendable (String) -> Void,
       onAttribute: @escaping @Sendable (String, TraceScalar) -> Void,
       onError: @escaping @Sendable (any Error) -> Void,
@@ -171,22 +171,15 @@ extension Terra {
       return self
     }
 
+    /// Attaches a span attribute using the string representation of `value`.
+    ///
+    /// All values are stored as OpenTelemetry string attributes regardless of their
+    /// Swift type, so numeric aggregation (sum, avg, percentile) on backend dashboards
+    /// will not work on values added via `tag`. Use `.tokens(input:output:)` and
+    /// `.responseModel(_:)` for structured numeric and identifier attributes.
     @discardableResult
-    public func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Self {
-      onAttribute(key.name, value.traceScalar)
-      return self
-    }
-
-    @discardableResult
-    public func metadata(@MetadataBuilder _ build: () -> [Metadata]) -> Self {
-      for item in build() {
-        switch item {
-        case .event(let name):
-          onEvent(name)
-        case .attribute(let attribute):
-          onAttribute(attribute.name, attribute.value)
-        }
-      }
+    public func tag<T: CustomStringConvertible & Sendable>(_ key: StaticString, _ value: T) -> Self {
+      onAttribute(key.description, .string(value.description))
       return self
     }
 
@@ -225,7 +218,7 @@ extension Terra {
     }
   }
 
-  public struct Call: Sendable {
+  public struct Operation: Sendable {
     private var operation: _Operation
     private var capturePolicy: CapturePolicy = .default
     private var attributes: [_TraceAttribute] = []
@@ -238,18 +231,6 @@ extension Terra {
     public func capture(_ policy: CapturePolicy) -> Self {
       var copy = self
       copy.capturePolicy = policy
-      return copy
-    }
-
-    public func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Self {
-      var copy = self
-      copy.attributes.append(.init(name: key.name, value: value.traceScalar))
-      return copy
-    }
-
-    public func metadata(@MetadataBuilder _ build: () -> [Metadata]) -> Self {
-      var copy = self
-      copy.metadataEntries.append(contentsOf: build())
       return copy
     }
 
@@ -273,7 +254,7 @@ extension Terra {
     }
 
     @discardableResult
-    public func run<R: Sendable, Engine: TelemetryEngine>(
+    package func run<R: Sendable, Engine: TelemetryEngine>(
       using engine: Engine,
       _ body: @escaping @Sendable () async throws -> R
     ) async throws -> R {
@@ -283,7 +264,7 @@ extension Terra {
     }
 
     @discardableResult
-    public func run<R: Sendable, Engine: TelemetryEngine>(
+    package func run<R: Sendable, Engine: TelemetryEngine>(
       using engine: Engine,
       _ body: @escaping @Sendable (TraceHandle) async throws -> R
     ) async throws -> R {
@@ -386,8 +367,8 @@ extension Terra {
     runtime: RuntimeID? = nil,
     temperature: Double? = nil,
     maxTokens: Int? = nil
-  ) -> Call {
-    Call(operation: .infer(.init(
+  ) -> Operation {
+    Operation(operation: .infer(.init(
       model: model,
       prompt: prompt,
       provider: provider,
@@ -405,8 +386,8 @@ extension Terra {
     temperature: Double? = nil,
     maxTokens: Int? = nil,
     expectedTokens: Int? = nil
-  ) -> Call {
-    Call(operation: .stream(.init(
+  ) -> Operation {
+    Operation(operation: .stream(.init(
       model: model,
       prompt: prompt,
       provider: provider,
@@ -422,8 +403,8 @@ extension Terra {
     inputCount: Int? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
-  ) -> Call {
-    Call(operation: .embed(.init(
+  ) -> Operation {
+    Operation(operation: .embed(.init(
       model: model,
       inputCount: inputCount,
       provider: provider,
@@ -436,8 +417,8 @@ extension Terra {
     id: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
-  ) -> Call {
-    Call(operation: .agent(.init(name: name, id: id, provider: provider, runtime: runtime)))
+  ) -> Operation {
+    Operation(operation: .agent(.init(name: name, id: id, provider: provider, runtime: runtime)))
   }
 
   public static func tool(
@@ -446,8 +427,8 @@ extension Terra {
     type: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
-  ) -> Call {
-    Call(operation: .tool(.init(name: name, callID: callID, type: type, provider: provider, runtime: runtime)))
+  ) -> Operation {
+    Operation(operation: .tool(.init(name: name, callID: callID, type: type, provider: provider, runtime: runtime)))
   }
 
   public static func safety(
@@ -455,25 +436,25 @@ extension Terra {
     subject: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
-  ) -> Call {
-    Call(operation: .safety(.init(name: name, subject: subject, provider: provider, runtime: runtime)))
+  ) -> Operation {
+    Operation(operation: .safety(.init(name: name, subject: subject, provider: provider, runtime: runtime)))
   }
 }
 
 extension String: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .string(self) }
+  package var traceScalar: Terra.TraceScalar { .string(self) }
 }
 
 extension Int: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .int(self) }
+  package var traceScalar: Terra.TraceScalar { .int(self) }
 }
 
 extension Double: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .double(self) }
+  package var traceScalar: Terra.TraceScalar { .double(self) }
 }
 
 extension Bool: Terra.ScalarValue {
-  public var traceScalar: Terra.TraceScalar { .bool(self) }
+  package var traceScalar: Terra.TraceScalar { .bool(self) }
 }
 
 private extension Terra.TraceScalar {

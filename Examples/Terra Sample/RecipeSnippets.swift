@@ -4,10 +4,6 @@ import Foundation
 import Terra
 
 enum TerraRecipeSnippets {
-  static let sampleKindKey = Terra.TraceKey<String>("sample.kind")
-  static let userTierKey = Terra.TraceKey<String>("app.user_tier")
-  static let queryLengthKey = Terra.TraceKey<Int>("tool.query.length")
-  static let taskKey = Terra.TraceKey<String>("agent.task")
 
   static func ninetySecondPath(prompt: String = "Give me a short release summary.") async throws -> String {
     try await Terra.start(.init(preset: .quickstart))
@@ -24,12 +20,10 @@ enum TerraRecipeSnippets {
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api")
       )
-      .metadata {
-        Terra.event("infer.request")
-        Terra.attr(sampleKindKey, "infer")
-      }
       .run { trace in
-        trace.attr(userTierKey, "free")
+        trace.event("infer.request")
+        trace.tag("sample.kind", "infer")
+        trace.tag("app.user_tier", "free")
         trace.tokens(input: 42, output: 18)
         return "stubbed-infer-response"
       }
@@ -44,13 +38,11 @@ enum TerraRecipeSnippets {
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api")
       )
-      .metadata {
-        Terra.event("tool.invoked")
-        Terra.attr(sampleKindKey, "tool")
-      }
-      .attr(queryLengthKey, query.count)
-      .run { _ in
-        ["result for \(query)"]
+      .run { trace in
+        trace.event("tool.invoked")
+        trace.tag("sample.kind", "tool")
+        trace.tag("tool.query.length", "\(query.count)")
+        return ["result for \(query)"]
       }
   }
 
@@ -62,12 +54,10 @@ enum TerraRecipeSnippets {
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api")
       )
-      .metadata {
-        Terra.event("agent.begin")
-        Terra.attr(sampleKindKey, "agent")
-      }
       .run { trace in
-        trace.attr(taskKey, task)
+        trace.event("agent.begin")
+        trace.tag("sample.kind", "agent")
+        trace.tag("agent.task", task)
         _ = try await toolRecipe(query: task)
         return try await inferRecipe(prompt: "Plan next steps for: \(task)")
       }

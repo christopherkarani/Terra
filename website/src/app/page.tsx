@@ -18,6 +18,7 @@ export default function LandingPage() {
         </div>
         <div className="hidden md:flex gap-8 text-sm font-medium text-gray-400">
           <a href="#documentation" className="hover:text-cyan-400 transition-colors">Documentation</a>
+          <a href="https://christopherkarani.github.io/Terra/docc/documentation/terra/" className="hover:text-cyan-400 transition-colors">DocC API</a>
           <a href="https://github.com/christopherkarani/Terra" className="hover:text-cyan-400 transition-colors">GitHub</a>
           <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Integrations.md" className="hover:text-cyan-400 transition-colors">Integrations</a>
         </div>
