@@ -1,3 +1,32 @@
+## Framework Audit Run (2026-03-14)
+
+- [x] Initialize/refresh memory context for this automation run.
+- [x] Capture baseline health (`swift build`, `swift test`).
+- [x] Perform mission-critical audit sweep (correctness/safety/concurrency/dead code).
+- [x] Add failing/targeted regression tests for each confirmed issue.
+- [x] Implement fixes for confirmed issues.
+- [x] Re-run targeted tests + full suite to prove no regressions.
+- [x] Prepare commit + PR notes and update automation memory.
+
+## Review
+
+- Baseline P0 found and fixed: `Sources/TerraCoreML/TerraCoreML.swift` referenced non-existent `Terra.ExecutionRoute*` types, causing hard compile failure.
+- Added package-local route evidence model in `TerraCoreML` and updated call sites.
+- Added regression coverage in `Tests/TerraCoreMLTests/TerraCoreMLTests.swift` for route-evidence mapping.
+- Hardened `TerraTraceKit`:
+  - `OTLPDecoder` now uses non-deprecated protobuf decode API (`serializedBytes`).
+  - `OTLPHTTPServer` now explicitly documents/declares sendability contract (`@unchecked Sendable`) with queue-confined mutable state.
+- Verification completed:
+  - `swift build` ✅
+  - `swift test --filter TerraCoreMLTests` ✅ (13 tests)
+  - `swift test --filter TerraTraceKitTests` ✅ (18 tests)
+  - `swift test` ✅ (172 tests, 0 failures)
+- Delivery:
+  - Branch: `automation/check-frameworks-for-issues-20260314`
+  - Commit: `94a6771`
+  - PR: https://github.com/christopherkarani/Terra/pull/20
+  - Note: adding labels `codex` and `codex-automation` failed because those labels do not exist in this repository.
+
 ## Legacy Seam Reference Sweep (2026-03-05)
 
 - [x] Initialize Wax session store.
