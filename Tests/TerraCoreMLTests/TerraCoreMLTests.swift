@@ -91,4 +91,28 @@ func coreMLAttributesExcludeContent() {
   #expect(attrs[Terra.Keys.Terra.safetySubjectHMACSHA256] == nil)
   #expect(attrs[Terra.Keys.Terra.safetySubjectSHA256] == nil)
 }
+
+@Test("routeEvidence maps cpuAndNeuralEngine to cpu_ane request")
+func routeEvidenceMapsNeuralEngine() {
+  let evidence = TerraCoreML.routeEvidence(
+    computeUnits: .cpuAndNeuralEngine,
+    captureMode: .direct,
+    confidence: .high
+  )
+  #expect(evidence.requested == "cpu_ane")
+  #expect(evidence.captureMode == .direct)
+  #expect(evidence.confidence == .high)
+}
+
+@Test("routeEvidence maps cpuOnly to cpu request")
+func routeEvidenceMapsCPUOnly() {
+  let evidence = TerraCoreML.routeEvidence(
+    computeUnits: .cpuOnly,
+    captureMode: .inferred,
+    confidence: .medium
+  )
+  #expect(evidence.requested == "cpu")
+  #expect(evidence.captureMode == .inferred)
+  #expect(evidence.confidence == .medium)
+}
 #endif

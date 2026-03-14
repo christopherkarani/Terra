@@ -484,6 +484,9 @@ public final class OTLPHTTPServer {
   }
 }
 
+// Concurrency safety: mutable state is confined to `queue` and never accessed from other executors.
+extension OTLPHTTPServer: @unchecked Sendable {}
+
 private struct HTTPRequestHead {
   let headers: [String: String]
   let contentLength: Int

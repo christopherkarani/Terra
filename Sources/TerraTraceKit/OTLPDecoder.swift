@@ -102,7 +102,7 @@ public struct OTLPRequestDecoder: Sendable {
     let request: Opentelemetry_Proto_Collector_Trace_V1_ExportTraceServiceRequest
     do {
       request = try Opentelemetry_Proto_Collector_Trace_V1_ExportTraceServiceRequest(
-        serializedData: payload
+        serializedBytes: payload
       )
     } catch {
       throw OTLPRequestDecoderError.invalidProtobuf(error.localizedDescription)

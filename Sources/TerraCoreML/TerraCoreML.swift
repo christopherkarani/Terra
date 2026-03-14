@@ -6,6 +6,33 @@ import CoreML
 
 /// Optional helpers for attaching Core ML metadata to Terra spans without polluting Terra's core API.
 public enum TerraCoreML {
+  package enum ExecutionRouteCaptureMode: Sendable, Equatable {
+    case direct
+    case inferred
+  }
+
+  package enum ExecutionRouteConfidence: String, Sendable, Equatable {
+    case high
+    case medium
+    case low
+  }
+
+  package struct ExecutionRouteEvidence: Sendable, Equatable {
+    package let requested: String
+    package let captureMode: ExecutionRouteCaptureMode
+    package let confidence: ExecutionRouteConfidence
+
+    package init(
+      requested: String,
+      captureMode: ExecutionRouteCaptureMode,
+      confidence: ExecutionRouteConfidence
+    ) {
+      self.requested = requested
+      self.captureMode = captureMode
+      self.confidence = confidence
+    }
+  }
+
   package enum Keys {
     /// Backend/runtime identifier for the active span.
     package static let runtime = "terra.runtime"
@@ -37,9 +64,9 @@ public enum TerraCoreML {
   /// Builds route-evidence attributes for a Core ML compute-units selection.
   package static func routeEvidence(
     computeUnits: MLComputeUnits,
-    captureMode: Terra.ExecutionRouteCaptureMode,
-    confidence: Terra.ExecutionRouteConfidence
-  ) -> Terra.ExecutionRouteEvidence {
+    captureMode: ExecutionRouteCaptureMode,
+    confidence: ExecutionRouteConfidence
+  ) -> ExecutionRouteEvidence {
     let requested: String
     switch computeUnits {
     case .all: requested = "all"
@@ -48,7 +75,7 @@ public enum TerraCoreML {
     case .cpuAndNeuralEngine: requested = "cpu_ane"
     @unknown default: requested = "unknown"
     }
-    return Terra.ExecutionRouteEvidence(
+    return ExecutionRouteEvidence(
       requested: requested,
       captureMode: captureMode,
       confidence: confidence
