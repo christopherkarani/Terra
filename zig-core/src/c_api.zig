@@ -276,10 +276,9 @@ pub export fn terra_record_inference_duration(inst: ?*TerraInstance, duration_ms
 }
 
 pub export fn terra_record_token_count(inst: ?*TerraInstance, input_tokens: i64, output_tokens: i64) callconv(.c) void {
-    _ = output_tokens;
-    _ = input_tokens;
-    _ = inst;
-    // TODO: Track token usage metrics
+    const i = inst orelse return;
+    if (input_tokens > 0) i.metrics.input_tokens_total.add(input_tokens);
+    if (output_tokens > 0) i.metrics.output_tokens_total.add(output_tokens);
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────

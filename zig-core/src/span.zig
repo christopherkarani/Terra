@@ -18,6 +18,14 @@ const SpanRecord = models.SpanRecord;
 const MAX_SPAN_NAME = models.MAX_SPAN_NAME;
 
 // ── Span ────────────────────────────────────────────────────────────────
+// NOTE: String ownership contract
+// Attribute keys, string values, event names, and error messages are stored
+// by reference ([]const u8 slices). Callers MUST ensure these strings remain
+// valid for the lifetime of the span (until after end() and drain/export).
+// For C callers: string parameters passed to terra_span_set_string() etc.
+// must remain valid until terra_span_end() returns. Static string literals
+// are always safe. Stack-allocated buffers are safe only if the span is
+// ended before the buffer goes out of scope.
 pub const Span = struct {
     trace_id: TraceID = TraceID.zero,
     span_id: SpanID = SpanID.zero,

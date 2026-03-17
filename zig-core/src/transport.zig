@@ -76,7 +76,7 @@ pub const BufferTransport = struct {
     }
 
     fn bufferSend(data: [*]const u8, len: u32, ctx: ?*anyopaque) callconv(.c) c_int {
-        const self: *BufferTransport = @ptrCast(@alignCast(ctx.?));
+        const self: *BufferTransport = @ptrCast(@alignCast(ctx orelse return -1));
         self.send_count += 1;
 
         if (self.fail_next) {

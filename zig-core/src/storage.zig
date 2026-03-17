@@ -79,21 +79,21 @@ pub const BufferStorage = struct {
     }
 
     fn bufWrite(data: [*]const u8, len: u32, ctx: ?*anyopaque) callconv(.c) c_int {
-        const self: *BufferStorage = @ptrCast(@alignCast(ctx.?));
+        const self: *BufferStorage = @ptrCast(@alignCast(ctx orelse return -1));
         self.write_count += 1;
         self.data.appendSlice(self.allocator, data[0..len]) catch return -1;
         return 0;
     }
 
     fn bufRead(buf: [*]u8, max_len: u32, ctx: ?*anyopaque) callconv(.c) u32 {
-        const self: *BufferStorage = @ptrCast(@alignCast(ctx.?));
+        const self: *BufferStorage = @ptrCast(@alignCast(ctx orelse return 0));
         const read_len = @min(@as(u32, @intCast(self.data.items.len)), max_len);
         @memcpy(buf[0..read_len], self.data.items[0..read_len]);
         return read_len;
     }
 
     fn bufDiscard(bytes: u32, ctx: ?*anyopaque) callconv(.c) void {
-        const self: *BufferStorage = @ptrCast(@alignCast(ctx.?));
+        const self: *BufferStorage = @ptrCast(@alignCast(ctx orelse return));
         const discard_len = @min(bytes, @as(u32, @intCast(self.data.items.len)));
         if (discard_len > 0) {
             const remaining = self.data.items.len - discard_len;
@@ -103,7 +103,7 @@ pub const BufferStorage = struct {
     }
 
     fn bufAvailable(ctx: ?*anyopaque) callconv(.c) u64 {
-        const self: *BufferStorage = @ptrCast(@alignCast(ctx.?));
+        const self: *BufferStorage = @ptrCast(@alignCast(ctx orelse return 0));
         return @intCast(self.data.items.len);
     }
 };

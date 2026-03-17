@@ -150,48 +150,7 @@ fn tagSize(field_number: u32) usize {
 }
 
 // ── Encode a single KeyValue ────────────────────────────────────────────
-fn encodeKeyValue(w: *ProtoWriter, attr: Attribute) bool {
-    // Serialize into temp buffer to get length
-    var tmp_buf: [512]u8 = undefined;
-    var tmp = ProtoWriter{ .buf = &tmp_buf };
-
-    // key (field 1, string)
-    if (!tmp.writeStringField(field.kv_key, attr.key)) return false;
-
-    // value (field 2, AnyValue submessage)
-    var av_buf: [256]u8 = undefined;
-    var av = ProtoWriter{ .buf = &av_buf };
-
-    switch (attr.value) {
-        .string => |s| {
-            if (!av.writeStringField(field.av_string, s)) return false;
-        },
-        .bool_val => |b| {
-            if (!av.writeTag(field.av_bool, VARINT)) return false;
-            if (!av.writeVarint(if (b) 1 else 0)) return false;
-        },
-        .int_val => |i| {
-            if (!av.writeTag(field.av_int, VARINT)) return false;
-            if (!av.writeSignedVarint(i)) return false;
-        },
-        .double_val => |d| {
-            if (!av.writeDouble(field.av_double, d)) return false;
-        },
-        .bytes => |b| {
-            if (!av.writeLenDelimited(field.av_bytes, b)) return false;
-        },
-        .null_val => {},
-    }
-
-    if (av.pos > 0) {
-        if (!tmp.writeLenDelimited(field.kv_value, av.buf[0..av.pos])) return false;
-    }
-
-    // Write the KV as a length-delimited submessage
-    return w.writeLenDelimited(field.span_attributes, tmp.buf[0..tmp.pos]);
-}
-
-fn encodeKeyValueWithFieldNum(w: *ProtoWriter, attr: Attribute, field_num: u32) bool {
+fn encodeKeyValue(w: *ProtoWriter, attr: Attribute, field_num: u32) bool {
     var tmp_buf: [512]u8 = undefined;
     var tmp = ProtoWriter{ .buf = &tmp_buf };
 
@@ -239,7 +198,7 @@ fn encodeEvent(w: *ProtoWriter, event: SpanEvent) bool {
     if (!tmp.writeStringField(field.event_name, event.name)) return false;
     // attributes (field 3, repeated KeyValue)
     for (event.attributes.slice()) |attr| {
-        if (!encodeKeyValueWithFieldNum(&tmp, attr, field.event_attributes)) return false;
+        if (!encodeKeyValue(&tmp, attr, field.event_attributes)) return false;
     }
 
     return w.writeLenDelimited(field.span_events, tmp.buf[0..tmp.pos]);
@@ -278,7 +237,7 @@ fn encodeSpan(w: *ProtoWriter, rec: *const SpanRecord) bool {
 
     // attributes (field 9, repeated KeyValue)
     for (rec.attributes.slice()) |attr| {
-        if (!encodeKeyValue(&sw, attr)) return false;
+        if (!encodeKeyValue(&sw, attr, field.span_attributes)) return false;
     }
 
     // events (field 10, repeated Event)
@@ -322,7 +281,7 @@ pub fn encodeSpanBatch(
         var res_buf: [4096]u8 = undefined;
         var res = ProtoWriter{ .buf = &res_buf };
         for (resource_attrs) |attr| {
-            if (!encodeKeyValueWithFieldNum(&res, attr, field.resource_attributes)) return null;
+            if (!encodeKeyValue(&res, attr, field.resource_attributes)) return null;
         }
         if (res.pos > 0) {
             if (!rs.writeLenDelimited(field.resource, res.buf[0..res.pos])) return null;

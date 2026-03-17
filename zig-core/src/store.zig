@@ -35,25 +35,28 @@ pub const SpanStore = struct {
     }
 
     /// Allocate a span slot. Returns null if at capacity and no evictable span.
+    /// SAFETY: The returned span has `active = true` and `ended = false`.
+    /// drainCompleted only processes slots where `ended == true`, so
+    /// concurrent drain is safe even while the caller initializes the span.
+    /// The caller MUST NOT call span.end() until initialization is complete.
     pub fn allocateSpan(self: *SpanStore) ?*Span {
         self.mutex.lock();
         defer self.mutex.unlock();
 
         if (self.count < self.capacity) {
-            // Find first inactive slot
             var i: u32 = 0;
             while (i < self.capacity) : (i += 1) {
-                if (!self.slots[i].active and self.slots[i].end_time_ns == 0) {
-                    self.slots[i] = Span{};
-                    self.slots[i].active = true;
+                const idx = (self.head + i) % self.capacity;
+                if (!self.slots[idx].active and self.slots[idx].end_time_ns == 0) {
+                    self.slots[idx] = Span{};
+                    self.slots[idx].active = true;
                     self.count += 1;
-                    return &self.slots[i];
+                    self.head = (idx + 1) % self.capacity;
+                    return &self.slots[idx];
                 }
             }
-            // All active — try to evict oldest completed
             return self.evictAndAllocate();
         }
-
         return self.evictAndAllocate();
     }
 
@@ -82,10 +85,10 @@ pub const SpanStore = struct {
 
     /// Mark a span as completed.
     pub fn completeSpan(self: *SpanStore, s: *Span) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        if (!s.ended) return;
-        self.completed_count += 1;
+        _ = self;
+        _ = s;
+        // No-op: span.end() sets ended=true which drainCompleted checks.
+        // Kept for API compatibility.
     }
 
     /// Deep-copy completed span data into batch buffer. Returns count drained.

@@ -80,6 +80,8 @@ pub const TerraMetrics = struct {
     spans_dropped: Counter = .{},
     transport_errors: Counter = .{},
     inference_duration_ms: Histogram = .{},
+    input_tokens_total: Counter = .{},
+    output_tokens_total: Counter = .{},
 
     pub fn reset(self: *TerraMetrics) void {
         self.inference_count.reset();
@@ -87,6 +89,8 @@ pub const TerraMetrics = struct {
         self.spans_dropped.reset();
         self.transport_errors.reset();
         self.inference_duration_ms.reset();
+        self.input_tokens_total.reset();
+        self.output_tokens_total.reset();
     }
 };
 

@@ -55,7 +55,7 @@ pub const StdScheduler = struct {
     }} ** 16,
     entry_count: u8 = 0,
     next_handle: u64 = 1,
-    running: bool = false,
+    running: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
     thread: ?std.Thread = null,
     mutex: std.Thread.Mutex = .{},
 
@@ -64,12 +64,12 @@ pub const StdScheduler = struct {
     }
 
     pub fn start(self: *StdScheduler) void {
-        self.running = true;
+        self.running.store(true, .release);
         self.thread = std.Thread.spawn(.{}, tickLoop, .{self}) catch null;
     }
 
     pub fn stop(self: *StdScheduler) void {
-        self.running = false;
+        self.running.store(false, .release);
         if (self.thread) |t| {
             t.join();
             self.thread = null;
@@ -77,7 +77,7 @@ pub const StdScheduler = struct {
     }
 
     fn tickLoop(self: *StdScheduler) void {
-        while (self.running) {
+        while (self.running.load(.acquire)) {
             std.Thread.sleep(10_000_000); // 10ms tick
             self.mutex.lock();
             const now: u64 = @intCast(std.time.nanoTimestamp());
@@ -104,7 +104,7 @@ pub const StdScheduler = struct {
     }
 
     fn stdSchedule(callback: *const fn (?*anyopaque) callconv(.c) void, interval_ms: u64, cb_ctx: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) u64 {
-        const self: *StdScheduler = @ptrCast(@alignCast(ctx.?));
+        const self: *StdScheduler = @ptrCast(@alignCast(ctx orelse return 0));
         self.mutex.lock();
         defer self.mutex.unlock();
 
@@ -127,7 +127,7 @@ pub const StdScheduler = struct {
     }
 
     fn stdCancel(handle: u64, ctx: ?*anyopaque) callconv(.c) void {
-        const self: *StdScheduler = @ptrCast(@alignCast(ctx.?));
+        const self: *StdScheduler = @ptrCast(@alignCast(ctx orelse return));
         self.mutex.lock();
         defer self.mutex.unlock();
         for (self.entries[0..self.entry_count]) |*entry| {

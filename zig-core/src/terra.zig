@@ -103,7 +103,7 @@ pub const TerraInstance = struct {
         self.config.transport_vtable.flush();
         self.config.transport_vtable.shutdown();
         self.store.deinit();
-        self.state = .stopped;
+        // Don't write .stopped — instance is about to be freed
         const allocator = self.allocator;
         allocator.destroy(self);
     }

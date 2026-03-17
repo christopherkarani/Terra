@@ -45,6 +45,15 @@ pub fn sha256(data: []const u8) [32]u8 {
     return out;
 }
 
+pub const CaptureIntent = enum(u8) {
+    default = 0, // Use global ContentPolicy
+    opt_in = 1, // Explicitly opt in to content capture
+
+    pub fn includesContent(self: CaptureIntent) bool {
+        return self == .opt_in;
+    }
+};
+
 pub fn redact(strategy: RedactionStrategy, content: []const u8, hmac_key: ?[]const u8) RedactedValue {
     return switch (strategy) {
         .drop => .{ .dropped = {} },
