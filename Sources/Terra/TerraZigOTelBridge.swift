@@ -537,6 +537,54 @@ final class TerraZigNoOpSpan: Span, @unchecked Sendable {
   func end(time: Date) {}
 }
 
+// MARK: - Zig Backend Installation
+
+extension Terra {
+  /// Install the Zig core as the active telemetry backend.
+  ///
+  /// This replaces the Swift OTel pipeline with the Zig-based engine:
+  /// 1. Calls `terra_init()` to create the native instance
+  /// 2. Registers `TerraZigTracerProvider` as the global OTel tracer provider
+  /// 3. Configures service name/version from the provided configuration
+  ///
+  /// After this call, all `Terra.withInferenceSpan()` etc. will route through
+  /// the Zig C ABI instead of the Swift OTel SDK.
+  package static func installZigBackend(
+    serviceName: String? = nil,
+    serviceVersion: String? = nil
+  ) -> Bool {
+    guard let instance = terra_init(nil) else {
+      return false
+    }
+
+    _zigInstance = instance
+
+    // Configure service metadata
+    if let name = serviceName {
+      name.withCString { cName in
+        let ver = serviceVersion ?? "0.0.0"
+        ver.withCString { cVer in
+          _ = terra_set_service_info(instance, cName, cVer)
+        }
+      }
+    } else if let version = serviceVersion {
+      version.withCString { cVer in
+        _ = terra_set_service_info(instance, "unknown", cVer)
+      }
+    }
+
+    // Register the Zig-backed tracer provider as the global OTel provider
+    let zigProvider = TerraZigTracerProvider(instance: instance)
+    OpenTelemetry.registerTracerProvider(tracerProvider: zigProvider)
+
+    return true
+  }
+
+  /// The raw Zig instance pointer, if the Zig backend was installed.
+  /// Used internally for shutdown and test support.
+  package private(set) static var _zigInstance: OpaquePointer? = nil
+}
+
 // MARK: - Helpers
 
 /// Calls `body` with a pointer to `value` if non-nil, or `nil` otherwise.
