@@ -110,7 +110,9 @@ class TerraSpan internal constructor(
         try {
             return block(this)
         } catch (e: Throwable) {
-            recordError(e.javaClass.name, e.message ?: "Unknown error")
+            if (!ended) {
+                recordError(e.javaClass.name, e.message ?: "Unknown error")
+            }
             throw e
         } finally {
             if (!ended) end()

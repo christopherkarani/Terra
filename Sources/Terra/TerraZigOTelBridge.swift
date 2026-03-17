@@ -227,6 +227,12 @@ final class TerraZigSpanBuilder: SpanBuilder {
   ) -> OpaquePointer? {
     switch spanName {
     case Terra.SpanNames.inference:
+      // Route to streaming span if gen_ai.request.stream attribute is set to true
+      if isStreamingRequest() {
+        return model.withCString { cModel in
+          terra_begin_streaming_span_ctx(instance, parentCtx, cModel, includeContent)
+        }
+      }
       return model.withCString { cModel in
         terra_begin_inference_span_ctx(instance, parentCtx, cModel, includeContent)
       }
@@ -250,7 +256,7 @@ final class TerraZigSpanBuilder: SpanBuilder {
         terra_begin_safety_span_ctx(instance, parentCtx, cName, includeContent)
       }
     default:
-      // For streaming or any unrecognized span name, fall back to inference
+      // Unrecognized span name — fall back to inference
       return model.withCString { cModel in
         terra_begin_inference_span_ctx(instance, parentCtx, cModel, includeContent)
       }
@@ -285,6 +291,17 @@ final class TerraZigSpanBuilder: SpanBuilder {
       }
     }
     return "unknown"
+  }
+
+  private func isStreamingRequest() -> Bool {
+    if let stream = attributes[Terra.Keys.GenAI.requestStream] {
+      switch stream {
+      case .bool(let b): return b
+      case .string(let s): return s == "true"
+      default: break
+      }
+    }
+    return false
   }
 }
 
@@ -402,7 +419,7 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
     // Zig C ABI does not support event attributes directly;
     // set them as span attributes with event-prefixed keys, then add the event.
     for (key, value) in attributes {
-      setAttribute(key: "event.\(name).\(key)", value: value)
+      setAttribute(key: "terra.event.\(name).\(key)", value: value)
     }
     name.withCString { cName in
       terra_span_add_event(zigSpan, cName)
@@ -412,7 +429,7 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
   func addEvent(name: String, attributes: [String: AttributeValue], timestamp: Date) {
     guard !ended else { return }
     for (key, value) in attributes {
-      setAttribute(key: "event.\(name).\(key)", value: value)
+      setAttribute(key: "terra.event.\(name).\(key)", value: value)
     }
     let nanos = UInt64(timestamp.timeIntervalSince1970 * 1_000_000_000)
     name.withCString { cName in
@@ -431,6 +448,9 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
     }
   }
 
+  // NOTE: The Zig C ABI (terra_span_record_error) does not accept a custom timestamp.
+  // The exception timestamp is always set by the Zig-side clock. This timestamp
+  // parameter is accepted for OTel Span protocol conformance but not applied.
   func recordException(_ exception: SpanException, timestamp: Date) {
     recordException(exception)
   }
@@ -440,6 +460,9 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
     setAttributes(attributes)
   }
 
+  // NOTE: The Zig C ABI (terra_span_record_error) does not accept a custom timestamp.
+  // The exception timestamp is always set by the Zig-side clock. This timestamp
+  // parameter is accepted for OTel Span protocol conformance but not applied.
   func recordException(_ exception: SpanException, attributes: [String: AttributeValue], timestamp: Date) {
     recordException(exception, attributes: attributes)
   }
@@ -458,6 +481,9 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
     terra_span_end(instance, zigSpan)
   }
 
+  // NOTE: The Zig C ABI (terra_span_end) does not accept a custom end timestamp.
+  // The span's end time is always set by the Zig-side clock. This timestamp
+  // parameter is accepted for OTel Span protocol conformance but not applied.
   func end(time: Date) {
     end()
   }

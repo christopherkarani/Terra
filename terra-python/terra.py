@@ -448,6 +448,7 @@ class TerraStreamingSpan(TerraSpan):
         if not self.is_valid or self._ended:
             return
         self._lib.terra_streaming_end(self._handle)
+        self._ended = True
 
 
 class Terra:
@@ -475,7 +476,11 @@ class Terra:
             otlp_endpoint=otlp_endpoint,
         )
 
-        # Pass NULL config to use defaults, then override via C API
+        # NOTE: terra_init() accepts NULL for defaults. Post-init configuration
+        # is limited to service_name/service_version via terra_set_service_info().
+        # Other TerraConfig fields (otlp_endpoint, content_policy, max_spans, etc.)
+        # are documented for future C API expansion but currently use Zig defaults.
+        # See terra.h for the complete C configuration struct.
         handle = lib.terra_init(None)
         if not handle:
             err = lib.terra_last_error()
@@ -485,7 +490,7 @@ class Terra:
 
         inst = cls(handle, lib)
 
-        # Apply service info
+        # Apply service info — the only config fields supported post-init via C API
         inst.set_service_info(cfg.service_name, cfg.service_version)
 
         return inst

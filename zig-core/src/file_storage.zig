@@ -37,13 +37,17 @@ pub const FileStorage = struct {
     /// Filename: terra_<timestamp_ns>.otlp
     /// On freestanding builds, this is a no-op stub.
     pub fn writeFile(self: *FileStorage, data: []const u8) !void {
+        return self.writeFileInner(data, false);
+    }
+
+    fn writeFileInner(self: *FileStorage, data: []const u8, retried: bool) !void {
         if (comptime !is_available) return;
 
         // Ensure directory exists
         var dir = std.fs.cwd().openDir(self.dir_path, .{}) catch |err| {
-            if (err == error.FileNotFound) {
+            if (err == error.FileNotFound and !retried) {
                 std.fs.cwd().makePath(self.dir_path) catch return err;
-                return self.writeFile(data);
+                return self.writeFileInner(data, true); // single retry
             }
             return err;
         };

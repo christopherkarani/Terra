@@ -43,9 +43,9 @@ pub const SharedRingBuffer = struct {
     tail: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
     /// Atomic read cursor (consumer owns). Byte offset into data[].
     head: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
-    /// Monotonic counters for diagnostics.
-    entries_written: u64 = 0,
-    entries_dropped: u64 = 0,
+    /// Monotonic counters for diagnostics (atomic for thread-safe access).
+    entries_written: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
+    entries_dropped: std.atomic.Value(u64) = std.atomic.Value(u64).init(0),
 
     /// Initialize a ring buffer over a caller-provided byte region.
     /// The caller must ensure `buf` remains valid and is not freed while the ring is in use.
@@ -85,12 +85,12 @@ pub const SharedRingBuffer = struct {
         const entry_size = alignUp(ENTRY_HEADER_SIZE + payload.len, ENTRY_ALIGNMENT);
         if (entry_size > self.capacity / 2) {
             // Entry too large for this ring
-            self.entries_dropped += 1;
+            _ = self.entries_dropped.fetchAdd(1, .monotonic);
             return false;
         }
 
         if (self.availableWrite() < entry_size) {
-            self.entries_dropped += 1;
+            _ = self.entries_dropped.fetchAdd(1, .monotonic);
             return false;
         }
 
@@ -116,7 +116,7 @@ pub const SharedRingBuffer = struct {
         // Advance tail (release so consumer sees the write)
         const new_tail = (t + @as(u32, @intCast(entry_size))) % self.capacity;
         self.tail.store(new_tail, .release);
-        self.entries_written += 1;
+        _ = self.entries_written.fetchAdd(1, .monotonic);
         return true;
     }
 
@@ -151,8 +151,8 @@ pub const SharedRingBuffer = struct {
     pub fn reset(self: *SharedRingBuffer) void {
         self.head.store(0, .monotonic);
         self.tail.store(0, .monotonic);
-        self.entries_written = 0;
-        self.entries_dropped = 0;
+        self.entries_written.store(0, .monotonic);
+        self.entries_dropped.store(0, .monotonic);
     }
 
     // ── Internal helpers ────────────────────────────────────────────────
@@ -214,7 +214,7 @@ test "SharedRingBuffer write and read round-trip" {
 
     const payload = "hello-terra";
     try std.testing.expect(ring.write(payload));
-    try std.testing.expectEqual(@as(u64, 1), ring.entries_written);
+    try std.testing.expectEqual(@as(u64, 1), ring.entries_written.load(.monotonic));
 
     var out: [128]u8 = undefined;
     const result = ring.read(&out);
@@ -229,7 +229,7 @@ test "SharedRingBuffer multiple entries" {
     try std.testing.expect(ring.write("first"));
     try std.testing.expect(ring.write("second"));
     try std.testing.expect(ring.write("third"));
-    try std.testing.expectEqual(@as(u64, 3), ring.entries_written);
+    try std.testing.expectEqual(@as(u64, 3), ring.entries_written.load(.monotonic));
 
     var out: [128]u8 = undefined;
     const r1 = ring.read(&out);
@@ -264,7 +264,7 @@ test "SharedRingBuffer drop when full" {
 
     // This should fail — not enough space
     try std.testing.expect(!ring.write(big_payload));
-    try std.testing.expectEqual(@as(u64, 1), ring.entries_dropped);
+    try std.testing.expectEqual(@as(u64, 1), ring.entries_dropped.load(.monotonic));
 }
 
 test "SharedRingBuffer reset" {
@@ -276,7 +276,7 @@ test "SharedRingBuffer reset" {
 
     try std.testing.expectEqual(@as(u32, 0), ring.head.load(.monotonic));
     try std.testing.expectEqual(@as(u32, 0), ring.tail.load(.monotonic));
-    try std.testing.expectEqual(@as(u64, 0), ring.entries_written);
+    try std.testing.expectEqual(@as(u64, 0), ring.entries_written.load(.monotonic));
 }
 
 test "SharedRingBuffer vtable integration" {
@@ -286,7 +286,7 @@ test "SharedRingBuffer vtable integration" {
 
     const result = vt.send("test-span-data");
     try std.testing.expectEqual(@as(c_int, 0), result);
-    try std.testing.expectEqual(@as(u64, 1), ring.entries_written);
+    try std.testing.expectEqual(@as(u64, 1), ring.entries_written.load(.monotonic));
 
     // Read back via ring directly
     var out: [128]u8 = undefined;
@@ -302,5 +302,5 @@ test "SharedRingBuffer entry too large" {
     // Entry larger than half capacity should be rejected
     const huge = "x" ** 40;
     try std.testing.expect(!ring.write(huge));
-    try std.testing.expectEqual(@as(u64, 1), ring.entries_dropped);
+    try std.testing.expectEqual(@as(u64, 1), ring.entries_dropped.load(.monotonic));
 }
