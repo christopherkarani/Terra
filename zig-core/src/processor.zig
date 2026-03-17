@@ -26,8 +26,8 @@ pub const PipelineConfig = struct {
     session_id: ?[]const u8 = null,
     transport: transport_mod.TransportVTable = transport_mod.noop_transport,
     storage: storage_mod.StorageVTable = storage_mod.noop_storage,
-    max_retries: u8 = 3,
-    retry_base_ms: u64 = 1000,
+    max_retries: u8 = 1,
+    retry_base_ms: u64 = 100,
 };
 
 // ── Processor ───────────────────────────────────────────────────────────
@@ -138,9 +138,10 @@ pub const Processor = struct {
             const result = self.config.transport.send(data);
             if (result == 0) return true;
 
-            // Exponential backoff
+            // Exponential backoff with cap
             if (attempt < self.config.max_retries) {
-                const backoff_ms = self.config.retry_base_ms * (@as(u64, 1) << @intCast(attempt));
+                const raw_backoff = self.config.retry_base_ms * (@as(u64, 1) << @intCast(attempt));
+                const backoff_ms: u64 = @min(raw_backoff, 500);
                 std.Thread.sleep(backoff_ms * 1_000_000);
             }
         }

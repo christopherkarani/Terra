@@ -45,8 +45,9 @@ fn setLastError(code: c_int, msg: []const u8) void {
 
 pub export fn terra_init(config_ptr: ?*const TerraConfig) callconv(.c) ?*TerraInstance {
     const cfg = if (config_ptr) |c| c.* else TerraConfig.default();
+    const allocator = cfg.allocator;
 
-    return TerraInstance.create(std.heap.page_allocator, cfg) catch |err| {
+    return TerraInstance.create(allocator, cfg) catch |err| {
         switch (err) {
             error.InvalidConfig => setLastError(TERRA_ERR_INVALID_CONFIG, "Invalid configuration"),
             error.OutOfMemory => setLastError(TERRA_ERR_OUT_OF_MEMORY, "Out of memory"),
@@ -204,8 +205,7 @@ pub export fn terra_span_record_error(s: ?*Span, error_type: ?[*:0]const u8, err
 
 pub export fn terra_streaming_record_token(s: ?*Span) callconv(.c) void {
     const span = s orelse return;
-    // Increment a counter attribute for tokens
-    span.setInt("terra.stream.output_tokens", 0); // Caller should use StreamingScope via Zig API
+    span.addEvent("terra.token");
 }
 
 pub export fn terra_streaming_record_first_token(s: ?*Span) callconv(.c) void {
@@ -214,8 +214,8 @@ pub export fn terra_streaming_record_first_token(s: ?*Span) callconv(.c) void {
 }
 
 pub export fn terra_streaming_end(s: ?*Span) callconv(.c) void {
-    // Finalize streaming metrics — does NOT end the span
-    _ = s;
+    const span = s orelse return;
+    span.addEvent("terra.stream.end");
 }
 
 // ── Context extraction ──────────────────────────────────────────────────

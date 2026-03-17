@@ -193,7 +193,8 @@ pub const Span = struct {
             @memcpy(rec.events[0..self.event_count], self.events[0..self.event_count]);
         }
         if (self.status_description_len > 0) {
-            rec.status_description = self.status_description_buf[0..self.status_description_len];
+            @memcpy(rec.status_description_buf[0..self.status_description_len], self.status_description_buf[0..self.status_description_len]);
+            rec.status_description_len = self.status_description_len;
         }
         return rec;
     }

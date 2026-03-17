@@ -187,7 +187,8 @@ pub const SpanRecord = struct {
     name_len: u8 = 0,
     kind: SpanKind = .internal,
     status: StatusCode = .unset,
-    status_description: ?[]const u8 = null,
+    status_description_buf: [256]u8 = [_]u8{0} ** 256,
+    status_description_len: u8 = 0,
     start_time_ns: u64 = 0,
     end_time_ns: u64 = 0,
     include_content: bool = false,
@@ -208,6 +209,11 @@ pub const SpanRecord = struct {
         const copy_len = @min(n.len, MAX_SPAN_NAME);
         @memcpy(self.name[0..copy_len], n[0..copy_len]);
         self.name_len = @intCast(copy_len);
+    }
+
+    pub fn statusDescriptionSlice(self: *const SpanRecord) ?[]const u8 {
+        if (self.status_description_len == 0) return null;
+        return self.status_description_buf[0..self.status_description_len];
     }
 
     pub fn durationNs(self: *const SpanRecord) u64 {

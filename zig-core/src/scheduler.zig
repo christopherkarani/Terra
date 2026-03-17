@@ -42,6 +42,7 @@ pub const StdScheduler = struct {
         cb_ctx: ?*anyopaque,
         last_fire_ns: u64,
         active: bool,
+        handle: u64,
     };
 
     entries: [16]Entry = [_]Entry{.{
@@ -50,6 +51,7 @@ pub const StdScheduler = struct {
         .cb_ctx = null,
         .last_fire_ns = 0,
         .active = false,
+        .handle = 0,
     }} ** 16,
     entry_count: u8 = 0,
     next_handle: u64 = 1,
@@ -117,6 +119,7 @@ pub const StdScheduler = struct {
             .cb_ctx = cb_ctx,
             .last_fire_ns = @intCast(std.time.nanoTimestamp()),
             .active = true,
+            .handle = handle,
         };
         self.entry_count += 1;
 
@@ -127,10 +130,11 @@ pub const StdScheduler = struct {
         const self: *StdScheduler = @ptrCast(@alignCast(ctx.?));
         self.mutex.lock();
         defer self.mutex.unlock();
-        _ = handle;
-        // Simple: just mark last entry inactive (handles are monotonic)
-        if (self.entry_count > 0) {
-            self.entries[self.entry_count - 1].active = false;
+        for (self.entries[0..self.entry_count]) |*entry| {
+            if (entry.active and entry.handle == handle) {
+                entry.active = false;
+                return;
+            }
         }
     }
 };

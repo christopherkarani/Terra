@@ -293,7 +293,7 @@ fn encodeSpan(w: *ProtoWriter, rec: *const SpanRecord) bool {
         var st = ProtoWriter{ .buf = &status_buf };
         if (!st.writeTag(field.status_code, VARINT)) return false;
         if (!st.writeVarint(@intFromEnum(rec.status))) return false;
-        if (rec.status_description) |desc| {
+        if (rec.statusDescriptionSlice()) |desc| {
             if (!st.writeStringField(field.status_message, desc)) return false;
         }
         if (!sw.writeLenDelimited(field.span_status, status_buf[0..st.pos])) return false;
@@ -314,7 +314,7 @@ pub fn encodeSpanBatch(
     var w = ProtoWriter{ .buf = buffer };
 
     // Build ResourceSpans submessage
-    var rs_buf: [65536]u8 = undefined;
+    var rs_buf: [16384]u8 = undefined;
     var rs = ProtoWriter{ .buf = &rs_buf };
 
     // Resource (field 1)
@@ -331,7 +331,7 @@ pub fn encodeSpanBatch(
 
     // ScopeSpans (field 2)
     {
-        var ss_buf: [65536]u8 = undefined;
+        var ss_buf: [16384]u8 = undefined;
         var ss = ProtoWriter{ .buf = &ss_buf };
 
         // InstrumentationScope (field 1)
@@ -461,7 +461,11 @@ test "encodeSpanBatch with status error" {
     rec.start_time_ns = 100;
     rec.end_time_ns = 200;
     rec.status = .err;
-    rec.status_description = "something failed";
+    {
+        const desc = "something failed";
+        @memcpy(rec.status_description_buf[0..desc.len], desc);
+        rec.status_description_len = desc.len;
+    }
 
     var buf: [4096]u8 = undefined;
     const result = encodeSpanBatch(&[_]SpanRecord{rec}, &[_]Attribute{}, &buf);

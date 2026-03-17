@@ -13,6 +13,7 @@ pub const RedactionStrategy = enum(u8) {
     drop = 0,
     length_only = 1,
     hmac_sha256 = 2,
+    sha256 = 3, // Legacy: plain SHA256 without HMAC key
 };
 
 pub const RedactedValue = union(enum) {
@@ -61,6 +62,12 @@ pub fn redact(strategy: RedactionStrategy, content: []const u8, hmac_key: ?[]con
                 hex = std.fmt.bytesToHex(&hash, .lower);
                 break :blk .{ .hash = hex };
             }
+        },
+        .sha256 => blk: {
+            const hash = sha256(content);
+            var hex: [64]u8 = undefined;
+            hex = std.fmt.bytesToHex(&hash, .lower);
+            break :blk .{ .hash = hex };
         },
     };
 }
