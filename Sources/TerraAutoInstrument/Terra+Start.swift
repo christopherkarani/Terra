@@ -172,15 +172,33 @@ extension Terra {
   }
 
   static func _performStart(_ config: _ResolvedStartConfiguration) throws {
-    // 1. Set up OpenTelemetry providers (traces, metrics, signposts, sessions)
+    // 0. Resolve service metadata
+    let serviceName = config.openTelemetry.serviceName
+      ?? Bundle.main.bundleIdentifier
+      ?? ProcessInfo.processInfo.processName
+    let serviceVersion = config.openTelemetry.serviceVersion
+      ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+
+    // 1. Set up telemetry providers — Zig core (preferred) or Swift OTel fallback
+    #if canImport(CTerraBridge)
+    let zigInstalled = installZigBackend(
+      serviceName: serviceName,
+      serviceVersion: serviceVersion
+    )
+    if !zigInstalled {
+      // Zig init failed — fall back to Swift OTel pipeline
+      var openTelemetryConfig = config.openTelemetry
+      openTelemetryConfig.serviceName = serviceName
+      openTelemetryConfig.serviceVersion = serviceVersion
+      try installOpenTelemetry(openTelemetryConfig)
+    }
+    #else
+    // No Zig core available — use Swift OTel pipeline
     var openTelemetryConfig = config.openTelemetry
-    if openTelemetryConfig.serviceName == nil {
-      openTelemetryConfig.serviceName = Bundle.main.bundleIdentifier ?? ProcessInfo.processInfo.processName
-    }
-    if openTelemetryConfig.serviceVersion == nil {
-      openTelemetryConfig.serviceVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-    }
+    openTelemetryConfig.serviceName = serviceName
+    openTelemetryConfig.serviceVersion = serviceVersion
     try installOpenTelemetry(openTelemetryConfig)
+    #endif
 
     // 2. Install Terra runtime (privacy, providers)
     install(.init(privacy: config.privacy))

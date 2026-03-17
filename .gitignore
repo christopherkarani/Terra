@@ -18,7 +18,18 @@ Docs/reference/api-improvement-report.md
 Docs/reference/frontfacing-api.md
 Docs/reference/frontfacing-api-catalog.md
 
-# Local agent artifacts
-tasks/.wax/
+# Internal planning and agent artifacts (not user-facing)
+Plans/
+tasks/
+Artifacts/
+Docs/plans/
+Docs/superpowers/
+.claude/plans/
 .claude/skills/**/__pycache__/
 .claude/skills/terra-instrument/
+.codex/
+.gemini/
+.tmp/
+
+# Android cross-compiled native libraries (build artifacts)
+terra-android/jniLibs/

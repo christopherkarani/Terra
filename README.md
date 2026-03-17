@@ -4,8 +4,8 @@
 
 # Terra
 
-Terra is an OpenTelemetry-native observability SDK for on-device GenAI on Apple platforms.
-Instrument inference, streaming, agents, tools, embeddings, and safety checks with privacy-safe defaults.
+Terra is a cross-platform GenAI observability SDK built on a Zig telemetry core with a stable C ABI.
+Instrument inference, streaming, agents, tools, embeddings, and safety checks — from iPhones to drones to MCUs — with privacy-safe defaults and zero runtime dependencies.
 
 ```swift
 import Terra
@@ -18,6 +18,53 @@ let result = try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: "Say he
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%20|%20macOS%20|%20visionOS-red.svg)]()
 
+## Architecture
+
+All language bindings share one native telemetry engine via a C ABI:
+
+```
+                           terra.h (C ABI)
+                                │
+                     ┌──────────┴──────────┐
+                     │   libtera.a / .so   │
+                     │   (Zig → native)    │
+                     └──────────┬──────────┘
+                                │
+     ┌────────┬────────┬────────┼────────┬────────┬────────┐
+     │        │        │        │        │        │        │
+   Swift   Kotlin    Python    Rust     C++       C     (more)
+     │        │        │        │        │        │
+  CTerraBridge  JNI    ctypes  FFI   terra.hpp  direct
+  OTel adapter  bridge  dlopen  safe  header-only  raw
+  @TaskLocal  Coroutine ctx mgr  Drop  RAII     manual
+```
+
+| Language | Linkage | Wrapper | Memory Management |
+|----------|---------|---------|-------------------|
+| **C** | `#include "terra.h"` | None (raw API) | Manual `terra_shutdown()` |
+| **C++** | `#include "terra.hpp"` | Header-only RAII | Destructor |
+| **Swift** | CTerraBridge xcframework | OTel protocol adapter | `defer` in closures |
+| **Kotlin** | JNI + `System.loadLibrary` | Kotlin SDK classes | `use {}` block |
+| **Python** | `ctypes.cdll.LoadLibrary` | Pythonic classes | `with` context manager |
+| **Rust** | `build.rs` links `libtera.a` | Safe wrappers | `Drop` trait |
+
+**Key design decisions:**
+- **Single source of truth** — 30+ functions defined once in Zig, exported via C ABI, wrapped by each language
+- **Opaque handles** — `terra_t*` and `terra_span_t*` require no struct layout knowledge
+- **Context is caller-owned** — no threadlocal in Zig; each language uses its native propagation (Swift `@TaskLocal`, Kotlin `CoroutineContext.Element`, etc.)
+- **Cross-platform** — compiles for macOS, iOS, Linux x86/ARM, Android, freestanding MCUs (thumb, ARM)
+
+### Platform Support
+
+| Target | Transport | Status |
+|--------|-----------|--------|
+| macOS / iOS | OTLP/HTTP | Production |
+| Android | OTLP/HTTP (OkHttp) | Production |
+| Linux ARM (Pi, Jetson) | OTLP/HTTP | Production |
+| Robotics (ROS 2) | ROS 2 topic + MQTT | Integration |
+| Drones / Serial | UART (CRC16 framing) | Integration |
+| MCUs (Cortex-M) | CoAP / Shared memory | Freestanding |
+
 ## Quick Start
 
 Copy-ready snippets live in `Examples/Terra Sample/RecipeSnippets.swift` and compile as-is.
@@ -28,6 +75,90 @@ import Terra
 try await Terra.start(.init(preset: .quickstart))
 let answer = try await TerraRecipeSnippets.inferRecipe(prompt: userPrompt)
 await Terra.shutdown()
+```
+
+### Python
+
+```python
+from terra import Terra, StatusCode
+
+terra = Terra.init(service_name="my-app", service_version="1.0.0")
+
+with terra.begin_inference_span(model="gpt-4") as span:
+    span.set_int("gen_ai.request.max_tokens", 2048)
+    span.set_double("gen_ai.request.temperature", 0.7)
+    result = call_llm(prompt)
+    span.set_int("gen_ai.usage.output_tokens", len(result))
+    span.set_status(StatusCode.OK)
+
+terra.shutdown()
+```
+
+### Rust
+
+```rust
+use terra::Terra;
+
+let terra = Terra::init()?;
+terra.set_service_info("my-app", "1.0.0")?;
+
+terra.with_inference_span("gpt-4", None, false, |span| {
+    span.set_int("gen_ai.request.max_tokens", 2048);
+    span.set_double("gen_ai.request.temperature", 0.7);
+    span.add_event("prompt_sent");
+    Ok(())
+})?;
+// terra.shutdown() called automatically via Drop
+```
+
+### C++
+
+```cpp
+#include <terra.hpp>
+
+auto terra = terra::Instance::init();
+terra.set_service_info("my-app", "1.0.0");
+
+{
+    auto span = terra.begin_inference("gpt-4");
+    span.set("gen_ai.request.max_tokens", int64_t(2048));
+    span.set("gen_ai.request.temperature", 0.7);
+    span.add_event("prompt_sent");
+    // span.end() called automatically by destructor
+}
+
+// terra.shutdown() called automatically by destructor
+```
+
+### Kotlin
+
+```kotlin
+Terra.init(terraConfig { serviceName = "my-app"; serviceVersion = "1.0.0" })
+
+Terra.beginInferenceSpan("gpt-4").use { span ->
+    span.setAttribute("gen_ai.request.max_tokens", 2048L)
+    span.setAttribute("gen_ai.request.temperature", 0.7)
+    span.addEvent("prompt_sent")
+}
+
+Terra.shutdown()
+```
+
+### C
+
+```c
+#include "terra.h"
+
+terra_t *inst = terra_init(NULL);
+terra_set_service_info(inst, "my-app", "1.0.0");
+
+terra_span_t *span = terra_begin_inference_span_ctx(inst, NULL, "gpt-4", false);
+terra_span_set_int(span, "gen_ai.request.max_tokens", 2048);
+terra_span_set_double(span, "gen_ai.request.temperature", 0.7);
+terra_span_add_event(span, "prompt_sent");
+terra_span_end(inst, span);
+
+terra_shutdown(inst);
 ```
 
 ## Setup Presets
@@ -139,26 +270,67 @@ func runFoundationModels(prompt: String) async throws -> String {
 - Front-facing API examples: [`Docs/Front_Facing_API_Examples.md`](Docs/Front_Facing_API_Examples.md)
 - Manual GitHub Pages + DocC publish: `Scripts/publish_pages_with_docc.sh`
 
-## Installation (SwiftPM)
+## Installation
+
+### Swift (SPM)
 
 ```swift
 .package(url: "https://github.com/christopherkarani/Terra.git", from: "0.1.0")
 ```
 
-Common products:
+Products: `Terra`, `TerraTracedMacro`, `TerraFoundationModels`, `TerraMLX`, `TerraLlama`
 
-- `Terra`
-- `TerraTracedMacro`
-- `TerraFoundationModels`
-- `TerraMLX`
-- `TerraLlama`
+### Python
+
+```bash
+# Build the shared library first
+cd zig-core && zig build
+# Then use terra-python/terra.py (pip package coming soon)
+export TERRA_LIB_PATH=./zig-core/zig-out/lib/libterra_shared.dylib
+```
+
+### Rust
+
+```toml
+# Cargo.toml
+[dependencies]
+terra = { path = "terra-rust" }  # crates.io publish coming soon
+```
+
+### C / C++
+
+```bash
+# Build libtera
+cd zig-core && zig build
+# Link: -I zig-core/include -L zig-core/zig-out/lib -lterra
+# C++: also add -I terra-cpp/include for terra.hpp
+```
+
+### Android (Kotlin)
+
+```bash
+# Cross-compile native libs
+./Scripts/build-libtera-android.sh
+# Add terra-android/ as a module in your Gradle project
+```
+
+### Cross-compilation
+
+```bash
+cd zig-core
+zig build -Dtarget=aarch64-linux-gnu        # Linux ARM (Pi, Jetson)
+zig build -Dtarget=aarch64-linux-android     # Android
+zig build -Dtarget=x86_64-linux-gnu          # Linux x86
+zig build -Dtarget=thumb-freestanding-none -DTERRA_NO_STD=true  # MCU
+```
 
 ## Requirements
 
-- iOS 13+
-- macOS 14+
-- visionOS 1+
-- tvOS 13+
-- watchOS 6+
+- Swift: iOS 13+, macOS 14+, visionOS 1+, tvOS 13+, watchOS 6+
+- Zig core: any platform Zig 0.14+ can target
+- Python: 3.8+
+- Rust: 2021 edition
+- C++: C++17
+- Android: minSdk 26, NDK or Zig cross-compile
 
 License: Apache-2.0

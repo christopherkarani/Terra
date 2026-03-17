@@ -1,0 +1,5 @@
+module CTerraBridge {
+    header "terra.h"
+    link "terra"
+    export *
+}

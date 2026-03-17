@@ -33,12 +33,29 @@ let package = Package(
     .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0")
   ],
   targets: [
+    // MARK: - Zig Core (C ABI bridge)
+
+    .target(
+      name: "CTerraBridge",
+      dependencies: ["libtera"],
+      path: "Sources/CTerraBridge",
+      publicHeadersPath: "include",
+      linkerSettings: [
+        .linkedLibrary("c++"),
+      ]
+    ),
+    .binaryTarget(
+      name: "libtera",
+      path: "Vendor/libtera.xcframework"
+    ),
+
     // MARK: - Core Libraries
 
     .target(
       name: "TerraCore",
       dependencies: [
         "TerraSystemProfiler",
+        .target(name: "CTerraBridge", condition: .when(platforms: [.macOS])),
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetryProtocolExporterHTTP", package: "opentelemetry-swift"),
@@ -52,7 +69,10 @@ let package = Package(
         )
       ],
       path: "Sources/Terra",
-      exclude: ["CLAUDE.md"]
+      exclude: ["CLAUDE.md"],
+      swiftSettings: [
+        .define("TERRA_USE_ZIG_CORE", .when(platforms: [.macOS])),
+      ]
     ),
     .target(
       name: "TerraCoreML",
@@ -293,8 +313,7 @@ let package = Package(
     .executableTarget(
       name: "TerraSample",
       dependencies: ["Terra"],
-      path: "Examples/Terra Sample",
-      exclude: ["CLAUDE.md"]
+      path: "Examples/Terra Sample"
     )
   ]
 )
