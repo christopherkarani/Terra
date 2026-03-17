@@ -160,11 +160,11 @@ def _find_libtera() -> str:
     # Check common relative paths from this file
     this_dir = Path(__file__).parent
     candidates = [
-        this_dir / ".." / "zig-core" / "zig-out" / "lib" / "libtera_shared.dylib",
-        this_dir / ".." / "zig-core" / "zig-out" / "lib" / "libtera_shared.so",
+        this_dir / ".." / "zig-core" / "zig-out" / "lib" / "libterra_shared.dylib",
+        this_dir / ".." / "zig-core" / "zig-out" / "lib" / "libterra_shared.so",
         this_dir / ".." / "zig-core" / "zig-out" / "lib" / "terra_shared.dll",
-        Path("/usr/local/lib/libtera_shared.so"),
-        Path("/usr/local/lib/libtera_shared.dylib"),
+        Path("/usr/local/lib/libterra_shared.so"),
+        Path("/usr/local/lib/libterra_shared.dylib"),
     ]
 
     for candidate in candidates:
@@ -178,7 +178,7 @@ def _find_libtera() -> str:
         return found
 
     raise FileNotFoundError(
-        "Cannot find libtera_shared. Set TERRA_LIB_PATH environment variable, "
+        "Cannot find libterra_shared. Set TERRA_LIB_PATH environment variable, "
         "or build with: cd zig-core && zig build"
     )
 
