@@ -293,8 +293,7 @@ let package = Package(
     .executableTarget(
       name: "TerraSample",
       dependencies: ["Terra"],
-      path: "Examples/Terra Sample",
-      exclude: ["CLAUDE.md"]
+      path: "Examples/Terra Sample"
     )
   ]
 )
