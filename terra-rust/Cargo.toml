@@ -1,0 +1,17 @@
+[package]
+name = "terra"
+version = "1.0.0"
+edition = "2021"
+description = "Rust bindings for Terra GenAI observability SDK"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/christopherkarani/Terra"
+keywords = ["observability", "telemetry", "genai", "opentelemetry"]
+categories = ["development-tools::profiling", "api-bindings"]
+
+[build-dependencies]
+bindgen = { version = "0.70", optional = true }
+
+[features]
+default = []
+bindgen = ["dep:bindgen"]

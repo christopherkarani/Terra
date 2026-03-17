@@ -30,3 +30,6 @@ Docs/superpowers/
 .codex/
 .gemini/
 .tmp/
+
+# Android cross-compiled native libraries (build artifacts)
+terra-android/jniLibs/
