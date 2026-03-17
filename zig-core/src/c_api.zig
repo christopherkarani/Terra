@@ -244,8 +244,8 @@ pub export fn terra_spans_dropped(inst: ?*const TerraInstance) callconv(.c) u64 
 }
 
 pub export fn terra_transport_degraded(inst: ?*const TerraInstance) callconv(.c) bool {
-    _ = inst;
-    return false; // TODO: track transport failure state
+    const i = inst orelse return false;
+    return i.metrics.transport_errors.get() > 0;
 }
 
 // ── Version ─────────────────────────────────────────────────────────────

@@ -16,7 +16,6 @@ pub const SpanStore = struct {
     // Ring buffer tracking
     head: u32 = 0, // Next slot to write
     count: u32 = 0, // Number of active spans
-    completed_count: u32 = 0,
     eviction_count: u64 = 0,
     mutex: std.Thread.Mutex = .{},
 
@@ -83,14 +82,6 @@ pub const SpanStore = struct {
         return null; // All slots active and not ended
     }
 
-    /// Mark a span as completed.
-    pub fn completeSpan(self: *SpanStore, s: *Span) void {
-        _ = self;
-        _ = s;
-        // No-op: span.end() sets ended=true which drainCompleted checks.
-        // Kept for API compatibility.
-    }
-
     /// Deep-copy completed span data into batch buffer. Returns count drained.
     pub fn drainCompleted(self: *SpanStore, batch: []SpanRecord, max: u32) u32 {
         self.mutex.lock();
@@ -117,7 +108,6 @@ pub const SpanStore = struct {
         @memset(self.slots, Span{});
         self.head = 0;
         self.count = 0;
-        self.completed_count = 0;
         self.eviction_count = 0;
     }
 };
@@ -175,7 +165,6 @@ test "SpanStore drainCompleted deep-copies" {
     s.setString("model", "gpt-4");
     clk.advance(500);
     s.end();
-    store.completeSpan(s);
 
     var batch: [4]SpanRecord = undefined;
     const drained = store.drainCompleted(&batch, 4);
@@ -216,5 +205,4 @@ test "SpanStore reset" {
     store.reset();
 
     try std.testing.expectEqual(@as(u32, 0), store.count);
-    try std.testing.expectEqual(@as(u32, 0), store.completed_count);
 }

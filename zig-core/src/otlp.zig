@@ -145,10 +145,6 @@ fn varintSize(value: u64) usize {
     return size;
 }
 
-fn tagSize(field_number: u32) usize {
-    return varintSize((@as(u64, field_number) << 3));
-}
-
 // ── Encode a single KeyValue ────────────────────────────────────────────
 fn encodeKeyValue(w: *ProtoWriter, attr: Attribute, field_num: u32) bool {
     var tmp_buf: [512]u8 = undefined;

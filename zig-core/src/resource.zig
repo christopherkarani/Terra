@@ -50,6 +50,7 @@ pub const ResourceAttributes = struct {
         ra.add(constants.keys.service.version, .{ .string = service_version });
         ra.add("os.type", .{ .string = osName() });
         ra.add("host.arch", .{ .string = archName() });
+        ra.add(constants.keys.schema_version, .{ .string = constants.schema_version_value });
         return ra;
     }
 

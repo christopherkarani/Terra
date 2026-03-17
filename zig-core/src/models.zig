@@ -149,7 +149,7 @@ pub const Attribute = struct {
 pub const SpanEvent = struct {
     name: []const u8,
     timestamp_ns: u64,
-    attributes: BoundedAttributes(16),
+    attributes: BoundedAttributes(4),
 };
 
 // ── BoundedAttributes ───────────────────────────────────────────────────
@@ -197,8 +197,8 @@ pub const SpanRecord = struct {
     // Flattened attributes (max 64)
     attributes: BoundedAttributes(64) = .{},
 
-    // Flattened events (max 32)
-    events: [32]SpanEvent = undefined,
+    // Flattened events (max 8)
+    events: [8]SpanEvent = undefined,
     event_count: u8 = 0,
 
     pub fn nameSlice(self: *const SpanRecord) []const u8 {

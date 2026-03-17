@@ -39,9 +39,7 @@ pub fn createTestInstance(allocator: std.mem.Allocator, overrides: ?TestConfig) 
 
 /// Destroy test instance and check for leaks.
 pub fn destroyTestInstance(inst: *TerraInstance) void {
-    const allocator = inst.allocator;
     inst.destroy();
-    _ = allocator;
 }
 
 /// Drain completed spans into caller-provided buffer. Returns count.

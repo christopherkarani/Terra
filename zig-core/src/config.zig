@@ -21,8 +21,8 @@ pub const TerraConfig = struct {
     max_spans: u32 = 1024,
     // Attribute limits
     max_attributes_per_span: u16 = 64,
-    max_events_per_span: u16 = 32,
-    max_event_attrs: u16 = 16,
+    max_events_per_span: u16 = 8,
+    max_event_attrs: u16 = 4,
     // Batching
     batch_size: u32 = 256,
     flush_interval_ms: u64 = 5000,

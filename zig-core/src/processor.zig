@@ -76,10 +76,7 @@ pub const Processor = struct {
         // Stage 1: Session enrichment
         self.enrichBatch();
 
-        // Stage 2: Privacy filter (per-span redaction)
-        self.applyPrivacy();
-
-        // Stage 3: Serialize to OTLP
+        // Stage 2: Serialize to OTLP
         var otlp_buf: [131072]u8 = undefined; // 128KB
         const resource_attrs = resource_mod.ResourceAttributes.build(
             self.config.service_name,
@@ -114,22 +111,7 @@ pub const Processor = struct {
                     .value = .{ .string = sid },
                 });
             }
-            // Inject schema version
-            _ = rec.attributes.append(.{
-                .key = constants.keys.schema_version,
-                .value = .{ .string = constants.schema_version_value },
-            });
         }
-    }
-
-    fn applyPrivacy(self: *Processor) void {
-        _ = self;
-        // Privacy is applied per-span based on:
-        // - span.content_policy_at_creation
-        // - span.include_content
-        // For now, the privacy redaction is handled at attribute-set time
-        // in the span module. This stage is reserved for batch-level
-        // post-processing if needed.
     }
 
     fn sendWithRetry(self: *Processor, data: []const u8) bool {

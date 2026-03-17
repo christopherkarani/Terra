@@ -191,8 +191,8 @@ pub const TerraInstance = struct {
 
     // ── End span ────────────────────────────────────────────────────────
     pub fn endSpan(self: *TerraInstance, s: *Span) void {
+        _ = self;
         s.end();
-        self.store.completeSpan(s);
     }
 
     // ── Session ─────────────────────────────────────────────────────────

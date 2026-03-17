@@ -5,6 +5,7 @@ const std = @import("std");
 const models = @import("models.zig");
 const clock = @import("clock.zig");
 const privacy = @import("privacy.zig");
+const constants = @import("constants.zig");
 
 const TraceID = models.TraceID;
 const SpanID = models.SpanID;
@@ -48,8 +49,8 @@ pub const Span = struct {
     // Attributes (max 64)
     attributes: BoundedAttributes(64) = .{},
 
-    // Events (max 32)
-    events: [32]SpanEvent = undefined,
+    // Events (max 8)
+    events: [8]SpanEvent = undefined,
     event_count: u8 = 0,
 
     // Clock reference
@@ -130,7 +131,7 @@ pub const Span = struct {
 
     pub fn addEventTs(self: *Span, name: []const u8, timestamp_ns: u64) void {
         if (self.ended) return;
-        if (self.event_count >= 32) return;
+        if (self.event_count >= 8) return;
         self.events[self.event_count] = .{
             .name = name,
             .timestamp_ns = timestamp_ns,
@@ -141,7 +142,7 @@ pub const Span = struct {
 
     pub fn addEventAttrs(self: *Span, name: []const u8, timestamp_ns: u64, attrs: []const Attribute) void {
         if (self.ended) return;
-        if (self.event_count >= 32) return;
+        if (self.event_count >= 8) return;
         var event = SpanEvent{
             .name = name,
             .timestamp_ns = timestamp_ns,
@@ -252,7 +253,7 @@ pub const StreamingScope = struct {
         // TTFT
         if (self.first_token_time_ns) |ttft_ns| {
             const ttft_ms = @as(f64, @floatFromInt(ttft_ns - self.span.start_time_ns)) / 1_000_000.0;
-            self.span.setDouble("terra.stream.time_to_first_token_ms", ttft_ms);
+            self.span.setDouble(constants.keys.terra.stream_time_to_first_token_ms, ttft_ms);
         }
 
         // Tokens per second
@@ -260,14 +261,14 @@ pub const StreamingScope = struct {
         if (duration_ns > 0 and self.token_count > 0) {
             const duration_s = @as(f64, @floatFromInt(duration_ns)) / 1_000_000_000.0;
             const tps = @as(f64, @floatFromInt(self.token_count)) / duration_s;
-            self.span.setDouble("terra.stream.tokens_per_second", tps);
+            self.span.setDouble(constants.keys.terra.stream_tokens_per_second, tps);
         }
 
         // Output tokens
-        self.span.setInt("terra.stream.output_tokens", @intCast(self.token_count));
+        self.span.setInt(constants.keys.terra.stream_output_tokens, @intCast(self.token_count));
 
         // Chunk count
-        self.span.setInt("terra.stream.chunk_count", @intCast(self.chunk_count));
+        self.span.setInt(constants.keys.terra.stream_chunk_count, @intCast(self.chunk_count));
 
         // Note: does NOT call span.end() — caller ends span separately
     }
@@ -351,13 +352,13 @@ test "Span event bounds" {
     var s = Span.init("test", TraceID.generate(), SpanID.zero, testing_clock.read, clk.context(), .never, false);
 
     var i: u8 = 0;
-    while (i < 32) : (i += 1) {
+    while (i < 8) : (i += 1) {
         s.addEvent("evt");
     }
-    try std.testing.expectEqual(@as(u8, 32), s.event_count);
+    try std.testing.expectEqual(@as(u8, 8), s.event_count);
 
     s.addEvent("overflow");
-    try std.testing.expectEqual(@as(u8, 32), s.event_count);
+    try std.testing.expectEqual(@as(u8, 8), s.event_count);
 }
 
 test "Span setStatus with description" {
