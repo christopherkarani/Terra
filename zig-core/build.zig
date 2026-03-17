@@ -25,6 +25,9 @@ pub fn build(b: *std.Build) void {
     });
     lib_mod.addOptions("build_options", options);
 
+    // Detect freestanding target (MCU builds can only produce static libs)
+    const is_freestanding = target.query.os_tag == .freestanding;
+
     // ── Library target: libtera (static) ────────────────────────────────
     const lib = b.addLibrary(.{
         .linkage = .static,
@@ -33,80 +36,80 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(lib);
 
-    // ── Library target: libtera (shared) ────────────────────────────────
-    const shared_mod = b.createModule(.{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    shared_mod.addOptions("build_options", options);
+    // Shared lib, CLI, tests, and benchmarks require an OS — skip on freestanding
+    if (!is_freestanding) {
+        // ── Library target: libtera (shared) ────────────────────────────
+        const shared_mod = b.createModule(.{
+            .root_source_file = b.path("src/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        shared_mod.addOptions("build_options", options);
 
-    const shared_lib = b.addLibrary(.{
-        .linkage = .dynamic,
-        .name = "terra_shared",
-        .root_module = shared_mod,
-    });
-    b.installArtifact(shared_lib);
+        const shared_lib = b.addLibrary(.{
+            .linkage = .dynamic,
+            .name = "terra_shared",
+            .root_module = shared_mod,
+        });
+        b.installArtifact(shared_lib);
 
-    // ── CLI target: terra-cli ───────────────────────────────────────────
-    const cli_mod = b.createModule(.{
-        .root_source_file = b.path("cli/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    cli_mod.addImport("terra", lib_mod);
-    cli_mod.addOptions("build_options", options);
+        // ── CLI target: terra-cli ───────────────────────────────────────
+        const cli_mod = b.createModule(.{
+            .root_source_file = b.path("cli/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        cli_mod.addImport("terra", lib_mod);
 
-    const cli_exe = b.addExecutable(.{
-        .name = "terra-cli",
-        .root_module = cli_mod,
-    });
-    b.installArtifact(cli_exe);
+        const cli_exe = b.addExecutable(.{
+            .name = "terra-cli",
+            .root_module = cli_mod,
+        });
+        b.installArtifact(cli_exe);
 
-    // ── Test step ───────────────────────────────────────────────────────
-    const test_mod = b.createModule(.{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    test_mod.addOptions("build_options", options);
+        // ── Test step ───────────────────────────────────────────────────
+        const test_mod = b.createModule(.{
+            .root_source_file = b.path("src/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        test_mod.addOptions("build_options", options);
 
-    const lib_unit_tests = b.addTest(.{
-        .root_module = test_mod,
-    });
-    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
+        const lib_unit_tests = b.addTest(.{
+            .root_module = test_mod,
+        });
+        const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
-    const cli_test_mod = b.createModule(.{
-        .root_source_file = b.path("cli/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    cli_test_mod.addImport("terra", lib_mod);
-    cli_test_mod.addOptions("build_options", options);
+        const cli_test_mod = b.createModule(.{
+            .root_source_file = b.path("cli/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        cli_test_mod.addImport("terra", lib_mod);
 
-    const cli_unit_tests = b.addTest(.{
-        .root_module = cli_test_mod,
-    });
-    const run_cli_unit_tests = b.addRunArtifact(cli_unit_tests);
+        const cli_unit_tests = b.addTest(.{
+            .root_module = cli_test_mod,
+        });
+        const run_cli_unit_tests = b.addRunArtifact(cli_unit_tests);
 
-    const test_step = b.step("test", "Run all unit tests with leak detection");
-    test_step.dependOn(&run_lib_unit_tests.step);
-    test_step.dependOn(&run_cli_unit_tests.step);
+        const test_step = b.step("test", "Run all unit tests with leak detection");
+        test_step.dependOn(&run_lib_unit_tests.step);
+        test_step.dependOn(&run_cli_unit_tests.step);
 
-    // ── Benchmark step ──────────────────────────────────────────────────
-    const bench_mod = b.createModule(.{
-        .root_source_file = b.path("cli/bench.zig"),
-        .target = target,
-        .optimize = .ReleaseFast,
-    });
-    bench_mod.addImport("terra", lib_mod);
-    bench_mod.addOptions("build_options", options);
+        // ── Benchmark step ──────────────────────────────────────────────
+        const bench_mod = b.createModule(.{
+            .root_source_file = b.path("cli/bench.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+        });
+        bench_mod.addImport("terra", lib_mod);
 
-    const bench_exe = b.addExecutable(.{
-        .name = "terra-bench",
-        .root_module = bench_mod,
-    });
-    const run_bench = b.addRunArtifact(bench_exe);
-    const bench_step = b.step("bench", "Run benchmarks");
-    bench_step.dependOn(&run_bench.step);
+        const bench_exe = b.addExecutable(.{
+            .name = "terra-bench",
+            .root_module = bench_mod,
+        });
+        const run_bench = b.addRunArtifact(bench_exe);
+        const bench_step = b.step("bench", "Run benchmarks");
+        bench_step.dependOn(&run_bench.step);
+    }
 }

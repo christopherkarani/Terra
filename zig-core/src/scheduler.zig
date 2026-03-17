@@ -1,7 +1,11 @@
 // Terra Zig Core — scheduler.zig
 // SchedulerVTable, std_scheduler, noop_scheduler.
+// When TERRA_NO_STD=true, only noop_scheduler is available (no threads on MCUs).
 
 const std = @import("std");
+const build_options = @import("build_options");
+
+const no_std = build_options.TERRA_NO_STD;
 
 pub const ScheduleFn = *const fn (callback: *const fn (?*anyopaque) callconv(.c) void, interval_ms: u64, cb_ctx: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) u64;
 pub const CancelFn = *const fn (handle: u64, ctx: ?*anyopaque) callconv(.c) void;
@@ -35,7 +39,10 @@ pub const noop_scheduler = SchedulerVTable{
 
 // ── Std Scheduler ───────────────────────────────────────────────────────
 // Single background thread that fires callbacks at intervals.
-pub const StdScheduler = struct {
+// Not available in freestanding/MCU mode (no threads).
+pub const StdScheduler = if (no_std) @compileError("StdScheduler requires OS threads (not available with TERRA_NO_STD=true)") else StdSchedulerImpl;
+
+const StdSchedulerImpl = struct {
     const Entry = struct {
         callback: *const fn (?*anyopaque) callconv(.c) void,
         interval_ns: u64,
@@ -59,16 +66,16 @@ pub const StdScheduler = struct {
     thread: ?std.Thread = null,
     mutex: std.Thread.Mutex = .{},
 
-    pub fn init() StdScheduler {
+    pub fn init() StdSchedulerImpl {
         return .{};
     }
 
-    pub fn start(self: *StdScheduler) void {
+    pub fn start(self: *StdSchedulerImpl) void {
         self.running.store(true, .release);
         self.thread = std.Thread.spawn(.{}, tickLoop, .{self}) catch null;
     }
 
-    pub fn stop(self: *StdScheduler) void {
+    pub fn stop(self: *StdSchedulerImpl) void {
         self.running.store(false, .release);
         if (self.thread) |t| {
             t.join();
@@ -76,7 +83,7 @@ pub const StdScheduler = struct {
         }
     }
 
-    fn tickLoop(self: *StdScheduler) void {
+    fn tickLoop(self: *StdSchedulerImpl) void {
         while (self.running.load(.acquire)) {
             std.Thread.sleep(10_000_000); // 10ms tick
             self.mutex.lock();
@@ -95,7 +102,7 @@ pub const StdScheduler = struct {
         }
     }
 
-    pub fn vtable(self: *StdScheduler) SchedulerVTable {
+    pub fn vtable(self: *StdSchedulerImpl) SchedulerVTable {
         return .{
             .schedule_fn = stdSchedule,
             .cancel_fn = stdCancel,
@@ -104,7 +111,7 @@ pub const StdScheduler = struct {
     }
 
     fn stdSchedule(callback: *const fn (?*anyopaque) callconv(.c) void, interval_ms: u64, cb_ctx: ?*anyopaque, ctx: ?*anyopaque) callconv(.c) u64 {
-        const self: *StdScheduler = @ptrCast(@alignCast(ctx orelse return 0));
+        const self: *StdSchedulerImpl = @ptrCast(@alignCast(ctx orelse return 0));
         self.mutex.lock();
         defer self.mutex.unlock();
 
@@ -127,7 +134,7 @@ pub const StdScheduler = struct {
     }
 
     fn stdCancel(handle: u64, ctx: ?*anyopaque) callconv(.c) void {
-        const self: *StdScheduler = @ptrCast(@alignCast(ctx orelse return));
+        const self: *StdSchedulerImpl = @ptrCast(@alignCast(ctx orelse return));
         self.mutex.lock();
         defer self.mutex.unlock();
         for (self.entries[0..self.entry_count]) |*entry| {

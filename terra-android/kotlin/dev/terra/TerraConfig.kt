@@ -1,0 +1,90 @@
+package dev.terra
+
+/**
+ * TerraConfig — Configuration for Terra initialization.
+ *
+ * Use [Builder] or the Kotlin DSL [terraConfig] to construct.
+ * Maps 1:1 to terra_config_t fields in terra.h.
+ */
+class TerraConfig private constructor(
+    val maxSpans: Int,
+    val maxAttributesPerSpan: Int,
+    val maxEventsPerSpan: Int,
+    val maxEventAttrs: Int,
+    val batchSize: Int,
+    val flushIntervalMs: Long,
+    val contentPolicy: ContentPolicy,
+    val redactionStrategy: RedactionStrategy,
+    val hmacKey: String?,
+    val serviceName: String,
+    val serviceVersion: String,
+    val otlpEndpoint: String
+) {
+
+    class Builder {
+        var maxSpans: Int = 4096
+        var maxAttributesPerSpan: Int = 128
+        var maxEventsPerSpan: Int = 128
+        var maxEventAttrs: Int = 16
+        var batchSize: Int = 512
+        var flushIntervalMs: Long = 5000L
+        var contentPolicy: ContentPolicy = ContentPolicy.NEVER
+        var redactionStrategy: RedactionStrategy = RedactionStrategy.HMAC_SHA256
+        var hmacKey: String? = null
+        var serviceName: String = "terra-android"
+        var serviceVersion: String = "1.0.0"
+        var otlpEndpoint: String = "http://localhost:4318"
+
+        fun maxSpans(value: Int) = apply { maxSpans = value }
+        fun maxAttributesPerSpan(value: Int) = apply { maxAttributesPerSpan = value }
+        fun maxEventsPerSpan(value: Int) = apply { maxEventsPerSpan = value }
+        fun maxEventAttrs(value: Int) = apply { maxEventAttrs = value }
+        fun batchSize(value: Int) = apply { batchSize = value }
+        fun flushIntervalMs(value: Long) = apply { flushIntervalMs = value }
+        fun contentPolicy(value: ContentPolicy) = apply { contentPolicy = value }
+        fun redactionStrategy(value: RedactionStrategy) = apply { redactionStrategy = value }
+        fun hmacKey(value: String?) = apply { hmacKey = value }
+        fun serviceName(value: String) = apply { serviceName = value }
+        fun serviceVersion(value: String) = apply { serviceVersion = value }
+        fun otlpEndpoint(value: String) = apply { otlpEndpoint = value }
+
+        fun build(): TerraConfig = TerraConfig(
+            maxSpans = maxSpans,
+            maxAttributesPerSpan = maxAttributesPerSpan,
+            maxEventsPerSpan = maxEventsPerSpan,
+            maxEventAttrs = maxEventAttrs,
+            batchSize = batchSize,
+            flushIntervalMs = flushIntervalMs,
+            contentPolicy = contentPolicy,
+            redactionStrategy = redactionStrategy,
+            hmacKey = hmacKey,
+            serviceName = serviceName,
+            serviceVersion = serviceVersion,
+            otlpEndpoint = otlpEndpoint
+        )
+    }
+}
+
+/** Kotlin DSL for building [TerraConfig]. */
+fun terraConfig(block: TerraConfig.Builder.() -> Unit): TerraConfig =
+    TerraConfig.Builder().apply(block).build()
+
+/** Content policy matching terra_content_policy_t. */
+enum class ContentPolicy {
+    /** Never capture prompt/response content. */
+    NEVER,
+    /** Capture only when explicitly opted in per-span. */
+    OPT_IN,
+    /** Always capture content. */
+    ALWAYS;
+}
+
+/** Redaction strategy matching terra_redaction_strategy_t. */
+enum class RedactionStrategy {
+    /** Drop sensitive content entirely. */
+    DROP,
+    /** Replace with length indicator (e.g., "[42 chars]"). */
+    LENGTH_ONLY,
+    /** HMAC-SHA256 hash with configured key. */
+    HMAC_SHA256;
+}

@@ -1,7 +1,9 @@
 // Terra Zig Core — processor.zig
 // Pipeline: SessionEnrichment -> BatchCollector -> PrivacyFilter -> OtlpSerializer -> TransportDispatch
+// When TERRA_NO_STD=true: skip session enrichment, no retry backoff sleep.
 
 const std = @import("std");
+const build_options = @import("build_options");
 const models = @import("models.zig");
 const otlp = @import("otlp.zig");
 const privacy = @import("privacy.zig");
@@ -9,6 +11,8 @@ const resource_mod = @import("resource.zig");
 const transport_mod = @import("transport.zig");
 const storage_mod = @import("storage.zig");
 const constants = @import("constants.zig");
+
+const no_std = build_options.TERRA_NO_STD;
 
 const SpanRecord = models.SpanRecord;
 const Attribute = models.Attribute;
@@ -101,6 +105,7 @@ pub const Processor = struct {
     }
 
     fn enrichBatch(self: *Processor) void {
+        if (no_std) return; // Skip session enrichment on freestanding targets
         var i: u32 = 0;
         while (i < self.batch_count) : (i += 1) {
             var rec = &self.batch_buf[i];
@@ -120,8 +125,8 @@ pub const Processor = struct {
             const result = self.config.transport.send(data);
             if (result == 0) return true;
 
-            // Exponential backoff with cap
-            if (attempt < self.config.max_retries) {
+            // Exponential backoff with cap (skipped on freestanding — no OS sleep)
+            if (!no_std and attempt < self.config.max_retries) {
                 const raw_backoff = self.config.retry_base_ms * (@as(u64, 1) << @intCast(attempt));
                 const backoff_ms: u64 = @min(raw_backoff, 500);
                 std.Thread.sleep(backoff_ms * 1_000_000);

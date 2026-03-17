@@ -2,11 +2,23 @@
 // Ring buffer of pre-allocated Span slots with LRU eviction.
 
 const std = @import("std");
+const build_options = @import("build_options");
 const span_mod = @import("span.zig");
 const models = @import("models.zig");
 
+const no_std = build_options.TERRA_NO_STD;
+
 const Span = span_mod.Span;
 const SpanRecord = models.SpanRecord;
+
+/// No-op lock for single-threaded MCU environments (TERRA_NO_STD=true).
+const NoopLock = struct {
+    pub fn lock(_: *@This()) void {}
+    pub fn unlock(_: *@This()) void {}
+};
+
+/// Use a real Mutex on hosted targets, no-op lock on freestanding.
+const Lock = if (no_std) NoopLock else std.Thread.Mutex;
 
 // ── SpanStore ───────────────────────────────────────────────────────────
 pub const SpanStore = struct {
@@ -17,7 +29,7 @@ pub const SpanStore = struct {
     head: u32 = 0, // Next slot to write
     count: u32 = 0, // Number of active spans
     eviction_count: u64 = 0,
-    mutex: std.Thread.Mutex = .{},
+    mutex: Lock = .{},
 
     pub fn init(allocator: std.mem.Allocator, capacity: u32) !SpanStore {
         const slots = try allocator.alloc(Span, capacity);

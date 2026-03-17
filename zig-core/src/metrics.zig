@@ -1,41 +1,73 @@
 // Terra Zig Core — metrics.zig
 // Counter, Histogram (thread-safe), TerraMetrics.
+// When TERRA_NO_STD=true, all metrics are no-ops (zero overhead on MCUs).
 
 const std = @import("std");
 const build_options = @import("build_options");
 
+const no_std = build_options.TERRA_NO_STD;
+
 // ── Counter ─────────────────────────────────────────────────────────────
-// Lock-free via atomics.
-pub const Counter = struct {
+pub const Counter = if (no_std) NoopCounter else AtomicCounter;
+
+/// No-op counter for freestanding/MCU builds — zero overhead.
+const NoopCounter = struct {
+    pub fn increment(_: *@This()) void {}
+    pub fn add(_: *@This(), _: i64) void {}
+    pub fn get(_: *const @This()) i64 {
+        return 0;
+    }
+    pub fn reset(_: *@This()) void {}
+};
+
+/// Lock-free counter via atomics for hosted targets.
+const AtomicCounter = struct {
     value: std.atomic.Value(i64) = std.atomic.Value(i64).init(0),
 
-    pub fn increment(self: *Counter) void {
+    pub fn increment(self: *AtomicCounter) void {
         _ = self.value.fetchAdd(1, .monotonic);
     }
 
-    pub fn add(self: *Counter, delta: i64) void {
+    pub fn add(self: *AtomicCounter, delta: i64) void {
         _ = self.value.fetchAdd(delta, .monotonic);
     }
 
-    pub fn get(self: *const Counter) i64 {
+    pub fn get(self: *const AtomicCounter) i64 {
         return self.value.load(.monotonic);
     }
 
-    pub fn reset(self: *Counter) void {
+    pub fn reset(self: *AtomicCounter) void {
         self.value.store(0, .monotonic);
     }
 };
 
 // ── Histogram ───────────────────────────────────────────────────────────
-// Mutex-protected for f64 operations.
-pub const Histogram = struct {
+pub const Histogram = if (no_std) NoopHistogram else MutexHistogram;
+
+/// No-op histogram for freestanding/MCU builds — zero overhead.
+const NoopHistogram = struct {
+    pub fn record(_: *@This(), _: f64) void {}
+    pub fn getSum(_: *@This()) f64 {
+        return 0;
+    }
+    pub fn getCount(_: *@This()) u64 {
+        return 0;
+    }
+    pub fn getMean(_: *@This()) f64 {
+        return 0;
+    }
+    pub fn reset(_: *@This()) void {}
+};
+
+/// Mutex-protected histogram for hosted targets.
+const MutexHistogram = struct {
     sum: f64 = 0,
     count: u64 = 0,
     min: f64 = std.math.floatMax(f64),
     max: f64 = -std.math.floatMax(f64),
     mutex: std.Thread.Mutex = .{},
 
-    pub fn record(self: *Histogram, value: f64) void {
+    pub fn record(self: *MutexHistogram, value: f64) void {
         self.mutex.lock();
         defer self.mutex.unlock();
         self.sum += value;
@@ -44,26 +76,26 @@ pub const Histogram = struct {
         if (value > self.max) self.max = value;
     }
 
-    pub fn getSum(self: *Histogram) f64 {
+    pub fn getSum(self: *MutexHistogram) f64 {
         self.mutex.lock();
         defer self.mutex.unlock();
         return self.sum;
     }
 
-    pub fn getCount(self: *Histogram) u64 {
+    pub fn getCount(self: *MutexHistogram) u64 {
         self.mutex.lock();
         defer self.mutex.unlock();
         return self.count;
     }
 
-    pub fn getMean(self: *Histogram) f64 {
+    pub fn getMean(self: *MutexHistogram) f64 {
         self.mutex.lock();
         defer self.mutex.unlock();
         if (self.count == 0) return 0;
         return self.sum / @as(f64, @floatFromInt(self.count));
     }
 
-    pub fn reset(self: *Histogram) void {
+    pub fn reset(self: *MutexHistogram) void {
         self.mutex.lock();
         defer self.mutex.unlock();
         self.sum = 0;
