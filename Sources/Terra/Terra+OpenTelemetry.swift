@@ -367,7 +367,14 @@ extension Terra {
   private static func _performShutdown() {
     openTelemetryInstallLock.lock()
     guard installedOpenTelemetryConfiguration != nil else {
+      #if canImport(CTerraBridge)
       openTelemetryInstallLock.unlock()
+      Terra._shutdownZigBackendIfInstalled()
+      Runtime.shared.markStopped()
+      #else
+      openTelemetryInstallLock.unlock()
+      Runtime.shared.markStopped()
+      #endif
       return
     }
     Runtime.shared.markShuttingDown()

@@ -66,6 +66,41 @@ func configurationAttributesMatchComputeUnitsAttributes() {
   #expect(fromConfig == fromUnits)
 }
 
+// MARK: - Route Evidence API Contract
+
+@Test("routeEvidence maps compute units into typed execution-route evidence")
+func routeEvidenceMapsComputeUnits() {
+  let evidence = TerraCoreML.routeEvidence(
+    computeUnits: .cpuAndNeuralEngine,
+    captureMode: .requestedOnly,
+    confidence: .high
+  )
+
+  #expect(evidence.requested == "cpu_ane")
+  #expect(evidence.captureMode == .requestedOnly)
+  #expect(evidence.confidence == .high)
+}
+
+@Test("execution-route evidence renders OTel attributes with expected keys")
+func executionRouteEvidenceAttributes() {
+  let evidence = Terra.ExecutionRouteEvidence(
+    requested: "cpu_gpu",
+    observed: "gpu",
+    estimatedPrimary: "gpu",
+    supported: ["cpu", "gpu"],
+    captureMode: .explicitObserved,
+    confidence: .medium
+  )
+
+  let attributes = evidence.attributes
+  #expect(attributes[Terra.Keys.Terra.execRouteRequested] == .string("cpu_gpu"))
+  #expect(attributes[Terra.Keys.Terra.execRouteObserved] == .string("gpu"))
+  #expect(attributes[Terra.Keys.Terra.execRouteEstimatedPrimary] == .string("gpu"))
+  #expect(attributes[Terra.Keys.Terra.execRouteSupported] == .string("cpu,gpu"))
+  #expect(attributes[Terra.Keys.Terra.execRouteCaptureMode] == .string("explicit_observed"))
+  #expect(attributes[Terra.Keys.Terra.execRouteConfidence] == .string("medium"))
+}
+
 // MARK: - CoreMLInstrumentation Name Sanitization
 
 @Test("sanitizeModelName strips control characters")

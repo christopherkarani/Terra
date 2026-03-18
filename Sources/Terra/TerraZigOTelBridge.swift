@@ -583,6 +583,12 @@ extension Terra {
   /// The raw Zig instance pointer, if the Zig backend was installed.
   /// Used internally for shutdown and test support.
   package private(set) static var _zigInstance: OpaquePointer? = nil
+
+  package static func _shutdownZigBackendIfInstalled() {
+    guard let instance = _zigInstance else { return }
+    _ = terra_shutdown(instance)
+    _zigInstance = nil
+  }
 }
 
 // MARK: - Helpers
