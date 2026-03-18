@@ -1,80 +1,105 @@
 <p align="center">
-  <img src="terra-banner.svg" alt="Terra Banner" width="100%" />
+  <img src="terra-banner.svg" alt="Terra" width="100%" />
 </p>
 
-# Terra
+<p align="center">
+  <strong>GenAI observability from iPhones to drones. One engine, six languages, zero cloud dependency.</strong>
+</p>
 
-Terra is a cross-platform GenAI observability SDK built on a Zig telemetry core with a stable C ABI.
-Instrument inference, streaming, agents, tools, embeddings, and safety checks — from iPhones to drones to MCUs — with privacy-safe defaults and zero runtime dependencies.
+<p align="center">
+  <a href="https://github.com/christopherkarani/Terra/actions/workflows/ci.yml"><img src="https://github.com/christopherkarani/Terra/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Swift-5.9+-orange.svg" alt="Swift 5.9+" />
+  <img src="https://img.shields.io/badge/Platforms-iOS%20%7C%20macOS%20%7C%20Android%20%7C%20Linux%20%7C%20visionOS%20%7C%20MCU-red.svg" alt="Platforms" />
+</p>
+
+---
+
+Terra instruments model inference, streaming, agents, tool calls, embeddings, and safety checks — with privacy-safe defaults and no runtime dependencies. A single Zig telemetry core powers native SDKs in Swift, Python, Rust, Kotlin, C++, and C.
 
 ```swift
 import Terra
 
 try await Terra.start()
-let result = try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: "Say hello").run { "Hello" }
+// CoreML predictions and HTTP AI calls are now automatically traced.
 ```
 
-[![CI](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/christopherkarani/Terra/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/Platforms-iOS%20|%20macOS%20|%20visionOS-red.svg)]()
+## Why Terra?
 
-## Architecture
+- **Privacy by default.** Content is never captured unless you opt in. Redaction happens at collection time via HMAC-SHA256 — not in transit, not in a pipeline you don't control.
+- **One engine, six languages.** A single Zig core (5,600 LOC, 121 tests) exports a stable C ABI. Each language wraps it idiomatically — no reimplementation drift.
+- **Auto-instrumentation, zero code changes.** CoreML predictions traced via runtime swizzling. HTTP calls to OpenAI, Anthropic, Google, and 5 more providers detected automatically.
+- **GenAI-native spans.** Built-in span types for inference, streaming (TTFT, tokens/sec, stall detection), agents, tools, embeddings, and safety checks. Not generic web traces retrofitted.
+- **On-device first.** Works offline. Persists locally. Exports via OTLP when you're ready — or never.
 
-All language bindings share one native telemetry engine via a C ABI:
+## Installation
 
-```
-                           terra.h (C ABI)
-                                │
-                     ┌──────────┴──────────┐
-                     │   libtera.a / .so   │
-                     │   (Zig → native)    │
-                     └──────────┬──────────┘
-                                │
-     ┌────────┬────────┬────────┼────────┬────────┬────────┐
-     │        │        │        │        │        │        │
-   Swift   Kotlin    Python    Rust     C++       C     (more)
-     │        │        │        │        │        │
-  CTerraBridge  JNI    ctypes  FFI   terra.hpp  direct
-  OTel adapter  bridge  dlopen  safe  header-only  raw
-  @TaskLocal  Coroutine ctx mgr  Drop  RAII     manual
+### Swift (SPM)
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/christopherkarani/Terra.git", from: "0.1.0")
+]
 ```
 
-| Language | Linkage | Wrapper | Memory Management |
-|----------|---------|---------|-------------------|
-| **C** | `#include "terra.h"` | None (raw API) | Manual `terra_shutdown()` |
-| **C++** | `#include "terra.hpp"` | Header-only RAII | Destructor |
-| **Swift** | CTerraBridge xcframework | OTel protocol adapter | `defer` in closures |
-| **Kotlin** | JNI + `System.loadLibrary` | Kotlin SDK classes | `use {}` block |
-| **Python** | `ctypes.cdll.LoadLibrary` | Pythonic classes | `with` context manager |
-| **Rust** | `build.rs` links `libtera.a` | Safe wrappers | `Drop` trait |
+Products: `Terra` (umbrella), `TerraTracedMacro`, `TerraFoundationModels`, `TerraMLX`, `TerraLlama`
 
-**Key design decisions:**
-- **Single source of truth** — 30+ functions defined once in Zig, exported via C ABI, wrapped by each language
-- **Opaque handles** — `terra_t*` and `terra_span_t*` require no struct layout knowledge
-- **Context is caller-owned** — no threadlocal in Zig; each language uses its native propagation (Swift `@TaskLocal`, Kotlin `CoroutineContext.Element`, etc.)
-- **Cross-platform** — compiles for macOS, iOS, Linux x86/ARM, Android, freestanding MCUs (thumb, ARM)
+### Other languages
 
-### Platform Support
+```bash
+# Build the Zig core (required for all non-Swift bindings)
+cd zig-core && zig build
+```
 
-| Target | Transport | Status |
-|--------|-----------|--------|
-| macOS / iOS | OTLP/HTTP | Production |
-| Android | OTLP/HTTP (OkHttp) | Production |
-| Linux ARM (Pi, Jetson) | OTLP/HTTP | Production |
-| Robotics (ROS 2) | ROS 2 topic + MQTT | Integration |
-| Drones / Serial | UART (CRC16 framing) | Integration |
-| MCUs (Cortex-M) | CoAP / Shared memory | Freestanding |
+| Language | Install |
+|----------|---------|
+| **Python** | `export TERRA_LIB_PATH=./zig-core/zig-out/lib/libterra_shared.dylib` then `import terra` |
+| **Rust** | `terra = { path = "terra-rust" }` in Cargo.toml |
+| **C++** | Link `-lterra` and `#include <terra.hpp>` (header-only RAII) |
+| **Kotlin** | `./Scripts/build-libtera-android.sh`, add `terra-android/` module |
+| **C** | Link `-lterra` and `#include "terra.h"` |
+
+<details>
+<summary>Cross-compilation targets</summary>
+
+```bash
+cd zig-core
+zig build -Dtarget=aarch64-linux-gnu        # Linux ARM (Pi, Jetson)
+zig build -Dtarget=aarch64-linux-android     # Android
+zig build -Dtarget=x86_64-linux-gnu          # Linux x86
+zig build -Dtarget=thumb-freestanding-none -DTERRA_NO_STD=true  # MCU
+```
+
+</details>
 
 ## Quick Start
 
-Copy-ready snippets live in `Examples/Terra Sample/RecipeSnippets.swift` and compile as-is.
+### Swift
+
+One line for the common case — auto-instruments CoreML and HTTP AI calls:
 
 ```swift
-import Terra
+try await Terra.start()
+```
 
-try await Terra.start(.init(preset: .quickstart))
-let answer = try await TerraRecipeSnippets.inferRecipe(prompt: userPrompt)
-await Terra.shutdown()
+Need manual spans? Use the composable API:
+
+```swift
+let answer = try await Terra
+    .infer(Terra.ModelID("gpt-4o-mini"), prompt: userPrompt)
+    .run { trace in
+        trace.tokens(input: 128, output: 64)
+        return try await llm.generate(userPrompt)
+    }
+```
+
+Or annotate functions directly with `@Traced`:
+
+```swift
+@Traced(model: Terra.ModelID("gpt-4o-mini"))
+func generate(prompt: String) async throws -> String {
+    try await llm.generate(prompt)
+}
 ```
 
 ### Python
@@ -86,9 +111,7 @@ terra = Terra.init(service_name="my-app", service_version="1.0.0")
 
 with terra.begin_inference_span(model="gpt-4") as span:
     span.set_int("gen_ai.request.max_tokens", 2048)
-    span.set_double("gen_ai.request.temperature", 0.7)
     result = call_llm(prompt)
-    span.set_int("gen_ai.usage.output_tokens", len(result))
     span.set_status(StatusCode.OK)
 
 terra.shutdown()
@@ -100,237 +123,148 @@ terra.shutdown()
 use terra::Terra;
 
 let terra = Terra::init()?;
-terra.set_service_info("my-app", "1.0.0")?;
-
 terra.with_inference_span("gpt-4", None, false, |span| {
     span.set_int("gen_ai.request.max_tokens", 2048);
-    span.set_double("gen_ai.request.temperature", 0.7);
     span.add_event("prompt_sent");
     Ok(())
 })?;
-// terra.shutdown() called automatically via Drop
+// shutdown called automatically via Drop
 ```
 
-### C++
+<details>
+<summary>C++, Kotlin, and C examples</summary>
 
+**C++**
 ```cpp
 #include <terra.hpp>
 
 auto terra = terra::Instance::init();
-terra.set_service_info("my-app", "1.0.0");
-
 {
     auto span = terra.begin_inference("gpt-4");
     span.set("gen_ai.request.max_tokens", int64_t(2048));
-    span.set("gen_ai.request.temperature", 0.7);
-    span.add_event("prompt_sent");
-    // span.end() called automatically by destructor
+    // span.end() called by destructor
 }
-
-// terra.shutdown() called automatically by destructor
+// terra.shutdown() called by destructor
 ```
 
-### Kotlin
-
+**Kotlin**
 ```kotlin
 Terra.init(terraConfig { serviceName = "my-app"; serviceVersion = "1.0.0" })
-
 Terra.beginInferenceSpan("gpt-4").use { span ->
     span.setAttribute("gen_ai.request.max_tokens", 2048L)
-    span.setAttribute("gen_ai.request.temperature", 0.7)
     span.addEvent("prompt_sent")
 }
-
 Terra.shutdown()
 ```
 
-### C
-
+**C**
 ```c
-#include "terra.h"
-
 terra_t *inst = terra_init(NULL);
-terra_set_service_info(inst, "my-app", "1.0.0");
-
 terra_span_t *span = terra_begin_inference_span_ctx(inst, NULL, "gpt-4", false);
 terra_span_set_int(span, "gen_ai.request.max_tokens", 2048);
-terra_span_set_double(span, "gen_ai.request.temperature", 0.7);
-terra_span_add_event(span, "prompt_sent");
 terra_span_end(inst, span);
-
 terra_shutdown(inst);
 ```
 
-## Setup Presets
+</details>
 
-| Preset | Use when | Start call |
-| --- | --- | --- |
-| `quickstart` | Local dev defaults | `try await Terra.start()` |
-| `production` | Persist traces and export in apps | `try await Terra.start(.init(preset: .production))` |
-| `diagnostics` | Deep troubleshooting with extra telemetry | `try await Terra.start(.init(preset: .diagnostics))` |
+## Architecture
+
+Every language binding wraps the same native telemetry engine:
+
+```
+                         terra.h (stable C ABI)
+                              │
+                   ┌──────────┴──────────┐
+                   │   libtera.a / .so   │
+                   │     (Zig core)      │
+                   └──────────┬──────────┘
+                              │
+   ┌────────┬────────┬────────┼────────┬────────┬────────┐
+ Swift   Kotlin   Python    Rust     C++       C     (more)
+```
+
+30+ functions defined once in Zig, exported via C ABI, wrapped idiomatically per language. No threadlocals — each language uses its native context propagation (Swift `@TaskLocal`, Kotlin `CoroutineContext`, Python context managers, Rust `Drop`).
+
+### Platform support
+
+| Target | Transport | Status |
+|--------|-----------|--------|
+| macOS / iOS | OTLP/HTTP | Production |
+| Android | OTLP/HTTP (OkHttp) | Production |
+| Linux ARM (Pi, Jetson) | OTLP/HTTP | Production |
+| Robotics (ROS 2) | ROS 2 topic + MQTT | Integration |
+| Drones / Serial | UART (CRC16 framing) | Integration |
+| MCUs (Cortex-M) | CoAP / Shared memory | Freestanding |
 
 ## Span Types
 
-| Span type | Factory | Example |
-| --- | --- | --- |
-| Inference | `Terra.infer(_:prompt:provider:runtime:temperature:maxTokens:)` | `try await Terra.infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt).run { "ok" }` |
-| Streaming | `Terra.stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)` | `try await Terra.stream(Terra.ModelID("gpt-4o-mini")).run { trace in trace.chunk(tokens: 8); return "ok" }` |
-| Agent | `Terra.agent(_:id:provider:runtime:)` | `try await Terra.agent("planner").run { "done" }` |
-| Tool | `Terra.tool(_:callID:type:provider:runtime:)` | `try await Terra.tool("search", callID: Terra.ToolCallID()).run { "result" }` |
-| Embedding | `Terra.embed(_:inputCount:provider:runtime:)` | `try await Terra.embed(Terra.ModelID("text-embedding-3-small"), inputCount: 3).run { vectors }` |
-| Safety check | `Terra.safety(_:subject:provider:runtime:)` | `try await Terra.safety("toxicity", subject: text).run { true }` |
+Six GenAI-specific span types, each with typed scopes for compile-time safety:
 
-## Privacy Policies
+| Span | Swift API | What it captures |
+|------|-----------|-----------------|
+| **Inference** | `Terra.infer(model, prompt:)` | Model, tokens, latency, provider |
+| **Streaming** | `Terra.stream(model)` | TTFT, tokens/sec, chunk count, stalls |
+| **Agent** | `Terra.agent(name)` | Agent steps, nested tool calls |
+| **Tool** | `Terra.tool(name, callID:)` | Execution time, input/output |
+| **Embedding** | `Terra.embed(model, inputCount:)` | Vector dimensions, batch size |
+| **Safety** | `Terra.safety(name, subject:)` | Check result, latency |
 
-| Policy | Behavior | Use when |
-| --- | --- | --- |
-| `.redacted` (default) | Captures telemetry metadata with HMAC-SHA256 redaction for content fields | Standard production default |
-| `.lengthOnly` | Captures only content lengths (no raw content) | You need shape/size signals only |
-| `.capturing` | Allows content capture when opted in per call | Controlled debugging environments |
-| `.silent` | Drops content-related telemetry | Strictest privacy mode |
+## Privacy
 
-## Composable Call API
+Privacy is architecture, not configuration. Content redaction happens at the point of collection.
 
-Use call composition when metadata is dynamic at runtime:
+| Policy | What happens |
+|--------|-------------|
+| `.redacted` (default) | Metadata captured; content fields HMAC-SHA256 hashed |
+| `.lengthOnly` | Only content lengths — no text at all |
+| `.capturing` | Full content when opted in per call |
+| `.silent` | Content telemetry dropped entirely |
 
-```swift
-let result = try await Terra
-  .infer(
-    Terra.ModelID(modelName),
-    prompt: prompt,
-    provider: Terra.ProviderID(providerName),
-    runtime: Terra.RuntimeID(runtimeName)
-  )
-  .capture(.includeContent)
-  .attr(.init("app.user_tier"), userTier)
-  .attr(.init("app.retry"), false)
-  .run { trace in
-    trace.responseModel(Terra.ModelID(modelName))
-    trace.tokens(input: 128, output: 64)
-    return try await llm.generate(prompt)
-  }
-```
+## Configuration
 
-Advanced seams/mocking patterns are documented in [`Docs/API_Cookbook.md`](Docs/API_Cookbook.md) and [`Docs/Front_Facing_API_Examples.md`](Docs/Front_Facing_API_Examples.md).
-
-## Configuration Persistence
+Three presets cover most cases:
 
 ```swift
-var config = Terra.Configuration(preset: .production)
-config.persistence = .defaults()
-try await Terra.start(config)
+try await Terra.start()                                    // quickstart (local dev)
+try await Terra.start(.init(preset: .production))          // persist + export
+try await Terra.start(.init(preset: .diagnostics))         // full profiling
 ```
 
-## Macros (`@Traced`)
-
-```swift
-import Terra
-import TerraTracedMacro
-
-@Traced(model: Terra.ModelID("gpt-4o-mini"))
-func infer(prompt: String) async throws -> String { try await llm.generate(prompt) }
-
-@Traced(model: Terra.ModelID("gpt-4o-mini"), streaming: true)
-func stream(prompt: String) async throws -> String { try await llm.generate(prompt) }
-
-@Traced(agent: "planner")
-func agentStep() async throws -> String { "ok" }
-
-@Traced(tool: "search")
-func runTool(query: String) async throws -> String { "ok" }
-
-@Traced(embedding: Terra.ModelID("text-embedding-3-small"))
-func embed(text: String) async throws -> [Float] { [0.1, 0.2] }
-
-@Traced(safety: "toxicity")
-func safety(subject: String) async throws -> Bool { true }
-```
-
-## Foundation Models
-
-```swift
-#if canImport(FoundationModels)
-import FoundationModels
-import TerraFoundationModels
-
-@available(macOS 26.0, iOS 26.0, *)
-func runFoundationModels(prompt: String) async throws -> String {
-  let session = Terra.TracedSession(model: .default)
-  return try await session.respond(to: prompt)
-}
-#endif
-```
-
-## Advanced
-
-- Full integrations: [`Docs/Integrations.md`](Docs/Integrations.md)
-- Migration guide: [`Docs/Migration_Guide.md`](Docs/Migration_Guide.md)
-- API cookbook: [`Docs/API_Cookbook.md`](Docs/API_Cookbook.md)
-- Front-facing API reference: [`Docs/Front_Facing_API.md`](Docs/Front_Facing_API.md)
-- Front-facing API examples: [`Docs/Front_Facing_API_Examples.md`](Docs/Front_Facing_API_Examples.md)
-- Manual GitHub Pages + DocC publish: `Scripts/publish_pages_with_docc.sh`
-
-## Installation
-
-### Swift (SPM)
-
-```swift
-.package(url: "https://github.com/christopherkarani/Terra.git", from: "0.1.0")
-```
-
-Products: `Terra`, `TerraTracedMacro`, `TerraFoundationModels`, `TerraMLX`, `TerraLlama`
-
-### Python
-
-```bash
-# Build the shared library first
-cd zig-core && zig build
-# Then use terra-python/terra.py (pip package coming soon)
-export TERRA_LIB_PATH=./zig-core/zig-out/lib/libterra_shared.dylib
-```
-
-### Rust
-
-```toml
-# Cargo.toml
-[dependencies]
-terra = { path = "terra-rust" }  # crates.io publish coming soon
-```
-
-### C / C++
-
-```bash
-# Build libtera
-cd zig-core && zig build
-# Link: -I zig-core/include -L zig-core/zig-out/lib -lterra
-# C++: also add -I terra-cpp/include for terra.hpp
-```
-
-### Android (Kotlin)
-
-```bash
-# Cross-compile native libs
-./Scripts/build-libtera-android.sh
-# Add terra-android/ as a module in your Gradle project
-```
-
-### Cross-compilation
-
-```bash
-cd zig-core
-zig build -Dtarget=aarch64-linux-gnu        # Linux ARM (Pi, Jetson)
-zig build -Dtarget=aarch64-linux-android     # Android
-zig build -Dtarget=x86_64-linux-gnu          # Linux x86
-zig build -Dtarget=thumb-freestanding-none -DTERRA_NO_STD=true  # MCU
-```
+Fine-tune with the configuration builder — privacy, export destination, persistence strategy, CoreML/HTTP/session features, and memory/GPU profiling are all independently configurable. See [API Cookbook](Docs/API_Cookbook.md) for details.
 
 ## Requirements
 
-- Swift: iOS 13+, macOS 14+, visionOS 1+, tvOS 13+, watchOS 6+
-- Zig core: any platform Zig 0.14+ can target
-- Python: 3.8+
-- Rust: 2021 edition
-- C++: C++17
-- Android: minSdk 26, NDK or Zig cross-compile
+| Platform | Minimum |
+|----------|---------|
+| iOS | 13.0+ |
+| macOS | 14.0+ |
+| visionOS | 1.0+ |
+| tvOS | 13.0+ |
+| watchOS | 6.0+ |
+| Swift | 5.9+ |
+| Zig core | Any target Zig 0.14+ supports |
+| Python | 3.8+ |
+| Rust | 2021 edition |
+| C++ | C++17 |
+| Android | minSdk 26 |
 
-License: Apache-2.0
+## Documentation
+
+- [API Reference](Docs/api-reference.md) — full public surface
+- [Cookbook](Docs/cookbook.md) — recipes, mocking, advanced patterns
+- [Integrations](Docs/integrations.md) — CoreML, FoundationModels, MLX, llama.cpp
+- [Migration](Docs/migration.md) — upgrading between versions
+
+## Contributing
+
+Contributions welcome. See [GitHub Issues](https://github.com/christopherkarani/Terra/issues) for open work.
+
+```bash
+swift build && swift test        # Build + run all tests
+swift test --filter TerraTests   # Run a specific target
+```
+
+## License
+
+Released under the [Apache 2.0 License](LICENSE).

@@ -140,8 +140,7 @@ GitHub Actions (`.github/workflows/ci.yml`):
 
 ## Documentation
 
-- `docs/TelemetryConvention/terra-v1.md` — Full v1 telemetry contract specification
-- `docs/TERRA_FEATURES.md` — Comprehensive feature reference (all 25 features)
-- `docs/terra-features.html` — Visual HTML feature page
-- `AIObservabilityPlan.md` — Implementation phases and gaps
-- `terra-v1-rc-production-readiness-plan.md` — Production readiness checklist
+- `Docs/api-reference.md` — Full public API surface
+- `Docs/cookbook.md` — Copy-paste recipes and advanced patterns
+- `Docs/integrations.md` — CoreML, FoundationModels, MLX, llama.cpp integration
+- `Docs/migration.md` — Legacy to current API migration
