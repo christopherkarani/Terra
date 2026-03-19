@@ -33,3 +33,9 @@ Docs/superpowers/
 
 # Android cross-compiled native libraries (build artifacts)
 terra-android/jniLibs/
+
+# Local integration harness outputs
+Tests/integration/test_c_api
+Tests/integration/test_cpp_api
+Tests/integration/*.dSYM/
+terra-python/__pycache__/

@@ -97,6 +97,9 @@ extension Terra {
       /// OpenClaw integration mode used when the span was recorded.
       package static let openClawMode = "terra.openclaw.mode"
 
+      /// Keeps a signal in local persistence without forwarding it to the OTLP exporter.
+      package static let exportLocalOnly = "terra.export.local_only"
+
       // MARK: Streaming inference attributes
       package static let streamTimeToFirstTokenMs = "terra.stream.time_to_first_token_ms"
       package static let streamTokensPerSecond = "terra.stream.tokens_per_second"

@@ -263,19 +263,6 @@ extension Terra {
   package static func _minimalFeatures() -> Configuration.Features {
     [.coreML]
   }
-
-  private static let _simulatorExportBlockedLock = NSLock()
-  private static var _simulatorExportBlockedValue = false
-
-  /// Blocks or unblocks telemetry export when running in the simulator.
-  package static func _setSimulatorExportBlocked(_ blocked: Bool) {
-    _simulatorExportBlockedLock.withLock { _simulatorExportBlockedValue = blocked }
-  }
-
-  /// Returns whether simulator export is currently blocked.
-  package static var _isSimulatorExportBlocked: Bool {
-    _simulatorExportBlockedLock.withLock { _simulatorExportBlockedValue }
-  }
 }
 
 // MARK: - Internal types (package-scoped)

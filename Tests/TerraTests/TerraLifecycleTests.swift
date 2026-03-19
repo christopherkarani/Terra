@@ -1,4 +1,8 @@
 import XCTest
+import InMemoryExporter
+import OpenTelemetryApi
+import OpenTelemetrySdk
+import PersistenceExporter
 @testable import TerraCore
 
 final class TerraLifecycleTests: XCTestCase {
@@ -114,6 +118,137 @@ final class TerraLifecycleTests: XCTestCase {
     XCTAssertNoThrow(try Terra.installOpenTelemetry(minimalConfig(port: 14097)))
     XCTAssertTrue(Terra._isRunning)
   }
+
+  func testSimulatorAwareSpanExporter_skipsExportUntilEnabled() {
+    let gate = TestExportGate(shouldExport: false)
+    let base = CountingSpanExporter()
+    let exporter = Terra.SimulatorAwareSpanExporter(
+      spanExporter: base,
+      shouldExport: { gate.shouldExport }
+    )
+    let span = makeSpanData(name: "gated-span")
+
+    XCTAssertEqual(exporter.export(spans: [span], explicitTimeout: nil), .success)
+    XCTAssertEqual(exporter.flush(explicitTimeout: nil), .success)
+    XCTAssertEqual(base.exportCalls, 0)
+    XCTAssertEqual(base.flushCalls, 0)
+
+    gate.shouldExport = true
+
+    XCTAssertEqual(exporter.export(spans: [span], explicitTimeout: nil), .success)
+    XCTAssertEqual(exporter.flush(explicitTimeout: nil), .success)
+    exporter.shutdown(explicitTimeout: nil)
+
+    XCTAssertEqual(base.exportCalls, 1)
+    XCTAssertEqual(base.flushCalls, 1)
+    XCTAssertEqual(base.shutdownCalls, 1)
+  }
+
+  func testSimulatorAwareSpanExporter_filtersLocalOnlySpans() {
+    let base = CountingSpanExporter()
+    let exporter = Terra.SimulatorAwareSpanExporter(
+      spanExporter: base,
+      shouldExport: { true }
+    )
+
+    let localOnlySpan = makeSpanData(
+      name: "local-only",
+      attributes: [Terra.Keys.Terra.exportLocalOnly: .bool(true)]
+    )
+    let exportableSpan = makeSpanData(name: "remote")
+
+    XCTAssertEqual(exporter.export(spans: [localOnlySpan], explicitTimeout: nil), .success)
+    XCTAssertTrue(base.exportedSpans.isEmpty)
+
+    XCTAssertEqual(exporter.export(spans: [localOnlySpan, exportableSpan], explicitTimeout: nil), .success)
+    XCTAssertEqual(base.exportedSpans.count, 1)
+    XCTAssertEqual(base.exportedSpans.first?.name, "remote")
+  }
+
+  func testSimulatorAwareMetricExporter_skipsExportUntilEnabled() {
+    let gate = TestExportGate(shouldExport: false)
+    let base = CountingMetricExporter()
+    let exporter = Terra.SimulatorAwareMetricExporter(
+      metricExporter: base,
+      shouldExport: { gate.shouldExport }
+    )
+
+    XCTAssertEqual(exporter.export(metrics: []), .success)
+    XCTAssertEqual(exporter.flush(), .success)
+    XCTAssertEqual(base.exportCalls, 0)
+    XCTAssertEqual(base.flushCalls, 0)
+
+    gate.shouldExport = true
+
+    XCTAssertEqual(exporter.export(metrics: []), .success)
+    XCTAssertEqual(exporter.flush(), .success)
+    XCTAssertEqual(exporter.shutdown(), .success)
+
+    XCTAssertEqual(base.exportCalls, 1)
+    XCTAssertEqual(base.flushCalls, 1)
+    XCTAssertEqual(base.shutdownCalls, 1)
+  }
+
+  func testSimulatorAwareLogExporter_skipsExportUntilEnabled() {
+    let gate = TestExportGate(shouldExport: false)
+    let base = CountingLogRecordExporter()
+    let exporter = Terra.SimulatorAwareLogExporter(
+      logExporter: base,
+      shouldExport: { gate.shouldExport }
+    )
+    let logRecord = makeLogRecord()
+
+    XCTAssertEqual(exporter.export(logRecords: [logRecord], explicitTimeout: nil), .success)
+    XCTAssertEqual(base.exportCalls, 0)
+
+    gate.shouldExport = true
+
+    XCTAssertEqual(exporter.export(logRecords: [logRecord], explicitTimeout: nil), .success)
+    exporter.shutdown(explicitTimeout: nil)
+
+    XCTAssertEqual(base.exportCalls, 1)
+    XCTAssertEqual(base.shutdownCalls, 1)
+  }
+
+  func testPersistenceSpanExporterDecorator_persistsLocalOnlyTraces() throws {
+    let tempDirectory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("TerraLifecyclePersistence-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+    let base = CountingSpanExporter()
+    let exporter = try PersistenceSpanExporterDecorator(
+      spanExporter: Terra.SimulatorAwareSpanExporter(
+        spanExporter: base,
+        shouldExport: { true }
+      ),
+      storageURL: tempDirectory,
+      performancePreset: synchronousPersistencePreset()
+    )
+
+    XCTAssertEqual(
+      exporter.export(
+        spans: [
+          makeSpanData(
+            name: "persisted.local.only",
+            attributes: [Terra.Keys.Terra.exportLocalOnly: .bool(true)]
+          )
+        ],
+        explicitTimeout: nil
+      ),
+      .success
+    )
+    XCTAssertEqual(base.exportCalls, 0)
+
+    let persistedFiles = try FileManager.default.contentsOfDirectory(
+      at: tempDirectory,
+      includingPropertiesForKeys: nil
+    )
+    XCTAssertFalse(persistedFiles.isEmpty)
+
+    let persistedData = try Data(contentsOf: persistedFiles[0])
+    XCTAssertFalse(persistedData.isEmpty)
+  }
 }
 
 // MARK: - Helpers
@@ -129,4 +264,138 @@ private func minimalConfig(port: Int = 14099) -> Terra.OpenTelemetryConfiguratio
     otlpMetricsEndpoint: URL(string: "http://127.0.0.1:\(port)/v1/metrics")!,
     otlpLogsEndpoint: URL(string: "http://127.0.0.1:\(port)/v1/logs")!
   )
+}
+
+private func makeSpanData(
+  name: String,
+  attributes: [String: AttributeValue] = [:]
+) -> SpanData {
+  let exporter = InMemoryExporter()
+  let provider = TracerProviderSdk()
+  provider.addSpanProcessor(SimpleSpanProcessor(spanExporter: exporter))
+  let tracer = provider.get(instrumentationName: "TerraLifecycleTests.makeSpanData")
+  let span = tracer.spanBuilder(spanName: name).startSpan()
+  span.setAttributes(attributes)
+  span.end()
+  provider.forceFlush()
+  return exporter.getFinishedSpanItems()[0]
+}
+
+private func makeLogRecord(
+  attributes: [String: AttributeValue] = [:]
+) -> ReadableLogRecord {
+  ReadableLogRecord(
+    resource: Resource(attributes: [:]),
+    instrumentationScopeInfo: InstrumentationScopeInfo(),
+    timestamp: Date(),
+    attributes: attributes
+  )
+}
+
+private func synchronousPersistencePreset() -> PersistencePerformancePreset {
+  PersistencePerformancePreset(
+    maxFileSize: 64 * 1_024,
+    maxDirectorySize: 4 * 1_024 * 1_024,
+    maxFileAgeForWrite: 60,
+    minFileAgeForRead: 120,
+    maxFileAgeForRead: 600,
+    maxObjectsInFile: 100,
+    maxObjectSize: 64 * 1_024,
+    synchronousWrite: true,
+    initialExportDelay: 300,
+    defaultExportDelay: 300,
+    minExportDelay: 300,
+    maxExportDelay: 300,
+    exportDelayChangeRate: 0
+  )
+}
+
+private final class CountingSpanExporter: SpanExporter {
+  private(set) var exportCalls = 0
+  private(set) var flushCalls = 0
+  private(set) var shutdownCalls = 0
+  private(set) var exportedSpans: [SpanData] = []
+
+  func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+    exportedSpans.append(contentsOf: spans)
+    _ = explicitTimeout
+    exportCalls += 1
+    return .success
+  }
+
+  func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+    _ = explicitTimeout
+    flushCalls += 1
+    return .success
+  }
+
+  func shutdown(explicitTimeout: TimeInterval?) {
+    _ = explicitTimeout
+    shutdownCalls += 1
+  }
+}
+
+private final class CountingMetricExporter: MetricExporter {
+  private(set) var exportCalls = 0
+  private(set) var flushCalls = 0
+  private(set) var shutdownCalls = 0
+
+  func export(metrics: [MetricData]) -> ExportResult {
+    _ = metrics
+    exportCalls += 1
+    return .success
+  }
+
+  func flush() -> ExportResult {
+    flushCalls += 1
+    return .success
+  }
+
+  func shutdown() -> ExportResult {
+    shutdownCalls += 1
+    return .success
+  }
+
+  func getAggregationTemporality(for instrument: InstrumentType) -> AggregationTemporality {
+    _ = instrument
+    return .cumulative
+  }
+}
+
+private final class CountingLogRecordExporter: LogRecordExporter {
+  private(set) var exportCalls = 0
+  private(set) var shutdownCalls = 0
+  private(set) var forceFlushCalls = 0
+
+  func export(logRecords: [ReadableLogRecord], explicitTimeout: TimeInterval?) -> ExportResult {
+    _ = logRecords
+    _ = explicitTimeout
+    exportCalls += 1
+    return .success
+  }
+
+  func shutdown(explicitTimeout: TimeInterval?) {
+    _ = explicitTimeout
+    shutdownCalls += 1
+  }
+
+  func forceFlush(explicitTimeout: TimeInterval?) -> ExportResult {
+    _ = explicitTimeout
+    forceFlushCalls += 1
+    return .success
+  }
+}
+
+private final class TestExportGate: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value: Bool
+
+  init(shouldExport: Bool) {
+    self.value = shouldExport
+  }
+
+  var shouldExport: Bool {
+    get { lock.withLock { value } }
+    set { lock.withLock { value = newValue } }
+  }
 }
