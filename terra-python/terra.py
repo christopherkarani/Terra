@@ -476,24 +476,40 @@ class Terra:
             otlp_endpoint=otlp_endpoint,
         )
 
-        # NOTE: terra_init() accepts NULL for defaults. Post-init configuration
-        # is limited to service_name/service_version via terra_set_service_info().
-        # Other TerraConfig fields (otlp_endpoint, content_policy, max_spans, etc.)
-        # are documented for future C API expansion but currently use Zig defaults.
-        # See terra.h for the complete C configuration struct.
-        handle = lib.terra_init(None)
+        hmac_key = cfg.hmac_key.encode() if cfg.hmac_key is not None else None
+        service_name_bytes = cfg.service_name.encode()
+        service_version_bytes = cfg.service_version.encode()
+        otlp_endpoint_bytes = cfg.otlp_endpoint.encode()
+
+        raw_cfg = CConfig(
+            max_spans=cfg.max_spans,
+            max_attributes_per_span=cfg.max_attributes_per_span,
+            max_events_per_span=cfg.max_events_per_span,
+            max_event_attrs=cfg.max_event_attrs,
+            batch_size=cfg.batch_size,
+            flush_interval_ms=cfg.flush_interval_ms,
+            content_policy=int(cfg.content_policy),
+            redaction_strategy=int(cfg.redaction_strategy),
+            hmac_key=hmac_key,
+            emit_legacy_sha256=cfg.emit_legacy_sha256,
+            service_name=service_name_bytes,
+            service_version=service_version_bytes,
+            otlp_endpoint=otlp_endpoint_bytes,
+            clock_fn=None,
+            clock_ctx=None,
+            transport_vtable=CTransportVTable(),
+            scheduler_vtable=CSchedulerVTable(),
+            storage_vtable=CStorageVTable(),
+        )
+
+        handle = lib.terra_init(ctypes.byref(raw_cfg))
         if not handle:
             err = lib.terra_last_error()
             buf = ctypes.create_string_buffer(256)
             lib.terra_last_error_message(buf, 256)
             raise RuntimeError(f"terra_init failed (error={err}): {buf.value.decode()}")
 
-        inst = cls(handle, lib)
-
-        # Apply service info — the only config fields supported post-init via C API
-        inst.set_service_info(cfg.service_name, cfg.service_version)
-
-        return inst
+        return cls(handle, lib)
 
     @property
     def is_running(self) -> bool:

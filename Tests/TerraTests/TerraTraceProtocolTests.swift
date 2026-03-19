@@ -8,31 +8,32 @@ struct TerraTraceProtocolTests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
+    @Sendable
     func assertTrace<T: Terra.Trace>(_ trace: T) {
       _ = trace.event("unit.test")
     }
 
-    _ = try await Terra.inference(model: "trace-model").execute { trace in
+    _ = await Terra.inference(model: "trace-model").execute { trace in
       assertTrace(trace)
       return "ok"
     }
-    _ = try await Terra.stream(model: "trace-model").execute { trace in
+    _ = await Terra.stream(model: "trace-model").execute { trace in
       assertTrace(trace)
       return "ok"
     }
-    _ = try await Terra.embedding(model: "trace-model").execute { trace in
+    _ = await Terra.embedding(model: "trace-model").execute { trace in
       assertTrace(trace)
       return "ok"
     }
-    _ = try await Terra.agent(name: "trace-agent").execute { trace in
+    _ = await Terra.agent(name: "trace-agent").execute { trace in
       assertTrace(trace)
       return "ok"
     }
-    _ = try await Terra.tool(name: "trace-tool", callID: "call-1").execute { trace in
+    _ = await Terra.tool(name: "trace-tool", callID: "call-1").execute { trace in
       assertTrace(trace)
       return "ok"
     }
-    _ = try await Terra.safetyCheck(name: "trace-safety").execute { trace in
+    _ = await Terra.safetyCheck(name: "trace-safety").execute { trace in
       assertTrace(trace)
       return "ok"
     }
@@ -45,7 +46,7 @@ struct TerraTraceProtocolTests {
 
     enum ExpectedError: Error { case failed }
 
-    _ = try await Terra.inference(model: "trace-model").execute { trace in
+    _ = await Terra.inference(model: "trace-model").execute { trace in
       trace.recordError(ExpectedError.failed)
       return "ok"
     }
@@ -74,7 +75,7 @@ struct TerraTraceProtocolTests {
       }
     }
 
-    _ = try await Terra.inference(model: "trace-model").execute { trace in
+    _ = await Terra.inference(model: "trace-model").execute { trace in
       trace.recordError(ExpectedError.failed)
       return "ok"
     }

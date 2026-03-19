@@ -558,6 +558,7 @@ extension Terra {
     }
 
     _zigInstance = instance
+    Runtime.shared.markRunning()
 
     // Configure service metadata
     if let name = serviceName {
@@ -578,6 +579,13 @@ extension Terra {
     OpenTelemetry.registerTracerProvider(tracerProvider: zigProvider)
 
     return true
+  }
+
+  package static func shutdownZigBackend() {
+    guard let instance = _zigInstance else { return }
+    _ = terra_shutdown(instance)
+    _zigInstance = nil
+    Runtime.shared.markStopped()
   }
 
   /// The raw Zig instance pointer, if the Zig backend was installed.

@@ -68,14 +68,25 @@ pub const TerraInstance = struct {
     service_name_len: u8 = 0,
     service_version_buf: [32]u8 = [_]u8{0} ** 32,
     service_version_len: u8 = 0,
+    owned_otlp_endpoint: ?[:0]u8 = null,
+    owned_hmac_key: ?[:0]u8 = null,
+
+    fn copyCStringIntoBuffer(buffer: []u8, input: []const u8) u8 {
+        const copy_len = @min(input.len, buffer.len - 1);
+        @memset(buffer, 0);
+        @memcpy(buffer[0..copy_len], input[0..copy_len]);
+        return @intCast(copy_len);
+    }
 
     /// Create a new TerraInstance. Caller owns the returned pointer.
     pub fn create(allocator: std.mem.Allocator, cfg: TerraConfig) !*TerraInstance {
         if (cfg.validate()) |_| return error.InvalidConfig;
 
-        const store = try SpanStore.init(allocator, cfg.max_spans);
+        var store = try SpanStore.init(allocator, cfg.max_spans);
+        errdefer store.deinit();
 
         const inst = try allocator.create(TerraInstance);
+        errdefer allocator.destroy(inst);
         inst.* = .{
             .config = cfg,
             .store = store,
@@ -83,16 +94,21 @@ pub const TerraInstance = struct {
             .state = .running,
         };
 
-        // Copy service name/version from config
         const sn = std.mem.sliceTo(cfg.service_name, 0);
-        const copy_sn = @min(sn.len, @as(usize, 128));
-        @memcpy(inst.service_name_buf[0..copy_sn], sn[0..copy_sn]);
-        inst.service_name_len = @intCast(copy_sn);
+        inst.service_name_len = copyCStringIntoBuffer(&inst.service_name_buf, sn);
+        inst.config.service_name = @ptrCast(&inst.service_name_buf);
 
         const sv = std.mem.sliceTo(cfg.service_version, 0);
-        const copy_sv = @min(sv.len, @as(usize, 32));
-        @memcpy(inst.service_version_buf[0..copy_sv], sv[0..copy_sv]);
-        inst.service_version_len = @intCast(copy_sv);
+        inst.service_version_len = copyCStringIntoBuffer(&inst.service_version_buf, sv);
+        inst.config.service_version = @ptrCast(&inst.service_version_buf);
+
+        if (cfg.hmac_key) |key| {
+            inst.owned_hmac_key = try allocator.dupeZ(u8, std.mem.sliceTo(key, 0));
+            inst.config.hmac_key = inst.owned_hmac_key.?.ptr;
+        }
+
+        inst.owned_otlp_endpoint = try allocator.dupeZ(u8, std.mem.sliceTo(cfg.otlp_endpoint, 0));
+        inst.config.otlp_endpoint = inst.owned_otlp_endpoint.?.ptr;
 
         return inst;
     }
@@ -103,6 +119,12 @@ pub const TerraInstance = struct {
         self.config.transport_vtable.flush();
         self.config.transport_vtable.shutdown();
         self.store.deinit();
+        if (self.owned_otlp_endpoint) |owned_otlp_endpoint| {
+            self.allocator.free(owned_otlp_endpoint);
+        }
+        if (self.owned_hmac_key) |owned_hmac_key| {
+            self.allocator.free(owned_hmac_key);
+        }
         // Don't write .stopped — instance is about to be freed
         const allocator = self.allocator;
         allocator.destroy(self);
@@ -209,13 +231,10 @@ pub const TerraInstance = struct {
 
     // ── Service info ────────────────────────────────────────────────────
     pub fn setServiceInfo(self: *TerraInstance, name: []const u8, ver: []const u8) void {
-        const copy_n = @min(name.len, @as(usize, 128));
-        @memcpy(self.service_name_buf[0..copy_n], name[0..copy_n]);
-        self.service_name_len = @intCast(copy_n);
-
-        const copy_v = @min(ver.len, @as(usize, 32));
-        @memcpy(self.service_version_buf[0..copy_v], ver[0..copy_v]);
-        self.service_version_len = @intCast(copy_v);
+        self.service_name_len = copyCStringIntoBuffer(&self.service_name_buf, name);
+        self.service_version_len = copyCStringIntoBuffer(&self.service_version_buf, ver);
+        self.config.service_name = @ptrCast(&self.service_name_buf);
+        self.config.service_version = @ptrCast(&self.service_version_buf);
     }
 
     // ── Diagnostics ─────────────────────────────────────────────────────
@@ -270,6 +289,36 @@ test "TerraInstance full lifecycle" {
     const count = inst.drainSpans(&buf);
     try std.testing.expectEqual(@as(u32, 1), count);
     try std.testing.expectEqualStrings("gen_ai.inference", buf[0].nameSlice());
+}
+
+test "TerraInstance owns copied config strings" {
+    var cfg = TerraConfig.default();
+    cfg.allocator = std.testing.allocator;
+    cfg.service_name = "owned-service";
+    cfg.service_version = "7.1.0";
+    cfg.otlp_endpoint = "http://owned-endpoint:4318";
+    cfg.hmac_key = "owned-secret";
+
+    const inst = try TerraInstance.create(std.testing.allocator, cfg);
+    defer inst.destroy();
+
+    try std.testing.expectEqualStrings("owned-service", std.mem.sliceTo(inst.config.service_name, 0));
+    try std.testing.expectEqualStrings("7.1.0", std.mem.sliceTo(inst.config.service_version, 0));
+    try std.testing.expectEqualStrings("http://owned-endpoint:4318", std.mem.sliceTo(inst.config.otlp_endpoint, 0));
+    try std.testing.expectEqualStrings("owned-secret", std.mem.sliceTo(inst.config.hmac_key.?, 0));
+}
+
+test "TerraInstance setServiceInfo updates processor-visible config" {
+    var cfg = TerraConfig.default();
+    cfg.allocator = std.testing.allocator;
+
+    const inst = try TerraInstance.create(std.testing.allocator, cfg);
+    defer inst.destroy();
+
+    inst.setServiceInfo("updated-service", "2.4.0");
+
+    try std.testing.expectEqualStrings("updated-service", std.mem.sliceTo(inst.config.service_name, 0));
+    try std.testing.expectEqualStrings("2.4.0", std.mem.sliceTo(inst.config.service_version, 0));
 }
 
 test "TerraInstance all 6 span types" {

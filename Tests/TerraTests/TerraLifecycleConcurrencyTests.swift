@@ -171,9 +171,8 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
     func testConcurrentStateReads_duringInstallShutdown() async throws {
         try Terra.installOpenTelemetry(minimalConfig(port: 15061))
 
-        // Collect observed pairs — locked to keep array mutation thread-safe.
-        var observedPairs: [(state: Terra.LifecycleState, running: Bool)] = []
-        let pairsLock = NSLock()
+        // Collect observed pairs atomically without using async-unavailable NSLock APIs.
+        let observedPairs = OSAllocatedUnfairLock(initialState: [(state: Terra.LifecycleState, running: Bool)]())
 
         await withTaskGroup(of: Void.self) { group in
             // 50 reader tasks
@@ -186,9 +185,9 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
                     // Yield so the cooperative scheduler can interleave the writer task.
                     await Task.yield()
 
-                    pairsLock.lock()
-                    observedPairs.append((state: state, running: running))
-                    pairsLock.unlock()
+                    observedPairs.withLock { pairs in
+                        pairs.append((state: state, running: running))
+                    }
                 }
             }
 
@@ -200,7 +199,9 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
         }
 
         // Every observed lifecycleState must be a valid enum case.
-        for pair in observedPairs {
+        let pairs = observedPairs.withLock { $0 }
+
+        for pair in pairs {
             XCTAssertTrue(
                 pair.state == .running
                   || pair.state == .starting
@@ -212,7 +213,7 @@ final class TerraLifecycleConcurrencyTests: XCTestCase {
             XCTAssertTrue(pair.running == true || pair.running == false)
         }
 
-        XCTAssertEqual(observedPairs.count, 50, "Should have 50 state observations — no hangs")
+        XCTAssertEqual(pairs.count, 50, "Should have 50 state observations — no hangs")
     }
 }
 

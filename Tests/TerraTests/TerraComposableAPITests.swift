@@ -32,7 +32,7 @@ struct TerraComposableAPITests {
       }
 
     for (index, call) in transformedCalls.enumerated() {
-      _ = try await call.run { trace in
+      _ = await call.run { trace in
         trace.tag("terra.collection.index", index)
         return "ok"
       }
@@ -86,7 +86,7 @@ struct TerraComposableAPITests {
     let includeFlag = true
     let phases = ["prepare", "dispatch"]
 
-    _ = try await Terra
+    _ = await Terra
       .infer(Terra.ModelID("builder/model"), prompt: "hello")
       .run { trace in
         trace.tag("builder.attr.base", "base")
@@ -110,7 +110,7 @@ struct TerraComposableAPITests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    _ = try await Terra
+    _ = await Terra
       .infer(Terra.ModelID("builder/model"), prompt: "hello")
       .run { trace in
         trace.event("trace.event.1")
@@ -129,7 +129,7 @@ struct TerraComposableAPITests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    _ = try await Terra
+    _ = await Terra
       .infer(Terra.ModelID("builder/model"), prompt: "hello")
       .run { _ in
         return "ok"

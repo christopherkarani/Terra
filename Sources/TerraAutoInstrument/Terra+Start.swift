@@ -179,24 +179,26 @@ extension Terra {
     let serviceVersion = config.openTelemetry.serviceVersion
       ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
 
-    // 1. Set up telemetry providers — Zig core (preferred) or Swift OTel fallback
-    #if canImport(CTerraBridge)
-    let zigInstalled = installZigBackend(
-      serviceName: serviceName,
-      serviceVersion: serviceVersion
-    )
-    if !zigInstalled {
-      // Zig init failed — fall back to Swift OTel pipeline
-      var openTelemetryConfig = config.openTelemetry
-      openTelemetryConfig.serviceName = serviceName
-      openTelemetryConfig.serviceVersion = serviceVersion
-      try installOpenTelemetry(openTelemetryConfig)
-    }
-    #else
-    // No Zig core available — use Swift OTel pipeline
     var openTelemetryConfig = config.openTelemetry
     openTelemetryConfig.serviceName = serviceName
     openTelemetryConfig.serviceVersion = serviceVersion
+
+    // 1. Set up telemetry providers.
+    // Use the Zig tracer path only when the resolved configuration can be
+    // honored there without silently dropping lifecycle or persistence behavior.
+    #if canImport(CTerraBridge)
+    if _supportsZigBackend(openTelemetryConfig) {
+      let zigInstalled = installZigBackend(
+        serviceName: serviceName,
+        serviceVersion: serviceVersion
+      )
+      if !zigInstalled {
+        try installOpenTelemetry(openTelemetryConfig)
+      }
+    } else {
+      try installOpenTelemetry(openTelemetryConfig)
+    }
+    #else
     try installOpenTelemetry(openTelemetryConfig)
     #endif
 
@@ -423,6 +425,17 @@ extension Terra {
 }
 
 extension Terra {
+  private static func _supportsZigBackend(_ configuration: OpenTelemetryConfiguration) -> Bool {
+    configuration.tracerProviderStrategy == .registerNew
+      && configuration.enableTraces
+      && !configuration.enableMetrics
+      && !configuration.enableLogs
+      && !configuration.enableSignposts
+      && !configuration.enableSessions
+      && configuration.persistence == nil
+      && configuration.traceSamplingRatio == nil
+  }
+
   struct _ResolvedStartConfiguration: Sendable {
     var privacy: Privacy
     var openTelemetry: OpenTelemetryConfiguration

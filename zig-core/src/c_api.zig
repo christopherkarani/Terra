@@ -20,6 +20,60 @@ const SpanContext = models.SpanContext;
 const SpanRecord = models.SpanRecord;
 const TerraVersion = terra_mod.TerraVersion;
 
+const CClockFn = ?*const fn (?*anyopaque) callconv(.c) u64;
+const CSendFn = ?*const fn ([*]const u8, u32, ?*anyopaque) callconv(.c) c_int;
+const CFlushFn = ?*const fn (?*anyopaque) callconv(.c) void;
+const CShutdownFn = ?*const fn (?*anyopaque) callconv(.c) void;
+const CSchedulerCallbackFn = ?*const fn (?*anyopaque) callconv(.c) void;
+const CScheduleFn = ?*const fn (CSchedulerCallbackFn, u64, ?*anyopaque, ?*anyopaque) callconv(.c) u64;
+const CCancelFn = ?*const fn (u64, ?*anyopaque) callconv(.c) void;
+const CStorageWriteFn = ?*const fn ([*]const u8, u32, ?*anyopaque) callconv(.c) c_int;
+const CStorageReadFn = ?*const fn ([*]u8, u32, ?*anyopaque) callconv(.c) u32;
+const CStorageDiscardOldestFn = ?*const fn (u32, ?*anyopaque) callconv(.c) void;
+const CStorageAvailableBytesFn = ?*const fn (?*anyopaque) callconv(.c) u64;
+
+const CTerraTransportVTable = extern struct {
+    send_fn: CSendFn = null,
+    flush_fn: CFlushFn = null,
+    shutdown_fn: CShutdownFn = null,
+    context: ?*anyopaque = null,
+};
+
+const CTerraSchedulerVTable = extern struct {
+    schedule_fn: CScheduleFn = null,
+    cancel_fn: CCancelFn = null,
+    context: ?*anyopaque = null,
+};
+
+const CTerraStorageVTable = extern struct {
+    write_fn: CStorageWriteFn = null,
+    read_fn: CStorageReadFn = null,
+    discard_oldest_fn: CStorageDiscardOldestFn = null,
+    available_bytes_fn: CStorageAvailableBytesFn = null,
+    context: ?*anyopaque = null,
+};
+
+const CTerraConfig = extern struct {
+    max_spans: u32 = 0,
+    max_attributes_per_span: u16 = 0,
+    max_events_per_span: u16 = 0,
+    max_event_attrs: u16 = 0,
+    batch_size: u32 = 0,
+    flush_interval_ms: u64 = 0,
+    content_policy: c_int = 0,
+    redaction_strategy: c_int = 0,
+    hmac_key: ?[*:0]const u8 = null,
+    emit_legacy_sha256: bool = false,
+    service_name: ?[*:0]const u8 = null,
+    service_version: ?[*:0]const u8 = null,
+    otlp_endpoint: ?[*:0]const u8 = null,
+    clock_fn: CClockFn = null,
+    clock_ctx: ?*anyopaque = null,
+    transport_vtable: CTerraTransportVTable = .{},
+    scheduler_vtable: CTerraSchedulerVTable = .{},
+    storage_vtable: CTerraStorageVTable = .{},
+};
+
 // ── Error codes matching terra.h ────────────────────────────────────────
 pub const TERRA_OK: c_int = 0;
 pub const TERRA_ERR_ALREADY_INITIALIZED: c_int = 1;
@@ -41,13 +95,97 @@ fn setLastError(code: c_int, msg: []const u8) void {
     last_error_msg_len = @intCast(copy_len);
 }
 
+fn mapContentPolicy(raw: c_int) !privacy.ContentPolicy {
+    return switch (raw) {
+        0 => .never,
+        1 => .opt_in,
+        2 => .always,
+        else => error.InvalidConfig,
+    };
+}
+
+fn mapRedactionStrategy(raw: c_int) !privacy.RedactionStrategy {
+    return switch (raw) {
+        0 => .drop,
+        1 => .length_only,
+        2 => .hmac_sha256,
+        3 => .sha256,
+        else => error.InvalidConfig,
+    };
+}
+
+fn toTransportVTable(vtable: CTerraTransportVTable) transport_mod.TransportVTable {
+    return .{
+        .send_fn = vtable.send_fn orelse transport_mod.noop_transport.send_fn,
+        .flush_fn = vtable.flush_fn orelse transport_mod.noop_transport.flush_fn,
+        .shutdown_fn = vtable.shutdown_fn orelse transport_mod.noop_transport.shutdown_fn,
+        .context = vtable.context,
+    };
+}
+
+fn toSchedulerVTable(vtable: CTerraSchedulerVTable) scheduler_mod.SchedulerVTable {
+    return .{
+        .schedule_fn = vtable.schedule_fn orelse scheduler_mod.noop_scheduler.schedule_fn,
+        .cancel_fn = vtable.cancel_fn orelse scheduler_mod.noop_scheduler.cancel_fn,
+        .context = vtable.context,
+    };
+}
+
+fn toStorageVTable(vtable: CTerraStorageVTable) storage_mod.StorageVTable {
+    return .{
+        .write_fn = vtable.write_fn orelse storage_mod.noop_storage.write_fn,
+        .read_fn = vtable.read_fn orelse storage_mod.noop_storage.read_fn,
+        .discard_oldest_fn = vtable.discard_oldest_fn orelse storage_mod.noop_storage.discard_oldest_fn,
+        .available_bytes_fn = vtable.available_bytes_fn orelse storage_mod.noop_storage.available_bytes_fn,
+        .context = vtable.context,
+    };
+}
+
+fn translateConfig(c_cfg: CTerraConfig) !TerraConfig {
+    var cfg = TerraConfig.default();
+
+    if (c_cfg.max_spans != 0) cfg.max_spans = c_cfg.max_spans;
+    if (c_cfg.max_attributes_per_span != 0) cfg.max_attributes_per_span = c_cfg.max_attributes_per_span;
+    if (c_cfg.max_events_per_span != 0) cfg.max_events_per_span = c_cfg.max_events_per_span;
+    if (c_cfg.max_event_attrs != 0) cfg.max_event_attrs = c_cfg.max_event_attrs;
+    if (c_cfg.batch_size != 0) cfg.batch_size = c_cfg.batch_size;
+    if (c_cfg.flush_interval_ms != 0) cfg.flush_interval_ms = c_cfg.flush_interval_ms;
+
+    cfg.content_policy = try mapContentPolicy(c_cfg.content_policy);
+    cfg.redaction_strategy = try mapRedactionStrategy(c_cfg.redaction_strategy);
+    cfg.hmac_key = c_cfg.hmac_key;
+    cfg.emit_legacy_sha256 = c_cfg.emit_legacy_sha256;
+
+    if (c_cfg.service_name) |service_name| cfg.service_name = service_name;
+    if (c_cfg.service_version) |service_version| cfg.service_version = service_version;
+    if (c_cfg.otlp_endpoint) |otlp_endpoint| cfg.otlp_endpoint = otlp_endpoint;
+
+    cfg.clock_fn = c_cfg.clock_fn orelse clock.stdClock;
+    cfg.clock_ctx = c_cfg.clock_ctx;
+    cfg.transport_vtable = toTransportVTable(c_cfg.transport_vtable);
+    cfg.scheduler_vtable = toSchedulerVTable(c_cfg.scheduler_vtable);
+    cfg.storage_vtable = toStorageVTable(c_cfg.storage_vtable);
+
+    if (c_cfg.batch_size == 0 and cfg.batch_size > cfg.max_spans) {
+        cfg.batch_size = cfg.max_spans;
+    }
+
+    return cfg;
+}
+
 // ── Lifecycle ───────────────────────────────────────────────────────────
 
-pub export fn terra_init(config_ptr: ?*const TerraConfig) callconv(.c) ?*TerraInstance {
-    const cfg = if (config_ptr) |c| c.* else TerraConfig.default();
-    const allocator = cfg.allocator;
+pub export fn terra_init(config_ptr: ?*const CTerraConfig) callconv(.c) ?*TerraInstance {
+    const cfg = if (config_ptr) |c| translateConfig(c.*) else TerraConfig.default();
+    const resolved_cfg = cfg catch |err| {
+        switch (err) {
+            error.InvalidConfig => setLastError(TERRA_ERR_INVALID_CONFIG, "Invalid configuration"),
+        }
+        return null;
+    };
+    const allocator = resolved_cfg.allocator;
 
-    return TerraInstance.create(allocator, cfg) catch |err| {
+    return TerraInstance.create(allocator, resolved_cfg) catch |err| {
         switch (err) {
             error.InvalidConfig => setLastError(TERRA_ERR_INVALID_CONFIG, "Invalid configuration"),
             error.OutOfMemory => setLastError(TERRA_ERR_OUT_OF_MEMORY, "Out of memory"),
@@ -295,6 +433,56 @@ test "terra_init null returns default instance" {
     const inst = terra_init(null);
     try std.testing.expect(inst != null);
     _ = terra_shutdown(inst);
+}
+
+test "terra_init translates C config into internal config" {
+    const raw = CTerraConfig{
+        .max_spans = 32,
+        .max_attributes_per_span = 16,
+        .max_events_per_span = 4,
+        .max_event_attrs = 2,
+        .batch_size = 8,
+        .flush_interval_ms = 250,
+        .content_policy = 1,
+        .redaction_strategy = 2,
+        .service_name = "ffi-service",
+        .service_version = "9.9.9",
+        .otlp_endpoint = "http://collector.example:4318",
+    };
+
+    const inst = terra_init(&raw).?;
+    defer _ = terra_shutdown(inst);
+
+    try std.testing.expectEqual(@as(u32, 32), inst.config.max_spans);
+    try std.testing.expectEqual(@as(u16, 16), inst.config.max_attributes_per_span);
+    try std.testing.expectEqual(@as(u16, 4), inst.config.max_events_per_span);
+    try std.testing.expectEqual(@as(u16, 2), inst.config.max_event_attrs);
+    try std.testing.expectEqual(@as(u32, 8), inst.config.batch_size);
+    try std.testing.expectEqual(@as(u64, 250), inst.config.flush_interval_ms);
+    try std.testing.expectEqual(privacy.ContentPolicy.opt_in, inst.config.content_policy);
+    try std.testing.expectEqual(privacy.RedactionStrategy.hmac_sha256, inst.config.redaction_strategy);
+    try std.testing.expectEqualStrings("ffi-service", std.mem.sliceTo(inst.config.service_name, 0));
+    try std.testing.expectEqualStrings("9.9.9", std.mem.sliceTo(inst.config.service_version, 0));
+    try std.testing.expectEqualStrings("http://collector.example:4318", std.mem.sliceTo(inst.config.otlp_endpoint, 0));
+}
+
+test "terra_init applies defaults and clamps implicit batch size" {
+    const raw = CTerraConfig{
+        .max_spans = 64,
+        .service_name = "partial-service",
+    };
+
+    const inst = terra_init(&raw).?;
+    defer _ = terra_shutdown(inst);
+
+    try std.testing.expectEqual(@as(u32, 64), inst.config.max_spans);
+    try std.testing.expectEqual(@as(u16, 64), inst.config.max_attributes_per_span);
+    try std.testing.expectEqual(@as(u16, 8), inst.config.max_events_per_span);
+    try std.testing.expectEqual(@as(u16, 4), inst.config.max_event_attrs);
+    try std.testing.expectEqual(@as(u32, 64), inst.config.batch_size);
+    try std.testing.expectEqual(@as(u64, 5000), inst.config.flush_interval_ms);
+    try std.testing.expectEqualStrings("partial-service", std.mem.sliceTo(inst.config.service_name, 0));
+    try std.testing.expectEqualStrings("0.0.0", std.mem.sliceTo(inst.config.service_version, 0));
 }
 
 test "terra_shutdown null returns error" {

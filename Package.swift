@@ -15,6 +15,7 @@ let package = Package(
     .library(name: "Terra", targets: ["Terra"]),
     .library(name: "TerraCore", targets: ["TerraCore"]),
     .library(name: "TerraCoreML", targets: ["TerraCoreML"]),
+    .library(name: "TerraTraceKit", targets: ["TerraTraceKit"]),
     .library(name: "TerraHTTPInstrument", targets: ["TerraHTTPInstrument"]),
     .library(name: "TerraFoundationModels", targets: ["TerraFoundationModels"]),
     .library(name: "TerraMLX", targets: ["TerraMLX"]),
@@ -69,7 +70,6 @@ let package = Package(
         )
       ],
       path: "Sources/Terra",
-      exclude: ["CLAUDE.md"],
       swiftSettings: [
         .define("TERRA_USE_ZIG_CORE", .when(platforms: [.macOS])),
       ]
@@ -84,7 +84,6 @@ let package = Package(
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
       ],
       path: "Sources/TerraCoreML",
-      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraTraceKit",
@@ -94,7 +93,6 @@ let package = Package(
         .product(name: "OpenTelemetryProtocolExporter", package: "opentelemetry-swift")
       ],
       path: "Sources/TerraTraceKit",
-      exclude: ["CLAUDE.md"]
     ),
 
     // MARK: - Auto-Instrumentation Umbrella
@@ -110,7 +108,6 @@ let package = Package(
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
       ],
       path: "Sources/TerraAutoInstrument",
-      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraHTTPInstrument",
@@ -121,7 +118,6 @@ let package = Package(
         .product(name: "URLSessionInstrumentation", package: "opentelemetry-swift"),
       ],
       path: "Sources/TerraHTTPInstrument",
-      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraFoundationModels",
@@ -130,7 +126,6 @@ let package = Package(
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
       ],
       path: "Sources/TerraFoundationModels",
-      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraMLX",
@@ -139,7 +134,6 @@ let package = Package(
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
       ],
       path: "Sources/TerraMLX",
-      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraMetalProfiler",
@@ -192,7 +186,6 @@ let package = Package(
         .product(name: "SwiftDiagnostics", package: "swift-syntax"),
       ],
       path: "Sources/TerraTracedMacroPlugin",
-      exclude: ["CLAUDE.md"]
     ),
     .target(
       name: "TerraTracedMacro",
@@ -201,7 +194,6 @@ let package = Package(
         "TerraCore",
       ],
       path: "Sources/TerraTracedMacro",
-      exclude: ["CLAUDE.md"]
     ),
 
     // MARK: - Test Targets
@@ -217,7 +209,6 @@ let package = Package(
         .product(name: "PersistenceExporter", package: "opentelemetry-swift"),
       ],
       path: "Tests/TerraTests",
-      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraCoreMLTests",
@@ -229,7 +220,6 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
       ],
       path: "Tests/TerraCoreMLTests",
-      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraTraceKitTests",
@@ -240,7 +230,6 @@ let package = Package(
         .product(name: "SwiftProtobuf", package: "swift-protobuf"),
       ],
       path: "Tests/TerraTraceKitTests",
-      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraHTTPInstrumentTests",
@@ -252,7 +241,6 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
       ],
       path: "Tests/TerraHTTPInstrumentTests",
-      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraMLXTests",
@@ -264,7 +252,6 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
       ],
       path: "Tests/TerraMLXTests",
-      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraAutoInstrumentTests",
@@ -280,7 +267,6 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
       ],
       path: "Tests/TerraAutoInstrumentTests",
-      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraFoundationModelsTests",
@@ -292,7 +278,6 @@ let package = Package(
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
       ],
       path: "Tests/TerraFoundationModelsTests",
-      exclude: ["CLAUDE.md"]
     ),
     .testTarget(
       name: "TerraTracedMacroTests",
@@ -306,7 +291,6 @@ let package = Package(
         .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
       ],
       path: "Tests/TerraTracedMacroTests",
-      exclude: ["CLAUDE.md"]
     ),
 
     // MARK: - Examples

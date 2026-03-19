@@ -9,7 +9,7 @@ struct TerraLlamaWrapperTests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    _ = try await TerraLlama.traced(model: "llama-3.2") { trace in
+    _ = await TerraLlama.traced(model: "llama-3.2") { trace in
       trace.chunk(tokens: 2)
       return "ok"
     }

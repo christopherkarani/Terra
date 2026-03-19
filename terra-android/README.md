@@ -18,9 +18,11 @@ The Zig core handles span lifecycle, ring buffer management, batching, privacy/r
 
 ### Prerequisites
 
+- JDK 17
 - Zig 0.14+ (for cross-compilation)
 - Android SDK with API 26+ (for Kotlin SDK)
 - Kotlin 1.9+
+- Gradle wrapper is vendored in this directory; no system Gradle install is required
 
 ### Cross-compile libtera for Android
 
@@ -46,12 +48,23 @@ cp zig-core/zig-out/lib/libterra.so terra-android/jniLibs/arm64-v8a/
 # (repeat for x86_64 target)
 ```
 
-### Build the AAR
+### Build and test from a fresh checkout
 
 ```bash
 cd terra-android/
-./gradlew assembleRelease
+./gradlew test assembleRelease
 ```
+
+### Run Android integration tests
+
+The host `test` task runs JVM-safe contract tests. The JNI and coroutine integration tests run as Android instrumentation tests:
+
+```bash
+cd terra-android/
+./gradlew connectedDebugAndroidTest
+```
+
+That requires an emulator or device plus both `arm64-v8a` and `x86_64` `libtera.so` artifacts in `jniLibs/`.
 
 ## Usage
 

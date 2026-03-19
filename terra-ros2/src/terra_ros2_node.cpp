@@ -1,15 +1,3 @@
-// Terra ROS 2 Node — Bridge between ROS 2 topics and Terra observability.
-//
-// Subscribes to /terra/traces (raw OTLP protobuf bytes) and forwards them
-// to a local Terra instance for processing. Publishes aggregated metrics
-// to /terra/metrics as JSON strings.
-//
-// Usage:
-//   ros2 run terra_ros2 terra_ros2_node
-//
-// This is a stub implementation. The actual OTLP processing and metric
-// aggregation will be wired up once the C ABI is finalized for batch ingest.
-
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -18,6 +6,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "std_msgs/msg/u_int8_multi_array.hpp"
+
+#include "terra_ros2_bridge_core.hpp"
 
 extern "C" {
 #include "terra.h"
@@ -28,10 +18,16 @@ using namespace std::chrono_literals;
 class TerraRos2Node : public rclcpp::Node {
 public:
     TerraRos2Node() : Node("terra_ros2_node") {
+        const std::string otlp_endpoint =
+            this->declare_parameter<std::string>("otlp_endpoint", "http://127.0.0.1:4318");
+        const int metrics_interval_ms =
+            this->declare_parameter<int>("metrics_interval_ms", 5000);
+
         // Initialize Terra with default config
         terra_config_t config = {};
         config.service_name = "terra-ros2";
-        config.service_version = "0.1.0";
+        config.service_version = "1.0.0";
+        config.otlp_endpoint = otlp_endpoint.c_str();
         terra_ = terra_init(&config);
 
         if (!terra_) {
@@ -39,6 +35,10 @@ public:
         } else {
             RCLCPP_INFO(this->get_logger(), "Terra instance initialized");
         }
+
+        bridge_ = std::make_unique<terra_ros2::TerraRos2BridgeCore>(
+            terra_,
+            std::make_shared<terra_ros2::CurlTraceForwarder>(otlp_endpoint));
 
         // Subscribe to trace data (raw bytes as UInt8MultiArray)
         trace_sub_ = this->create_subscription<std_msgs::msg::UInt8MultiArray>(
@@ -50,10 +50,12 @@ public:
 
         // Periodic metrics publishing timer (every 5 seconds)
         metrics_timer_ = this->create_wall_timer(
-            5s, std::bind(&TerraRos2Node::publish_metrics, this));
+            std::chrono::milliseconds(metrics_interval_ms),
+            std::bind(&TerraRos2Node::publish_metrics, this));
 
         RCLCPP_INFO(this->get_logger(),
-                     "Terra ROS 2 node started — listening on /terra/traces, publishing to /terra/metrics");
+                     "Terra ROS 2 node started — forwarding /terra/traces to %s and publishing metrics to /terra/metrics",
+                     otlp_endpoint.c_str());
     }
 
     ~TerraRos2Node() {
@@ -65,41 +67,34 @@ public:
 
 private:
     void trace_callback(const std_msgs::msg::UInt8MultiArray::SharedPtr msg) {
-        if (!terra_ || msg->data.empty()) return;
+        if (!bridge_) return;
 
-        // TODO: Forward raw OTLP bytes to Terra for local processing.
-        // The C ABI for batch ingest is not yet exposed — this is a placeholder.
-        // Future: terra_ingest_otlp(terra_, msg->data.data(), msg->data.size());
-        RCLCPP_DEBUG(this->get_logger(),
-                      "Received %zu bytes of trace data", msg->data.size());
-
-        spans_received_ += 1;
+        const bool forwarded = bridge_->ingest_trace_batch(msg->data.data(), msg->data.size());
+        if (forwarded) {
+            RCLCPP_DEBUG(
+                this->get_logger(),
+                "Forwarded %zu OTLP bytes from /terra/traces",
+                msg->data.size());
+        } else {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "Failed to forward %zu OTLP bytes from /terra/traces",
+                msg->data.size());
+        }
     }
 
     void publish_metrics() {
-        if (!terra_) return;
+        if (!bridge_) return;
 
         auto msg = std_msgs::msg::String();
-
-        // Gather diagnostics from Terra
-        uint64_t dropped = terra_spans_dropped(terra_);
-        bool degraded = terra_transport_degraded(terra_);
-        uint8_t state = terra_get_state(terra_);
-
-        // Build JSON metrics payload
-        msg.data = "{"
-            "\"spans_received\":" + std::to_string(spans_received_) + ","
-            "\"spans_dropped\":" + std::to_string(dropped) + ","
-            "\"transport_degraded\":" + (degraded ? "true" : "false") + ","
-            "\"lifecycle_state\":" + std::to_string(state) +
-            "}";
+        msg.data = bridge_->metrics_json();
 
         metrics_pub_->publish(msg);
         RCLCPP_DEBUG(this->get_logger(), "Published metrics: %s", msg.data.c_str());
     }
 
     terra_t *terra_ = nullptr;
-    uint64_t spans_received_ = 0;
+    std::unique_ptr<terra_ros2::TerraRos2BridgeCore> bridge_;
 
     rclcpp::Subscription<std_msgs::msg::UInt8MultiArray>::SharedPtr trace_sub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr metrics_pub_;

@@ -272,7 +272,7 @@ enum OTLPTestCompression {
     defer { compression_stream_destroy(&stream) }
 
     var result = preload
-    var flags: Int32 = Int32(COMPRESSION_STREAM_FINALIZE.rawValue)
+    let flags: Int32 = Int32(COMPRESSION_STREAM_FINALIZE.rawValue)
     let blockLimit = 64 * 1024
     var bufferSize = Swift.max(sourceSize, 64)
 

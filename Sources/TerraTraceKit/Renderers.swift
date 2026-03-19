@@ -1,13 +1,13 @@
 import Foundation
 
-struct StreamRenderer: Sendable {
-  let filter: TraceFilter?
+public struct StreamRenderer: Sendable {
+  public let filter: TraceFilter?
 
-  init(filter: TraceFilter? = nil) {
+  public init(filter: TraceFilter? = nil) {
     self.filter = filter
   }
 
-  func render(spans: [SpanRecord]) -> [String] {
+  public func render(spans: [SpanRecord]) -> [String] {
     let filtered = spans.filter { spanMatchesFilter($0, filter: filter) }
     let ordered = filtered.sorted(by: spanStreamSort)
 
@@ -25,14 +25,14 @@ struct StreamRenderer: Sendable {
   }
 }
 
-struct TreeRenderer: Sendable {
-  let filter: TraceFilter?
+public struct TreeRenderer: Sendable {
+  public let filter: TraceFilter?
 
-  init(filter: TraceFilter? = nil) {
+  public init(filter: TraceFilter? = nil) {
     self.filter = filter
   }
 
-  func render(snapshot: TraceSnapshot) -> String {
+  public func render(snapshot: TraceSnapshot) -> String {
     let filtered = snapshot.allSpans.filter { spanMatchesFilter($0, filter: filter) }
     guard !filtered.isEmpty else { return "" }
 

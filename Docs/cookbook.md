@@ -9,7 +9,11 @@ import Terra
 
 try await Terra.start()
 // CoreML and HTTP AI calls are now automatically traced.
-// Use presets for different environments:
+```
+
+Other common presets:
+
+```swift
 try await Terra.start(.init(preset: .production))
 try await Terra.start(.init(preset: .diagnostics))
 ```
@@ -131,12 +135,14 @@ _ = try await Terra
 ## Custom Configuration
 
 ```swift
-var config = Terra.Configuration()
+var config = Terra.Configuration(preset: .production)
 config.privacy = .redacted
-config.endpoint = URL(string: "http://127.0.0.1:4318")!
-config.serviceName = "com.example.app"
-config.serviceVersion = "3.0.0"
-config.persistence = .defaults()
+config.destination = .endpoint(URL(string: "http://127.0.0.1:4318")!)
+config.features = [.coreML, .http, .sessions]
+config.persistence = .balanced(
+    FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("terra-demo", isDirectory: true)
+)
 try await Terra.start(config)
 ```
 

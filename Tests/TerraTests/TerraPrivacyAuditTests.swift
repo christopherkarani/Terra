@@ -18,7 +18,7 @@ struct TerraPrivacyAuditTests {
     let span = try await captureSpan(
       privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256)
     ) {
-      _ = try await Terra.inference(model: "audit-model", prompt: secret).execute { "ok" }
+      _ = await Terra.inference(model: "audit-model", prompt: secret).execute { "ok" }
     }
 
     #expect(span.attributes[Terra.Keys.Terra.promptLength] == nil)
@@ -32,7 +32,7 @@ struct TerraPrivacyAuditTests {
     let span = try await captureSpan(
       privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256)
     ) {
-      _ = try await Terra.safetyCheck(name: "toxicity", subject: secret).execute { "ok" }
+      _ = await Terra.safetyCheck(name: "toxicity", subject: secret).execute { "ok" }
     }
 
     #expect(span.attributes[Terra.Keys.Terra.safetySubjectLength] == nil)
@@ -46,18 +46,18 @@ struct TerraPrivacyAuditTests {
     let privacy = Terra.Privacy(contentPolicy: .optIn, redaction: .hashHMACSHA256)
 
     let first = try await captureSpan(privacy: privacy) {
-      _ = try await Terra.inference(model: "audit-model", prompt: secret).execute { "ok" }
+      _ = await Terra.inference(model: "audit-model", prompt: secret).execute { "ok" }
     }
     #expect(first.attributes[Terra.Keys.Terra.promptHMACSHA256] == nil)
 
     let second = try await captureSpan(privacy: privacy) {
-      _ = try await Terra.inference(model: "audit-model", prompt: secret).includeContent().execute { "ok" }
+      _ = await Terra.inference(model: "audit-model", prompt: secret).includeContent().execute { "ok" }
     }
     #expect(second.attributes[Terra.Keys.Terra.promptHMACSHA256] != nil)
     #expect(second.attributes.values.allSatisfy { !$0.description.contains(secret) })
 
     let third = try await captureSpan(privacy: privacy) {
-      _ = try await Terra.inference(model: "audit-model", prompt: secret).execute { "ok" }
+      _ = await Terra.inference(model: "audit-model", prompt: secret).execute { "ok" }
     }
     #expect(third.attributes[Terra.Keys.Terra.promptHMACSHA256] == nil)
   }
@@ -68,7 +68,7 @@ struct TerraPrivacyAuditTests {
     let privacy = Terra.Privacy(contentPolicy: .optIn, redaction: .hashHMACSHA256)
 
     let span = try await captureSpan(privacy: privacy) {
-      _ = try await Terra
+      _ = await Terra
         .infer(Terra.ModelID("audit-model"), prompt: secret)
         .capture(.includeContent)
         .run { "ok" }
@@ -99,9 +99,9 @@ struct TerraPrivacyAuditTests {
     let spans = try await captureSpans(
       privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256)
     ) {
-      _ = try await Terra.agent(name: "planner") {
-        _ = try await Terra.inference(model: "planner-model", prompt: secret) { "ok" }
-        _ = try await Terra.tool(name: "search", callID: "call-1") { "ok" }
+      _ = await Terra.agent("planner").run {
+        _ = await Terra.infer(Terra.ModelID("planner-model"), prompt: secret).run { "ok" }
+        _ = await Terra.tool("search", callID: Terra.ToolCallID("call-1")).run { "ok" }
         return "done"
       }
     }
@@ -118,7 +118,7 @@ struct TerraPrivacyAuditTests {
     let span = try await captureSpan(
       privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256)
     ) {
-      _ = try await Terra.stream(model: "stream-model", prompt: secret).execute { trace in
+      _ = await Terra.stream(model: "stream-model", prompt: secret).execute { trace in
         trace.chunk(tokens: 2)
         return "ok"
       }

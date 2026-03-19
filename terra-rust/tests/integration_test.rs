@@ -19,16 +19,8 @@ fn test_init_and_shutdown() {
     // Drop calls shutdown automatically
 }
 
-/// NOTE: init_with_config currently fails because of an ABI mismatch between
-/// the Rust `terra_config_t` (C layout) and the Zig `TerraConfig` struct
-/// (contains Zig-specific types like `std.mem.Allocator` and function pointers
-/// with different calling conventions). The Zig `terra_init` export interprets
-/// the raw pointer as its own TerraConfig, so the C struct fields land at
-/// wrong offsets. This is a known limitation — config init needs a dedicated
-/// C-ABI config bridge in the Zig core. For now, `terra_init(NULL)` (default
-/// config) is the supported path.
 #[test]
-fn test_init_with_config_returns_error() {
+fn test_init_with_config() {
     let config = TerraConfig::new()
         .service_name("integration-test")
         .service_version("0.1.0")
@@ -41,12 +33,16 @@ fn test_init_with_config_returns_error() {
         .content_policy(ContentPolicy::Never)
         .redaction_strategy(RedactionStrategy::Drop);
 
-    // Currently fails due to ABI mismatch — document this as expected behavior
-    let result = Terra::init_with_config(&config);
-    assert!(
-        result.is_err(),
-        "init_with_config should fail until ABI bridge is implemented"
-    );
+    let terra = Terra::init_with_config(&config).expect("init_with_config failed");
+    assert!(terra.is_running());
+    assert_eq!(terra.state(), LifecycleState::Running);
+
+    let mut span = terra
+        .begin_inference_span("configured-model", None, false)
+        .expect("configured span creation failed");
+    span.set_string("gen_ai.request.model", "configured-model");
+    span.set_status(StatusCode::Ok, "configured startup succeeded");
+    span.end();
 }
 
 #[test]

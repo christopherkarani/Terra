@@ -41,6 +41,9 @@ extension Terra {
     func shutdown() {
       activeConfiguration = nil
       Terra._disableAutoInstrumentationsForShutdown()
+      #if canImport(CTerraBridge)
+      Terra.shutdownZigBackend()
+      #endif
       Terra._shutdownOpenTelemetry()
     }
 
