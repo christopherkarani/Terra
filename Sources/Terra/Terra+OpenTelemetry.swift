@@ -1,5 +1,9 @@
 import Foundation
 import OpenTelemetryApi
+
+#if canImport(CTerraBridge)
+  import CTerraBridge
+#endif
 import OpenTelemetryProtocolExporterHttp
 import OpenTelemetrySdk
 import PersistenceExporter
@@ -490,6 +494,11 @@ extension Terra {
     openTelemetryInstallLock.lock()
     guard installedOpenTelemetryConfiguration != nil else {
       openTelemetryInstallLock.unlock()
+      #if canImport(CTerraBridge)
+        if Terra._shutdownZigBackendIfInstalled() {
+          Runtime.shared.markStopped()
+        }
+      #endif
       return
     }
     Runtime.shared.markShuttingDown()

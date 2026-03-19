@@ -540,6 +540,8 @@ final class TerraZigNoOpSpan: Span, @unchecked Sendable {
 // MARK: - Zig Backend Installation
 
 extension Terra {
+  private static let zigBackendLock = NSLock()
+
   /// Install the Zig core as the active telemetry backend.
   ///
   /// This replaces the Swift OTel pipeline with the Zig-based engine:
@@ -553,7 +555,17 @@ extension Terra {
     serviceName: String? = nil,
     serviceVersion: String? = nil
   ) -> Bool {
+    zigBackendLock.lock()
+    defer { zigBackendLock.unlock() }
+
+    if _zigInstance != nil {
+      Runtime.shared.markRunning()
+      return true
+    }
+
+    Runtime.shared.markStarting()
     guard let instance = terra_init(nil) else {
+      Runtime.shared.markStopped()
       return false
     }
 
@@ -577,12 +589,27 @@ extension Terra {
     let zigProvider = TerraZigTracerProvider(instance: instance)
     OpenTelemetry.registerTracerProvider(tracerProvider: zigProvider)
 
+    Runtime.shared.markRunning()
     return true
   }
 
   /// The raw Zig instance pointer, if the Zig backend was installed.
   /// Used internally for shutdown and test support.
   package private(set) static var _zigInstance: OpaquePointer? = nil
+
+  /// Shuts down the Zig backend if it is active.
+  /// - Returns: `true` when a Zig instance was active and was shut down.
+  package static func _shutdownZigBackendIfInstalled() -> Bool {
+    zigBackendLock.lock()
+    guard let instance = _zigInstance else {
+      zigBackendLock.unlock()
+      return false
+    }
+    _zigInstance = nil
+    zigBackendLock.unlock()
+    _ = terra_shutdown(instance)
+    return true
+  }
 }
 
 // MARK: - Helpers
