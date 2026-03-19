@@ -54,7 +54,6 @@ private final class DiscoveryBridge: NSObject, NetServiceBrowserDelegate, NetSer
   }
 
   func start() {
-    browser.delegate = self
     timeoutTask = Task { [weak self] in
       guard let self else { return }
       let components = timeout.components
@@ -64,7 +63,12 @@ private final class DiscoveryBridge: NSObject, NetServiceBrowserDelegate, NetSer
       try? await Task.sleep(nanoseconds: nanos)
       finish(with: nil)
     }
-    browser.searchForServices(ofType: BonjourTerraDashboardDiscovery.serviceType, inDomain: "")
+
+    RunLoop.main.perform { [weak self] in
+      guard let self, !self.isFinished else { return }
+      self.browser.delegate = self
+      self.browser.searchForServices(ofType: BonjourTerraDashboardDiscovery.serviceType, inDomain: "")
+    }
   }
 
   func netServiceBrowser(
@@ -110,8 +114,14 @@ private final class DiscoveryBridge: NSObject, NetServiceBrowserDelegate, NetSer
     lock.unlock()
 
     timeoutTask?.cancel()
-    browser.stop()
+    RunLoop.main.perform { [browser] in
+      browser.stop()
+    }
     continuation.resume(returning: url)
     onFinish()
+  }
+
+  private var isFinished: Bool {
+    lock.withLock { didResume }
   }
 }

@@ -69,10 +69,6 @@ private enum InferenceFailure: Error {
   case failed
 }
 
-private enum SessionStartFailure: Error {
-  case failed
-}
-
 #if canImport(CoreML)
 private func unsupportedComputePlanSummary() -> TerraCoreMLComputePlanSummary {
   TerraCoreMLComputePlanSummary(
@@ -162,11 +158,49 @@ struct TerraSessionTests {
     #expect(sessionSpan.events.contains(where: { $0.name == "terra.memory.warning" }))
   }
 
-  @Test("TerraSession blocks simulator export even when runtime is already running")
-  func sessionBlocksSimulatorExportGate() async throws {
+  @Test("TerraSession marks simulator session spans as local-only when export is disabled")
+  func sessionMarksSimulatorSpansLocalOnly() async throws {
     Terra.lockTestingIsolation()
     defer { Terra.unlockTestingIsolation() }
-    Terra._setSimulatorExportBlocked(false)
+
+    let harness = SessionSpanHarness()
+    defer { harness.tearDown() }
+
+    var configuration = TerraSession.Configuration()
+    configuration.memorySamplingInterval = nil
+    configuration.autoStartRuntime = false
+
+    let session = TerraSession(
+      configuration: configuration,
+      dependencies: .init(
+        dashboardDiscovery: MockDashboardDiscovery(endpoint: nil),
+        logger: TestSessionLogger(),
+        isSimulator: true,
+        currentThermalState: { ProcessInfo.ThermalState.nominal },
+        memoryFootprint: { Optional<UInt64>.none }
+      )
+    )
+
+    try await session.start()
+    _ = try await session.recordInference(
+      modelName: "SimulatorModel",
+      featureSummaries: []
+    ) {
+      "ok"
+    }
+    await session.end()
+
+    let sessionSpan = try #require(harness.finishedSpans().first(where: { $0.name == Terra.SpanNames.session }))
+    let inferenceSpan = try #require(harness.finishedSpans().first(where: { $0.name == Terra.SpanNames.inference }))
+    #expect(sessionSpan.attributes[Terra.Keys.Terra.exportLocalOnly] == .bool(true))
+    #expect(inferenceSpan.attributes[Terra.Keys.Terra.exportLocalOnly] == .bool(true))
+  }
+
+  @Test("TerraSession leaves the process-wide export gate unchanged")
+  func sessionLeavesGlobalExportGateUntouched() async throws {
+    Terra.lockTestingIsolation()
+    defer { Terra.unlockTestingIsolation() }
+    Terra._setSimulatorExportBlocked(true)
     defer { Terra._setSimulatorExportBlocked(false) }
 
     var configuration = TerraSession.Configuration()
@@ -186,16 +220,18 @@ struct TerraSessionTests {
     )
 
     try await session.start()
-    #expect(Terra._isSimulatorExportBlocked)
+    #expect(Terra._isSimulatorExportBlocked == true)
     await session.end()
+    #expect(Terra._isSimulatorExportBlocked == true)
   }
 
-  @Test("TerraSession respects simulator export opt-in and restores the previous export gate")
-  func sessionRestoresSimulatorExportGateWhenOptedIn() async throws {
+  @Test("TerraSession simulator export opt-in keeps session spans exportable")
+  func sessionOptInLeavesSimulatorSpansExportable() async throws {
     Terra.lockTestingIsolation()
     defer { Terra.unlockTestingIsolation() }
-    Terra._setSimulatorExportBlocked(true)
-    defer { Terra._setSimulatorExportBlocked(false) }
+
+    let harness = SessionSpanHarness()
+    defer { harness.tearDown() }
 
     var configuration = TerraSession.Configuration()
     configuration.memorySamplingInterval = nil
@@ -214,39 +250,18 @@ struct TerraSessionTests {
     )
 
     try await session.start()
-    #expect(Terra._isSimulatorExportBlocked == false)
-    await session.end()
-    #expect(Terra._isSimulatorExportBlocked == true)
-  }
-
-  @Test("TerraSession restores the simulator export gate when start fails")
-  func sessionRestoresSimulatorExportGateAfterStartFailure() async {
-    Terra.lockTestingIsolation()
-    defer { Terra.unlockTestingIsolation() }
-    Terra._setSimulatorExportBlocked(false)
-    defer { Terra._setSimulatorExportBlocked(false) }
-
-    var configuration = TerraSession.Configuration()
-    configuration.memorySamplingInterval = nil
-    configuration.autoStartRuntime = true
-
-    let session = TerraSession(
-      configuration: configuration,
-      dependencies: .init(
-        dashboardDiscovery: MockDashboardDiscovery(endpoint: nil),
-        logger: TestSessionLogger(),
-        isSimulator: true,
-        currentThermalState: { ProcessInfo.ThermalState.nominal },
-        memoryFootprint: { Optional<UInt64>.none },
-        startRuntime: { _ in throw SessionStartFailure.failed },
-        isRuntimeRunning: { false }
-      )
-    )
-
-    await #expect(throws: SessionStartFailure.self) {
-      try await session.start()
+    _ = try await session.recordInference(
+      modelName: "OptInModel",
+      featureSummaries: []
+    ) {
+      "ok"
     }
-    #expect(Terra._isSimulatorExportBlocked == false)
+    await session.end()
+
+    let sessionSpan = try #require(harness.finishedSpans().first(where: { $0.name == Terra.SpanNames.session }))
+    let inferenceSpan = try #require(harness.finishedSpans().first(where: { $0.name == Terra.SpanNames.inference }))
+    #expect(sessionSpan.attributes[Terra.Keys.Terra.exportLocalOnly] == nil)
+    #expect(inferenceSpan.attributes[Terra.Keys.Terra.exportLocalOnly] == nil)
   }
 
   @Test("TerraSession resolves a discovered dashboard endpoint and falls back when unavailable")
@@ -467,6 +482,71 @@ struct TerraSessionTests {
     let duration = Double(span.attributes["terra.coreml.load.duration_ms"]?.description ?? "")
     let measuredDuration = try #require(duration)
     #expect(measuredDuration >= 45)
+  }
+
+  @Test("TerraSession model load cache keys vary by model configuration")
+  func sessionModelLoadCacheKeyIncludesConfiguration() async throws {
+    Terra.lockTestingIsolation()
+    defer { Terra.unlockTestingIsolation() }
+
+    let harness = SessionSpanHarness()
+    defer { harness.tearDown() }
+
+    let tempDirectory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("TerraSessionCacheKeyTests-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+    let modelURL = tempDirectory.appendingPathComponent("Config.mlmodelc")
+    try Data("demo".utf8).write(to: modelURL)
+
+    var configuration = TerraSession.Configuration()
+    configuration.memorySamplingInterval = nil
+    configuration.autoStartRuntime = false
+    configuration.modelLoadCacheURL = tempDirectory.appendingPathComponent("load-cache.json")
+
+    let session = TerraSession(
+      configuration: configuration,
+      dependencies: .init(
+        dashboardDiscovery: MockDashboardDiscovery(endpoint: nil),
+        logger: TestSessionLogger(),
+        isSimulator: false,
+        currentThermalState: { ProcessInfo.ThermalState.nominal },
+        memoryFootprint: { Optional<UInt64>.none },
+        computePlanSummary: { _, _ in
+          unsupportedComputePlanSummary()
+        }
+      )
+    )
+
+    let cpuOnly = MLModelConfiguration()
+    cpuOnly.computeUnits = .cpuOnly
+    let cpuAndANE = MLModelConfiguration()
+    cpuAndANE.computeUnits = .cpuAndNeuralEngine
+
+    try await session.start()
+    _ = try await session.recordModelLoad(
+      contentsOf: modelURL,
+      configuration: cpuOnly,
+      modelName: "ConfigModel"
+    ) {
+      "cpu-only"
+    }
+    _ = try await session.recordModelLoad(
+      contentsOf: modelURL,
+      configuration: cpuAndANE,
+      modelName: "ConfigModel"
+    ) {
+      "cpu-ane"
+    }
+    await session.end()
+
+    let spans = harness.finishedSpans().filter { $0.name == Terra.SpanNames.modelLoad }
+    let firstSpan = try #require(spans.first)
+    let secondSpan = try #require(spans.dropFirst().first)
+    #expect(firstSpan.attributes["terra.coreml.load.is_cold"] == .bool(true))
+    #expect(secondSpan.attributes["terra.coreml.load.is_cold"] == .bool(true))
+    #expect(firstSpan.attributes["terra.coreml.load.cache_key"] != secondSpan.attributes["terra.coreml.load.cache_key"])
   }
 
   @Test("TerraSession inference tracking records feature summaries, thermal state, and error type")

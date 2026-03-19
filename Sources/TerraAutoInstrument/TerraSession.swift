@@ -142,7 +142,6 @@ package actor TerraSession {
   private var thermalObserver: NSObjectProtocol?
   private var memoryWarningObserver: NSObjectProtocol?
   private var memorySamplingTask: Task<Void, Never>?
-  private var previousSimulatorExportBlocked: Bool?
   private static let modelLoadCacheStore = TerraSessionModelLoadCacheStore()
 
   package init(configuration: Configuration = .init()) {
@@ -164,60 +163,51 @@ package actor TerraSession {
   package func start() async throws {
     guard !isStarted else { return }
 
+    if keepsSessionSignalsLocal {
+      dependencies.logger.warning("Simulator export disabled. TerraSession will capture simulator spans locally but will not export them.")
+    }
+
+    if configuration.autoStartRuntime, !dependencies.isRuntimeRunning() {
+      var runtimeConfig = Terra.Configuration()
+      runtimeConfig.features = Terra._minimalFeatures()
+      if let endpoint = await resolveExporterEndpoint() {
+        runtimeConfig.destination = .endpoint(endpoint)
+      }
+      try await dependencies.startRuntime(runtimeConfig)
+    }
+
+    thermalStateLabel = TerraSessionDefaults.thermalStateLabel(dependencies.currentThermalState())
+    let keepsSessionSignalsLocal = self.keepsSessionSignalsLocal
+    let span = TerraSessionDefaults.makeSpan(named: Terra.SpanNames.session)
+    span.setAttributes(TerraSessionDefaults.sessionSignalAttributes([
+      "terra.session.id": .string(sessionID),
+      "terra.session.start_time_unix_ms": .int(Int(dependencies.currentDate().timeIntervalSince1970 * 1000)),
+      "terra.session.device_model": .string(TerraSessionDefaults.deviceModel()),
+      "terra.session.os_version": .string(TerraSessionDefaults.osVersion()),
+      "terra.device.is_simulator": .bool(dependencies.isSimulator),
+      Terra.Keys.Terra.thermalState: .string(thermalStateLabel),
+      Terra.Keys.Terra.runtime: .string("coreml"),
+    ], localOnly: keepsSessionSignalsLocal))
+
+    rootSpan = span
+    isStarted = true
+
     if dependencies.isSimulator {
-      previousSimulatorExportBlocked = Terra._isSimulatorExportBlocked
-      Terra._setSimulatorExportBlocked(!configuration.exportSimulatorMetrics)
-      if !configuration.exportSimulatorMetrics {
-        dependencies.logger.warning("Simulator export disabled. TerraSession will capture simulator spans locally but will not export them.")
-      }
-    }
-
-    do {
-      if configuration.autoStartRuntime, !dependencies.isRuntimeRunning() {
-        var runtimeConfig = Terra.Configuration()
-        runtimeConfig.features = Terra._minimalFeatures()
-        if let endpoint = await resolveExporterEndpoint() {
-          runtimeConfig.destination = .endpoint(endpoint)
-        }
-        try await dependencies.startRuntime(runtimeConfig)
-      }
-
-      thermalStateLabel = TerraSessionDefaults.thermalStateLabel(dependencies.currentThermalState())
-      let span = TerraSessionDefaults.makeSpan(named: Terra.SpanNames.session)
-      let startAttributes: [String: AttributeValue] = [
-        "terra.session.id": .string(sessionID),
-        "terra.session.start_time_unix_ms": .int(Int(dependencies.currentDate().timeIntervalSince1970 * 1000)),
-        "terra.session.device_model": .string(TerraSessionDefaults.deviceModel()),
-        "terra.session.os_version": .string(TerraSessionDefaults.osVersion()),
-        "terra.device.is_simulator": .bool(dependencies.isSimulator),
-        Terra.Keys.Terra.thermalState: .string(thermalStateLabel),
-        Terra.Keys.Terra.runtime: .string("coreml"),
+      dependencies.logger.warning("Simulator detected. Terra will label the session as simulator data.")
+      let warningAttributes: [String: AttributeValue] = [
+        "terra.warning.code": .string("simulator"),
+        "terra.warning.message": .string("Simulator metrics are not representative of on-device performance."),
       ]
-      span.setAttributes(startAttributes)
-
-      rootSpan = span
-      isStarted = true
-
-      if dependencies.isSimulator {
-        dependencies.logger.warning("Simulator detected. Terra will label the session as simulator data.")
-        let warningAttributes: [String: AttributeValue] = [
-          "terra.warning.code": .string("simulator"),
-          "terra.warning.message": .string("Simulator metrics are not representative of on-device performance."),
-        ]
-        span.addEvent(
-          name: "terra.warning",
-          attributes: warningAttributes,
-          timestamp: dependencies.currentDate()
-        )
-      }
-
-      installThermalObservation()
-      installMemoryWarningObservation()
-      startMemorySamplingIfNeeded()
-    } catch {
-      restoreSimulatorExportGateIfNeeded()
-      throw error
+      span.addEvent(
+        name: "terra.warning",
+        attributes: warningAttributes,
+        timestamp: dependencies.currentDate()
+      )
     }
+
+    installThermalObservation()
+    installMemoryWarningObservation()
+    startMemorySamplingIfNeeded()
   }
 
   package func end() async {
@@ -235,7 +225,6 @@ package actor TerraSession {
     }
     rootSpan?.end()
     rootSpan = nil
-    restoreSimulatorExportGateIfNeeded()
   }
 
   package func resolveExporterEndpoint() async -> URL? {
@@ -330,23 +319,24 @@ package actor TerraSession {
     modelName: String,
     _ load: @escaping @Sendable () async throws -> R
   ) async throws -> R {
-    let cacheKey = modelLoadCacheKey(for: url)
+    let cacheKey = modelLoadCacheKey(for: url, configuration: configuration)
     let cacheURL = self.configuration.modelLoadCacheURL
     let isCold = await Self.modelLoadCacheStore.isCold(cacheKey: cacheKey, fileURL: cacheURL)
     let thermalStateLabel = self.thermalStateLabel
+    let keepsSessionSignalsLocal = self.keepsSessionSignalsLocal
     let startedAt = TerraSessionDefaults.monotonicTime()
     let computePlanSummary = await dependencies.computePlanSummary(url, configuration)
 
-    return try await withSessionContext { [self, cacheKey, cacheURL, computePlanSummary, isCold, thermalStateLabel] in
+    return try await withSessionContext { [self, cacheKey, cacheURL, computePlanSummary, isCold, thermalStateLabel, keepsSessionSignalsLocal] in
       let span = TerraSessionDefaults.makeSpan(named: Terra.SpanNames.modelLoad)
-      span.setAttributes([
+      span.setAttributes(TerraSessionDefaults.sessionSignalAttributes([
         Terra.Keys.GenAI.requestModel: .string(modelName),
         Terra.Keys.Terra.runtime: .string("coreml"),
         Terra.Keys.Terra.thermalState: .string(thermalStateLabel),
         "terra.coreml.compute_units": .string(TerraSessionDefaults.computeUnitsLabel(configuration.computeUnits)),
         "terra.coreml.load.is_cold": .bool(isCold),
         "terra.coreml.load.cache_key": .string(cacheKey),
-      ])
+      ], localOnly: keepsSessionSignalsLocal))
       span.setAttributes(
         TerraCoreML.routeEvidence(
           computeUnits: configuration.computeUnits,
@@ -388,15 +378,16 @@ package actor TerraSession {
     _ body: @escaping @Sendable () async throws -> R
   ) async throws -> R {
     let thermalStateLabel = self.thermalStateLabel
-    return try await withSessionContext { [self, thermalStateLabel] in
+    let keepsSessionSignalsLocal = self.keepsSessionSignalsLocal
+    return try await withSessionContext { [self, thermalStateLabel, keepsSessionSignalsLocal] in
       let span = TerraSessionDefaults.makeSpan(named: Terra.SpanNames.inference)
-      var attributes: [String: AttributeValue] = [
+      var attributes = TerraSessionDefaults.sessionSignalAttributes([
         Terra.Keys.GenAI.operationName: .string("inference"),
         Terra.Keys.GenAI.requestModel: .string(modelName),
         Terra.Keys.Terra.runtime: .string("coreml"),
         Terra.Keys.Terra.thermalState: .string(thermalStateLabel),
         "terra.coreml.input_summary": .string(TerraSessionDefaults.serializedFeatureSummary(featureSummaries)),
-      ]
+      ], localOnly: keepsSessionSignalsLocal)
       if let computeUnits {
         attributes["terra.coreml.compute_units"] = .string(TerraSessionDefaults.computeUnitsLabel(computeUnits))
         attributes.merge(
@@ -478,19 +469,20 @@ package actor TerraSession {
     }
   }
 
-  private func modelLoadCacheKey(for url: URL) -> String {
+  private var keepsSessionSignalsLocal: Bool {
+    dependencies.isSimulator && !configuration.exportSimulatorMetrics
+  }
+
+  #if canImport(CoreML)
+  private func modelLoadCacheKey(for url: URL, configuration: MLModelConfiguration) -> String {
     let path = url.standardizedFileURL.path
     let modificationDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
       ?? .distantPast
-    let raw = "\(path)|\(modificationDate.timeIntervalSince1970)"
+    let configurationFingerprint = TerraSessionDefaults.modelLoadConfigurationFingerprint(configuration)
+    let raw = "\(path)|\(modificationDate.timeIntervalSince1970)|\(configurationFingerprint)"
     return TerraSessionDefaults.sha256(raw)
   }
-
-  private func restoreSimulatorExportGateIfNeeded() {
-    guard let previousSimulatorExportBlocked else { return }
-    Terra._setSimulatorExportBlocked(previousSimulatorExportBlocked)
-    self.previousSimulatorExportBlocked = nil
-  }
+  #endif
 }
 
 package actor TerraSessionModelLoadCacheStore {
@@ -597,6 +589,35 @@ private enum TerraSessionDefaults {
       return name
     }
     return "coreml-model"
+  }
+
+  static func modelLoadConfigurationFingerprint(_ configuration: MLModelConfiguration) -> String {
+    var components = [
+      "compute_units=\(computeUnitsLabel(configuration.computeUnits))",
+      "low_precision_gpu=\(configuration.allowLowPrecisionAccumulationOnGPU)",
+    ]
+
+    if let parameters = configuration.parameters, !parameters.isEmpty {
+      let serializedParameters = parameters
+        .map { key, value in
+          "\(String(describing: key))=\(String(describing: value))"
+        }
+        .sorted()
+        .joined(separator: ",")
+      components.append("parameters=\(serializedParameters)")
+    }
+
+    return components.joined(separator: "|")
+  }
+
+  static func sessionSignalAttributes(
+    _ attributes: [String: AttributeValue],
+    localOnly: Bool
+  ) -> [String: AttributeValue] {
+    guard localOnly else { return attributes }
+    var attributes = attributes
+    attributes[Terra.Keys.Terra.exportLocalOnly] = .bool(true)
+    return attributes
   }
 
   static func featureSummaries(from provider: any MLFeatureProvider) -> [TerraSession.FeatureSummary] {

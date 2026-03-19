@@ -214,6 +214,7 @@ let package = Package(
         "TerraTraceKit",
         .product(name: "InMemoryExporter", package: "opentelemetry-swift"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
+        .product(name: "PersistenceExporter", package: "opentelemetry-swift"),
       ],
       path: "Tests/TerraTests",
       exclude: ["CLAUDE.md"]

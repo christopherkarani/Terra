@@ -114,7 +114,11 @@ extension Terra {
     @discardableResult
     package func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
       guard shouldExport() else { return .success }
-      return spanExporter.export(spans: spans, explicitTimeout: explicitTimeout)
+      let exportableSpans = spans.filter { span in
+        span.attributes[Keys.Terra.exportLocalOnly] != .bool(true)
+      }
+      guard !exportableSpans.isEmpty else { return .success }
+      return spanExporter.export(spans: exportableSpans, explicitTimeout: explicitTimeout)
     }
 
     package func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
@@ -172,7 +176,11 @@ extension Terra {
 
     package func export(logRecords: [ReadableLogRecord], explicitTimeout: TimeInterval?) -> ExportResult {
       guard shouldExport() else { return .success }
-      return logExporter.export(logRecords: logRecords, explicitTimeout: explicitTimeout)
+      let exportableLogRecords = logRecords.filter { logRecord in
+        logRecord.attributes[Keys.Terra.exportLocalOnly] != .bool(true)
+      }
+      guard !exportableLogRecords.isEmpty else { return .success }
+      return logExporter.export(logRecords: exportableLogRecords, explicitTimeout: explicitTimeout)
     }
 
     package func shutdown(explicitTimeout: TimeInterval?) {
@@ -283,19 +291,21 @@ extension Terra {
 
   private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> (TracerProviderSdk, Bool) {
     func makeExporter() throws -> any SpanExporter {
-      let baseExporter = OtlpHttpTraceExporter(endpoint: configuration.otlpTracesEndpoint)
+      let networkExporter = SimulatorAwareSpanExporter(
+        spanExporter: OtlpHttpTraceExporter(endpoint: configuration.otlpTracesEndpoint)
+      )
       let exporter: any SpanExporter
       if let persistence = configuration.persistence {
         try FileManager.default.createDirectory(at: persistence.tracesStorageURL, withIntermediateDirectories: true, attributes: nil)
         exporter = try PersistenceSpanExporterDecorator(
-          spanExporter: baseExporter,
+          spanExporter: networkExporter,
           storageURL: persistence.tracesStorageURL,
           performancePreset: persistence.performancePreset
         )
       } else {
-        exporter = baseExporter
+        exporter = networkExporter
       }
-      return SimulatorAwareSpanExporter(spanExporter: exporter)
+      return exporter
     }
 
     let spanProcessor: SpanProcessor?
@@ -362,19 +372,21 @@ extension Terra {
 
   private static func installMetrics(configuration: OpenTelemetryConfiguration) throws -> MeterProviderSdk {
     func makeExporter() throws -> any MetricExporter {
-      let baseExporter = OtlpHttpMetricExporter(endpoint: configuration.otlpMetricsEndpoint)
+      let networkExporter = SimulatorAwareMetricExporter(
+        metricExporter: OtlpHttpMetricExporter(endpoint: configuration.otlpMetricsEndpoint)
+      )
       let exporter: any MetricExporter
       if let persistence = configuration.persistence {
         try FileManager.default.createDirectory(at: persistence.metricsStorageURL, withIntermediateDirectories: true, attributes: nil)
         exporter = try PersistenceMetricExporterDecorator(
-          metricExporter: baseExporter,
+          metricExporter: networkExporter,
           storageURL: persistence.metricsStorageURL,
           performancePreset: persistence.performancePreset
         )
       } else {
-        exporter = baseExporter
+        exporter = networkExporter
       }
-      return SimulatorAwareMetricExporter(metricExporter: exporter)
+      return exporter
     }
 
     let exporter = try makeExporter()
@@ -397,19 +409,21 @@ extension Terra {
 
   private static func installLogs(configuration: OpenTelemetryConfiguration) throws -> (LoggerProviderSdk, any LogRecordProcessor) {
     func makeExporter() throws -> any LogRecordExporter {
-      let baseExporter = OtlpHttpLogExporter(endpoint: configuration.otlpLogsEndpoint)
+      let networkExporter = SimulatorAwareLogExporter(
+        logExporter: OtlpHttpLogExporter(endpoint: configuration.otlpLogsEndpoint)
+      )
       let exporter: any LogRecordExporter
       if let persistence = configuration.persistence {
         try FileManager.default.createDirectory(at: persistence.logsStorageURL, withIntermediateDirectories: true, attributes: nil)
         exporter = try PersistenceLogExporterDecorator(
-          logRecordExporter: baseExporter,
+          logRecordExporter: networkExporter,
           storageURL: persistence.logsStorageURL,
           performancePreset: persistence.performancePreset
         )
       } else {
-        exporter = baseExporter
+        exporter = networkExporter
       }
-      return SimulatorAwareLogExporter(logExporter: exporter)
+      return exporter
     }
 
     let exporter = try makeExporter()
