@@ -99,6 +99,92 @@ extension Terra {
     }
   }
 
+  package final class SimulatorAwareSpanExporter: SpanExporter {
+    private let spanExporter: any SpanExporter
+    private let shouldExport: @Sendable () -> Bool
+
+    package init(
+      spanExporter: any SpanExporter,
+      shouldExport: @escaping @Sendable () -> Bool = { !Terra._isSimulatorExportBlocked }
+    ) {
+      self.spanExporter = spanExporter
+      self.shouldExport = shouldExport
+    }
+
+    @discardableResult
+    package func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+      guard shouldExport() else { return .success }
+      return spanExporter.export(spans: spans, explicitTimeout: explicitTimeout)
+    }
+
+    package func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+      guard shouldExport() else { return .success }
+      return spanExporter.flush(explicitTimeout: explicitTimeout)
+    }
+
+    package func shutdown(explicitTimeout: TimeInterval?) {
+      spanExporter.shutdown(explicitTimeout: explicitTimeout)
+    }
+  }
+
+  package final class SimulatorAwareMetricExporter: MetricExporter {
+    private let metricExporter: any MetricExporter
+    private let shouldExport: @Sendable () -> Bool
+
+    package init(
+      metricExporter: any MetricExporter,
+      shouldExport: @escaping @Sendable () -> Bool = { !Terra._isSimulatorExportBlocked }
+    ) {
+      self.metricExporter = metricExporter
+      self.shouldExport = shouldExport
+    }
+
+    package func export(metrics: [MetricData]) -> ExportResult {
+      guard shouldExport() else { return .success }
+      return metricExporter.export(metrics: metrics)
+    }
+
+    package func flush() -> ExportResult {
+      guard shouldExport() else { return .success }
+      return metricExporter.flush()
+    }
+
+    package func shutdown() -> ExportResult {
+      metricExporter.shutdown()
+    }
+
+    package func getAggregationTemporality(for instrument: InstrumentType) -> AggregationTemporality {
+      metricExporter.getAggregationTemporality(for: instrument)
+    }
+  }
+
+  package final class SimulatorAwareLogExporter: LogRecordExporter {
+    private let logExporter: any LogRecordExporter
+    private let shouldExport: @Sendable () -> Bool
+
+    package init(
+      logExporter: any LogRecordExporter,
+      shouldExport: @escaping @Sendable () -> Bool = { !Terra._isSimulatorExportBlocked }
+    ) {
+      self.logExporter = logExporter
+      self.shouldExport = shouldExport
+    }
+
+    package func export(logRecords: [ReadableLogRecord], explicitTimeout: TimeInterval?) -> ExportResult {
+      guard shouldExport() else { return .success }
+      return logExporter.export(logRecords: logRecords, explicitTimeout: explicitTimeout)
+    }
+
+    package func shutdown(explicitTimeout: TimeInterval?) {
+      logExporter.shutdown(explicitTimeout: explicitTimeout)
+    }
+
+    package func forceFlush(explicitTimeout: TimeInterval?) -> ExportResult {
+      guard shouldExport() else { return .success }
+      return logExporter.forceFlush(explicitTimeout: explicitTimeout)
+    }
+  }
+
   package static func defaultPersistenceStorageURL() -> URL {
     let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
       ?? FileManager.default.temporaryDirectory
@@ -198,15 +284,18 @@ extension Terra {
   private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> (TracerProviderSdk, Bool) {
     func makeExporter() throws -> any SpanExporter {
       let baseExporter = OtlpHttpTraceExporter(endpoint: configuration.otlpTracesEndpoint)
-      guard let persistence = configuration.persistence else {
-        return baseExporter
+      let exporter: any SpanExporter
+      if let persistence = configuration.persistence {
+        try FileManager.default.createDirectory(at: persistence.tracesStorageURL, withIntermediateDirectories: true, attributes: nil)
+        exporter = try PersistenceSpanExporterDecorator(
+          spanExporter: baseExporter,
+          storageURL: persistence.tracesStorageURL,
+          performancePreset: persistence.performancePreset
+        )
+      } else {
+        exporter = baseExporter
       }
-      try FileManager.default.createDirectory(at: persistence.tracesStorageURL, withIntermediateDirectories: true, attributes: nil)
-      return try PersistenceSpanExporterDecorator(
-        spanExporter: baseExporter,
-        storageURL: persistence.tracesStorageURL,
-        performancePreset: persistence.performancePreset
-      )
+      return SimulatorAwareSpanExporter(spanExporter: exporter)
     }
 
     let spanProcessor: SpanProcessor?
@@ -274,15 +363,18 @@ extension Terra {
   private static func installMetrics(configuration: OpenTelemetryConfiguration) throws -> MeterProviderSdk {
     func makeExporter() throws -> any MetricExporter {
       let baseExporter = OtlpHttpMetricExporter(endpoint: configuration.otlpMetricsEndpoint)
-      guard let persistence = configuration.persistence else {
-        return baseExporter
+      let exporter: any MetricExporter
+      if let persistence = configuration.persistence {
+        try FileManager.default.createDirectory(at: persistence.metricsStorageURL, withIntermediateDirectories: true, attributes: nil)
+        exporter = try PersistenceMetricExporterDecorator(
+          metricExporter: baseExporter,
+          storageURL: persistence.metricsStorageURL,
+          performancePreset: persistence.performancePreset
+        )
+      } else {
+        exporter = baseExporter
       }
-      try FileManager.default.createDirectory(at: persistence.metricsStorageURL, withIntermediateDirectories: true, attributes: nil)
-      return try PersistenceMetricExporterDecorator(
-        metricExporter: baseExporter,
-        storageURL: persistence.metricsStorageURL,
-        performancePreset: persistence.performancePreset
-      )
+      return SimulatorAwareMetricExporter(metricExporter: exporter)
     }
 
     let exporter = try makeExporter()
@@ -306,15 +398,18 @@ extension Terra {
   private static func installLogs(configuration: OpenTelemetryConfiguration) throws -> (LoggerProviderSdk, any LogRecordProcessor) {
     func makeExporter() throws -> any LogRecordExporter {
       let baseExporter = OtlpHttpLogExporter(endpoint: configuration.otlpLogsEndpoint)
-      guard let persistence = configuration.persistence else {
-        return baseExporter
+      let exporter: any LogRecordExporter
+      if let persistence = configuration.persistence {
+        try FileManager.default.createDirectory(at: persistence.logsStorageURL, withIntermediateDirectories: true, attributes: nil)
+        exporter = try PersistenceLogExporterDecorator(
+          logRecordExporter: baseExporter,
+          storageURL: persistence.logsStorageURL,
+          performancePreset: persistence.performancePreset
+        )
+      } else {
+        exporter = baseExporter
       }
-      try FileManager.default.createDirectory(at: persistence.logsStorageURL, withIntermediateDirectories: true, attributes: nil)
-      return try PersistenceLogExporterDecorator(
-        logRecordExporter: baseExporter,
-        storageURL: persistence.logsStorageURL,
-        performancePreset: persistence.performancePreset
-      )
+      return SimulatorAwareLogExporter(logExporter: exporter)
     }
 
     let exporter = try makeExporter()
@@ -340,6 +435,19 @@ extension Terra {
   /// `true` when Terra has been started and is actively collecting telemetry.
   package static var _isRunning: Bool {
     _lifecycleState == .running
+  }
+
+  private static let _simulatorExportBlockedLock = NSLock()
+  private static var _simulatorExportBlockedValue = false
+
+  /// Blocks or unblocks telemetry export when running in the simulator.
+  package static func _setSimulatorExportBlocked(_ blocked: Bool) {
+    _simulatorExportBlockedLock.withLock { _simulatorExportBlockedValue = blocked }
+  }
+
+  /// Returns whether simulator export is currently blocked.
+  package static var _isSimulatorExportBlocked: Bool {
+    _simulatorExportBlockedLock.withLock { _simulatorExportBlockedValue }
   }
 
   // MARK: - Shutdown

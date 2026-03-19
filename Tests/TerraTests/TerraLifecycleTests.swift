@@ -1,4 +1,5 @@
 import XCTest
+import OpenTelemetrySdk
 @testable import TerraCore
 
 final class TerraLifecycleTests: XCTestCase {
@@ -114,6 +115,74 @@ final class TerraLifecycleTests: XCTestCase {
     XCTAssertNoThrow(try Terra.installOpenTelemetry(minimalConfig(port: 14097)))
     XCTAssertTrue(Terra._isRunning)
   }
+
+  func testSimulatorAwareSpanExporter_skipsExportUntilEnabled() {
+    let gate = TestExportGate(shouldExport: false)
+    let base = CountingSpanExporter()
+    let exporter = Terra.SimulatorAwareSpanExporter(
+      spanExporter: base,
+      shouldExport: { gate.shouldExport }
+    )
+
+    XCTAssertEqual(exporter.export(spans: [], explicitTimeout: nil), .success)
+    XCTAssertEqual(exporter.flush(explicitTimeout: nil), .success)
+    XCTAssertEqual(base.exportCalls, 0)
+    XCTAssertEqual(base.flushCalls, 0)
+
+    gate.shouldExport = true
+
+    XCTAssertEqual(exporter.export(spans: [], explicitTimeout: nil), .success)
+    XCTAssertEqual(exporter.flush(explicitTimeout: nil), .success)
+    exporter.shutdown(explicitTimeout: nil)
+
+    XCTAssertEqual(base.exportCalls, 1)
+    XCTAssertEqual(base.flushCalls, 1)
+    XCTAssertEqual(base.shutdownCalls, 1)
+  }
+
+  func testSimulatorAwareMetricExporter_skipsExportUntilEnabled() {
+    let gate = TestExportGate(shouldExport: false)
+    let base = CountingMetricExporter()
+    let exporter = Terra.SimulatorAwareMetricExporter(
+      metricExporter: base,
+      shouldExport: { gate.shouldExport }
+    )
+
+    XCTAssertEqual(exporter.export(metrics: []), .success)
+    XCTAssertEqual(exporter.flush(), .success)
+    XCTAssertEqual(base.exportCalls, 0)
+    XCTAssertEqual(base.flushCalls, 0)
+
+    gate.shouldExport = true
+
+    XCTAssertEqual(exporter.export(metrics: []), .success)
+    XCTAssertEqual(exporter.flush(), .success)
+    XCTAssertEqual(exporter.shutdown(), .success)
+
+    XCTAssertEqual(base.exportCalls, 1)
+    XCTAssertEqual(base.flushCalls, 1)
+    XCTAssertEqual(base.shutdownCalls, 1)
+  }
+
+  func testSimulatorAwareLogExporter_skipsExportUntilEnabled() {
+    let gate = TestExportGate(shouldExport: false)
+    let base = CountingLogRecordExporter()
+    let exporter = Terra.SimulatorAwareLogExporter(
+      logExporter: base,
+      shouldExport: { gate.shouldExport }
+    )
+
+    XCTAssertEqual(exporter.export(logRecords: [], explicitTimeout: nil), .success)
+    XCTAssertEqual(base.exportCalls, 0)
+
+    gate.shouldExport = true
+
+    XCTAssertEqual(exporter.export(logRecords: [], explicitTimeout: nil), .success)
+    exporter.shutdown(explicitTimeout: nil)
+
+    XCTAssertEqual(base.exportCalls, 1)
+    XCTAssertEqual(base.shutdownCalls, 1)
+  }
 }
 
 // MARK: - Helpers
@@ -129,4 +198,93 @@ private func minimalConfig(port: Int = 14099) -> Terra.OpenTelemetryConfiguratio
     otlpMetricsEndpoint: URL(string: "http://127.0.0.1:\(port)/v1/metrics")!,
     otlpLogsEndpoint: URL(string: "http://127.0.0.1:\(port)/v1/logs")!
   )
+}
+
+private final class CountingSpanExporter: SpanExporter {
+  private(set) var exportCalls = 0
+  private(set) var flushCalls = 0
+  private(set) var shutdownCalls = 0
+
+  func export(spans: [SpanData], explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+    _ = spans
+    _ = explicitTimeout
+    exportCalls += 1
+    return .success
+  }
+
+  func flush(explicitTimeout: TimeInterval?) -> SpanExporterResultCode {
+    _ = explicitTimeout
+    flushCalls += 1
+    return .success
+  }
+
+  func shutdown(explicitTimeout: TimeInterval?) {
+    _ = explicitTimeout
+    shutdownCalls += 1
+  }
+}
+
+private final class CountingMetricExporter: MetricExporter {
+  private(set) var exportCalls = 0
+  private(set) var flushCalls = 0
+  private(set) var shutdownCalls = 0
+
+  func export(metrics: [MetricData]) -> ExportResult {
+    _ = metrics
+    exportCalls += 1
+    return .success
+  }
+
+  func flush() -> ExportResult {
+    flushCalls += 1
+    return .success
+  }
+
+  func shutdown() -> ExportResult {
+    shutdownCalls += 1
+    return .success
+  }
+
+  func getAggregationTemporality(for instrument: InstrumentType) -> AggregationTemporality {
+    _ = instrument
+    return .cumulative
+  }
+}
+
+private final class CountingLogRecordExporter: LogRecordExporter {
+  private(set) var exportCalls = 0
+  private(set) var shutdownCalls = 0
+  private(set) var forceFlushCalls = 0
+
+  func export(logRecords: [ReadableLogRecord], explicitTimeout: TimeInterval?) -> ExportResult {
+    _ = logRecords
+    _ = explicitTimeout
+    exportCalls += 1
+    return .success
+  }
+
+  func shutdown(explicitTimeout: TimeInterval?) {
+    _ = explicitTimeout
+    shutdownCalls += 1
+  }
+
+  func forceFlush(explicitTimeout: TimeInterval?) -> ExportResult {
+    _ = explicitTimeout
+    forceFlushCalls += 1
+    return .success
+  }
+}
+
+private final class TestExportGate: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value: Bool
+
+  init(shouldExport: Bool) {
+    self.value = shouldExport
+  }
+
+  var shouldExport: Bool {
+    get { lock.withLock { value } }
+    set { lock.withLock { value = newValue } }
+  }
 }
