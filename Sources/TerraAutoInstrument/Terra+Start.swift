@@ -181,7 +181,8 @@ extension Terra {
 
     // 1. Set up telemetry providers — Zig core (preferred) or Swift OTel fallback
     #if canImport(CTerraBridge)
-    let zigInstalled = installZigBackend(
+    let zigBackendAllowed = config.openTelemetry.persistence == nil
+    let zigInstalled = zigBackendAllowed && installZigBackend(
       serviceName: serviceName,
       serviceVersion: serviceVersion
     )

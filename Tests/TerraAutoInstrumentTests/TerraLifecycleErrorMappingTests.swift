@@ -51,6 +51,8 @@ final class TerraLifecycleErrorMappingTests {
       #expect(Bool(false), "Expected Terra.start to throw persistence_setup_failed.")
     } catch let error as Terra.TerraError {
       #expect(error.code == .persistence_setup_failed)
+      #expect(Terra.lifecycleState == .stopped)
+      #expect(!Terra.isRunning)
     } catch {
       #expect(Bool(false), "Unexpected error type: \(error)")
     }
