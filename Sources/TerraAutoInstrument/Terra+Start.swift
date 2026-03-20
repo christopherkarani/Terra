@@ -27,11 +27,21 @@ extension Terra {
       case instant(URL)
     }
 
-    public enum Profiling: Sendable, Equatable {
-      case off
-      case memory
-      case metal
-      case all
+    public struct Profiling: OptionSet, Sendable, Hashable {
+      public let rawValue: Int
+      public init(rawValue: Int) { self.rawValue = rawValue }
+
+      public static let memory   = Profiling(rawValue: 1 << 0)
+      public static let metal    = Profiling(rawValue: 1 << 1)
+      public static let thermal  = Profiling(rawValue: 1 << 2)
+      public static let power    = Profiling(rawValue: 1 << 3)
+      public static let espresso = Profiling(rawValue: 1 << 4)
+      public static let ane      = Profiling(rawValue: 1 << 5)
+
+      // Progressive disclosure tiers
+      public static let standard: Profiling = [.memory, .thermal]
+      public static let extended: Profiling = [.memory, .thermal, .metal, .power]
+      public static let all: Profiling      = [.memory, .thermal, .metal, .power, .espresso, .ane]
     }
 
     public struct Features: OptionSet, Sendable, Equatable {
@@ -57,19 +67,19 @@ extension Terra {
         destination = .localDashboard
         features = [.coreML, .http, .sessions, .signposts]
         persistence = .off
-        profiling = .off
+        profiling = []
       case .production:
         privacy = .redacted
         destination = .localDashboard
         features = [.coreML, .http, .sessions]
         persistence = .balanced(Terra.defaultPersistenceStorageURL())
-        profiling = .off
+        profiling = []
       case .diagnostics:
         privacy = .redacted
         destination = .localDashboard
         features = [.coreML, .http, .sessions, .signposts, .logs]
         persistence = .balanced(Terra.defaultPersistenceStorageURL())
-        profiling = .all
+        profiling = .standard
       }
     }
 
@@ -96,8 +106,12 @@ extension Terra {
 
       // derive profiling
       let profilingSettings = _ProfilingSettings(
-        enableMemoryProfiler: profiling == .memory || profiling == .all,
-        enableMetalProfiler: profiling == .metal || profiling == .all
+        enableMemoryProfiler: profiling.contains(.memory),
+        enableMetalProfiler: profiling.contains(.metal),
+        enableThermalMonitor: profiling.contains(.thermal),
+        enablePowerProfiler: profiling.contains(.power),
+        enableEspressoCapture: profiling.contains(.espresso),
+        enableANEProfiler: profiling.contains(.ane)
       )
 
       // derive instrumentations
@@ -218,6 +232,9 @@ extension Terra {
     if config.profiling.enableMetalProfiler {
       TerraMetalProfiler.install()
     }
+    if config.profiling.enableThermalMonitor {
+      ThermalMonitor.install()
+    }
 
     // 4. Enable HTTP AI API auto-instrumentation (and optional OpenClaw gateway coverage)
     var monitoredHosts = config.aiAPIHosts
@@ -273,13 +290,25 @@ extension Terra {
   package struct _ProfilingSettings: Sendable, Equatable {
     package var enableMemoryProfiler: Bool
     package var enableMetalProfiler: Bool
+    package var enableThermalMonitor: Bool
+    package var enablePowerProfiler: Bool
+    package var enableEspressoCapture: Bool
+    package var enableANEProfiler: Bool
 
     package init(
       enableMemoryProfiler: Bool = false,
-      enableMetalProfiler: Bool = false
+      enableMetalProfiler: Bool = false,
+      enableThermalMonitor: Bool = false,
+      enablePowerProfiler: Bool = false,
+      enableEspressoCapture: Bool = false,
+      enableANEProfiler: Bool = false
     ) {
       self.enableMemoryProfiler = enableMemoryProfiler
       self.enableMetalProfiler = enableMetalProfiler
+      self.enableThermalMonitor = enableThermalMonitor
+      self.enablePowerProfiler = enablePowerProfiler
+      self.enableEspressoCapture = enableEspressoCapture
+      self.enableANEProfiler = enableANEProfiler
     }
   }
 
