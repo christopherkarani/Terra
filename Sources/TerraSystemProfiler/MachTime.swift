@@ -6,6 +6,14 @@ import Darwin
 
 public enum MachTime {
 
+  #if canImport(Darwin)
+  private static let timebase: mach_timebase_info_data_t = {
+    var info = mach_timebase_info_data_t()
+    mach_timebase_info(&info)
+    return info
+  }()
+  #endif
+
   public struct Timestamp: Sendable, Hashable {
     public let rawValue: UInt64
 
@@ -26,8 +34,6 @@ public enum MachTime {
     #if canImport(Darwin)
     guard end.rawValue > start.rawValue else { return 0 }
     let elapsed = end.rawValue - start.rawValue
-    var timebase = mach_timebase_info_data_t()
-    mach_timebase_info(&timebase)
     return elapsed * UInt64(timebase.numer) / UInt64(timebase.denom)
     #else
     guard end.rawValue > start.rawValue else { return 0 }

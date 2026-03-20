@@ -1,5 +1,6 @@
 import Foundation
 import OpenTelemetryApi
+import TerraSystemProfiler
 
 #if canImport(CryptoKit)
   import CryptoKit
@@ -226,18 +227,7 @@ final class Runtime {
   }
 
   static func thermalStateLabel() -> String {
-    switch ProcessInfo.processInfo.thermalState {
-    case .nominal:
-      return "nominal"
-    case .fair:
-      return "fair"
-    case .serious:
-      return "serious"
-    case .critical:
-      return "critical"
-    @unknown default:
-      return "unknown"
-    }
+    ThermalMonitor.stateLabel(ProcessInfo.processInfo.thermalState)
   }
 }
 

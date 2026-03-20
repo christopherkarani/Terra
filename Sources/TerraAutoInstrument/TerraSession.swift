@@ -673,18 +673,7 @@ private enum TerraSessionDefaults {
   #endif
 
   static func thermalStateLabel(_ state: ProcessInfo.ThermalState) -> String {
-    switch state {
-    case .nominal:
-      return "nominal"
-    case .fair:
-      return "fair"
-    case .serious:
-      return "serious"
-    case .critical:
-      return "critical"
-    @unknown default:
-      return "unknown"
-    }
+    ThermalMonitor.stateLabel(state)
   }
 
   static func serializedFeatureSummary(_ summaries: [TerraSession.FeatureSummary]) -> String {

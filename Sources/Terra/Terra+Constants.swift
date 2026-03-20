@@ -134,7 +134,6 @@ extension Terra {
       package static let espressoMemoryBoundOps = "terra.espresso.memory_bound_ops"
       package static let espressoComputeBoundOps = "terra.espresso.compute_bound_ops"
       package static let espressoAvgWorkUnitEfficiency = "terra.espresso.avg_work_unit_efficiency"
-      package static let espressoCaptureStatus = "terra.espresso.capture_status"
 
       // MARK: Power metrics (macOS)
       package static let powerCpuWatts = "terra.power.cpu_watts"
@@ -142,6 +141,19 @@ extension Terra {
       package static let powerAneWatts = "terra.power.ane_watts"
       package static let powerPackageWatts = "terra.power.package_watts"
       package static let powerSampleCount = "terra.power.sample_count"
+
+      // MARK: Compute plan analysis
+      package static let computePlanTotalOps = "terra.compute_plan.total_ops"
+      package static let computePlanAneOps = "terra.compute_plan.ane_ops"
+      package static let computePlanGpuOps = "terra.compute_plan.gpu_ops"
+      package static let computePlanCpuOps = "terra.compute_plan.cpu_ops"
+      package static let computePlanAneUtilization = "terra.compute_plan.ane_utilization"
+      package static let computePlanDominantDevice = "terra.compute_plan.dominant_device"
+      package static let computePlanIsMixedExecution = "terra.compute_plan.is_mixed_execution"
+
+      // MARK: ANE fallback assessment
+      package static let aneFallbackLikely = "terra.ane.fallback_likely"
+      package static let aneFallbackConfidence = "terra.ane.fallback_confidence"
 
       // MARK: ANE hardware profiling
       package static let aneHardwareExecutionTimeNs = "terra.ane.hardware_execution_time_ns"

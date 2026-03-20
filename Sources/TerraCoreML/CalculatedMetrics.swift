@@ -53,14 +53,7 @@ public enum ComputeDeviceGuess: String, Sendable, TelemetryAttributeConvertible 
       return
     }
 
-    // Heuristic thresholds
-    if inferenceTimeMs < 20 {
-      self = .likelyANE
-    } else if inferenceTimeMs < 100 {
-      self = .likelyGPU
-    } else {
-      self = .likelyCPU
-    }
+    self.init(inferenceTimeMs: inferenceTimeMs)
   }
   #endif
 

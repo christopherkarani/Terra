@@ -5,10 +5,11 @@ public enum PowerMetricsCollector {
   private static let lock = NSLock()
   private static var process: Process?
   private static var pipe: Pipe?
-  private static var collectedSamples: [PowerSample] = []
+
+  private static let _isAvailable: Bool = FileManager.default.isExecutableFile(atPath: "/usr/bin/powermetrics")
 
   public static func isAvailable() -> Bool {
-    FileManager.default.isExecutableFile(atPath: "/usr/bin/powermetrics")
+    _isAvailable
   }
 
   public static func start(domains: PowerDomains = .all, intervalMs: Int = 1000) {
@@ -35,8 +36,6 @@ public enum PowerMetricsCollector {
     proc.standardOutput = outputPipe
     proc.standardError = FileHandle.nullDevice
 
-    collectedSamples = []
-
     do {
       try proc.run()
       process = proc
@@ -52,12 +51,10 @@ public enum PowerMetricsCollector {
     let outputPipe = pipe
     process = nil
     pipe = nil
-    let existingSamples = collectedSamples
-    collectedSamples = []
     lock.unlock()
 
     guard let proc, let outputPipe else {
-      return PowerSummary.from(existingSamples)
+      return PowerSummary.from([])
     }
 
     proc.terminate()
@@ -67,7 +64,7 @@ public enum PowerMetricsCollector {
     let output = String(data: data, encoding: .utf8) ?? ""
 
     // powermetrics outputs multiple samples separated by "***"
-    var samples = existingSamples
+    var samples: [PowerSample] = []
     let sections = output.components(separatedBy: "***")
     for section in sections {
       if let sample = PowerMetricsParser.parse(section) {

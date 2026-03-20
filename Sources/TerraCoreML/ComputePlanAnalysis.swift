@@ -6,36 +6,35 @@ import TerraCore
 import TerraSystemProfiler
 
 package struct ComputePlanAnalysis: Sendable, TelemetryAttributeConvertible {
-  public let totalOps: Int
-  public let aneOps: Int
-  public let gpuOps: Int
-  public let cpuOps: Int
+  package let totalOps: Int
+  package let aneOps: Int
+  package let gpuOps: Int
+  package let cpuOps: Int
 
-  public var aneUtilization: Double {
+  package var aneUtilization: Double {
     guard totalOps > 0 else { return 0 }
     return Double(aneOps) / Double(totalOps)
   }
 
-  public var dominantDevice: String {
+  package var dominantDevice: String {
     if aneOps >= gpuOps && aneOps >= cpuOps { return "ane" }
     if gpuOps >= aneOps && gpuOps >= cpuOps { return "gpu" }
     return "cpu"
   }
 
-  public var isMixedExecution: Bool {
-    let devices = [aneOps > 0, gpuOps > 0, cpuOps > 0]
-    return devices.filter { $0 }.count > 1
+  package var isMixedExecution: Bool {
+    (aneOps > 0 ? 1 : 0) + (gpuOps > 0 ? 1 : 0) + (cpuOps > 0 ? 1 : 0) > 1
   }
 
-  public var telemetryAttributes: [String: AttributeValue] {
+  package var telemetryAttributes: [String: AttributeValue] {
     [
-      "terra.compute_plan.total_ops": .int(totalOps),
-      "terra.compute_plan.ane_ops": .int(aneOps),
-      "terra.compute_plan.gpu_ops": .int(gpuOps),
-      "terra.compute_plan.cpu_ops": .int(cpuOps),
-      "terra.compute_plan.ane_utilization": .double(aneUtilization),
-      "terra.compute_plan.dominant_device": .string(dominantDevice),
-      "terra.compute_plan.is_mixed_execution": .bool(isMixedExecution),
+      Terra.Keys.Terra.computePlanTotalOps: .int(totalOps),
+      Terra.Keys.Terra.computePlanAneOps: .int(aneOps),
+      Terra.Keys.Terra.computePlanGpuOps: .int(gpuOps),
+      Terra.Keys.Terra.computePlanCpuOps: .int(cpuOps),
+      Terra.Keys.Terra.computePlanAneUtilization: .double(aneUtilization),
+      Terra.Keys.Terra.computePlanDominantDevice: .string(dominantDevice),
+      Terra.Keys.Terra.computePlanIsMixedExecution: .bool(isMixedExecution),
     ]
   }
 
@@ -61,7 +60,7 @@ package struct ComputePlanAnalysis: Sendable, TelemetryAttributeConvertible {
     )
   }
 
-  public func assessANEFallback(observedInferenceTimeMs: Double) -> ANEFallbackAssessment {
+  package func assessANEFallback(observedInferenceTimeMs: Double) -> ANEFallbackAssessment {
     // If ANE utilization is high but inference is slow, ANE fallback likely occurred
     let highANERatio = aneUtilization > 0.5
     let slowForANE = observedInferenceTimeMs > 50
@@ -84,10 +83,10 @@ package struct ANEFallbackAssessment: Sendable, TelemetryAttributeConvertible {
   package let isFallbackLikely: Bool
   package let confidence: Terra.ExecutionRouteConfidence
 
-  public var telemetryAttributes: [String: AttributeValue] {
+  package var telemetryAttributes: [String: AttributeValue] {
     [
-      "terra.ane.fallback_likely": .bool(isFallbackLikely),
-      "terra.ane.fallback_confidence": .string(confidence.rawValue),
+      Terra.Keys.Terra.aneFallbackLikely: .bool(isFallbackLikely),
+      Terra.Keys.Terra.aneFallbackConfidence: .string(confidence.rawValue),
     ]
   }
 }

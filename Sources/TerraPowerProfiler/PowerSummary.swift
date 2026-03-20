@@ -30,12 +30,19 @@ public struct PowerSummary: Sendable, TelemetryAttributeConvertible {
       )
     }
 
+    var cpu = 0.0, gpu = 0.0, ane = 0.0, pkg = 0.0
+    for s in samples {
+      cpu += s.cpuWatts
+      gpu += s.gpuWatts
+      ane += s.aneWatts
+      pkg += s.packageWatts
+    }
     let count = Double(samples.count)
     return PowerSummary(
-      averageCpuWatts: samples.reduce(0) { $0 + $1.cpuWatts } / count,
-      averageGpuWatts: samples.reduce(0) { $0 + $1.gpuWatts } / count,
-      averageAneWatts: samples.reduce(0) { $0 + $1.aneWatts } / count,
-      averagePackageWatts: samples.reduce(0) { $0 + $1.packageWatts } / count,
+      averageCpuWatts: cpu / count,
+      averageGpuWatts: gpu / count,
+      averageAneWatts: ane / count,
+      averagePackageWatts: pkg / count,
       sampleCount: samples.count
     )
   }

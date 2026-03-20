@@ -30,10 +30,9 @@ public enum ModelSizeDetector {
 
   public static func detectSize(of modelURL: URL) -> ModelSize? {
     let path = modelURL.path
-    let fm = FileManager.default
 
-    // Try .mlmodelc (compiled model)
-    if path.hasSuffix(".mlmodelc") || fm.fileExists(atPath: modelURL.appendingPathComponent("weights").path) {
+    // Try .mlmodelc (compiled model) — scanWeightsDirectory handles missing dirs
+    if path.hasSuffix(".mlmodelc") {
       return scanWeightsDirectory(
         modelURL.appendingPathComponent("weights"),
         format: .compiledModel
@@ -46,9 +45,7 @@ public enum ModelSizeDetector {
         .appendingPathComponent("Data")
         .appendingPathComponent("com.apple.CoreML")
         .appendingPathComponent("weights")
-      if fm.fileExists(atPath: weightsDir.path) {
-        return scanWeightsDirectory(weightsDir, format: .modelPackage)
-      }
+      return scanWeightsDirectory(weightsDir, format: .modelPackage)
     }
 
     return nil
