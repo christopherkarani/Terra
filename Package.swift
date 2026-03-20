@@ -22,6 +22,7 @@ let package = Package(
     .library(name: "TerraMetalProfiler", targets: ["TerraMetalProfiler"]),
     .library(name: "TerraSystemProfiler", targets: ["TerraSystemProfiler"]),
     .library(name: "TerraAccelerate", targets: ["TerraAccelerate"]),
+    .library(name: "TerraPowerProfiler", targets: ["TerraPowerProfiler"]),
     .library(name: "TerraTracedMacro", targets: ["TerraTracedMacro"]),
     .executable(name: "TerraSample", targets: ["TerraSample"]),
     .executable(name: "TerraSDKBenchmarks", targets: ["TerraSDKBenchmarks"])
@@ -151,6 +152,14 @@ let package = Package(
       path: "Sources/TerraSystemProfiler"
     ),
     .target(
+      name: "TerraPowerProfiler",
+      dependencies: [
+        "TerraSystemProfiler",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+      ],
+      path: "Sources/TerraPowerProfiler"
+    ),
+    .target(
       name: "TerraLlama",
       dependencies: [
         "TerraCore",
@@ -199,6 +208,14 @@ let package = Package(
 
     // MARK: - Test Targets
 
+    .testTarget(
+      name: "TerraPowerProfilerTests",
+      dependencies: [
+        "TerraPowerProfiler",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+      ],
+      path: "Tests/TerraPowerProfilerTests"
+    ),
     .testTarget(
       name: "TerraSystemProfilerTests",
       dependencies: [

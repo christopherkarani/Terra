@@ -136,6 +136,13 @@ extension Terra {
       package static let espressoAvgWorkUnitEfficiency = "terra.espresso.avg_work_unit_efficiency"
       package static let espressoCaptureStatus = "terra.espresso.capture_status"
 
+      // MARK: Power metrics (macOS)
+      package static let powerCpuWatts = "terra.power.cpu_watts"
+      package static let powerGpuWatts = "terra.power.gpu_watts"
+      package static let powerAneWatts = "terra.power.ane_watts"
+      package static let powerPackageWatts = "terra.power.package_watts"
+      package static let powerSampleCount = "terra.power.sample_count"
+
       // MARK: Execution route diagnostics
       package static let execRouteRequested = "terra.exec.route.requested"
       package static let execRouteObserved = "terra.exec.route.observed"
