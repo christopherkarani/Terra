@@ -15,19 +15,19 @@ import Testing
     #expect(!config.features.contains(.logs))
     if case .localDashboard = config.destination { } else { Issue.record("Expected .localDashboard") }
     if case .off = config.persistence { } else { Issue.record("Expected .off persistence") }
-    if case .off = config.profiling { } else { Issue.record("Expected .off profiling") }
+    #expect(config.profiling.isEmpty)
   }
 
   @Test func productionPresetEnablesPersistence() {
     let config = Terra.Configuration(preset: .production)
     if case .balanced = config.persistence { } else { Issue.record("Expected .balanced persistence") }
-    if case .off = config.profiling { } else { Issue.record("Expected .off profiling in production") }
+    #expect(config.profiling.isEmpty)
     #expect(!config.features.contains(.logs))
   }
 
   @Test func diagnosticsPresetEnablesAll() {
     let config = Terra.Configuration(preset: .diagnostics)
-    if case .all = config.profiling { } else { Issue.record("Expected .all profiling") }
+    #expect(config.profiling == .standard)
     if case .balanced = config.persistence { } else { Issue.record("Expected .balanced persistence") }
     #expect(config.features.contains(.logs))
     #expect(config.features.contains(.signposts))
