@@ -129,6 +129,13 @@ extension Terra {
       package static let modelInferenceTimeMs = "terra.model.inference_time_ms"
       package static let modelComputeDeviceGuess = "terra.model.compute_device_guess"
 
+      // MARK: Espresso log capture (macOS)
+      package static let espressoTotalGFlops = "terra.espresso.total_gflops"
+      package static let espressoMemoryBoundOps = "terra.espresso.memory_bound_ops"
+      package static let espressoComputeBoundOps = "terra.espresso.compute_bound_ops"
+      package static let espressoAvgWorkUnitEfficiency = "terra.espresso.avg_work_unit_efficiency"
+      package static let espressoCaptureStatus = "terra.espresso.capture_status"
+
       // MARK: Execution route diagnostics
       package static let execRouteRequested = "terra.exec.route.requested"
       package static let execRouteObserved = "terra.exec.route.observed"
