@@ -1,0 +1,4 @@
+module CTerraANEBridge {
+    header "terra_ane_bridge.h"
+    export *
+}

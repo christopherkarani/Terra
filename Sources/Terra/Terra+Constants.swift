@@ -143,6 +143,13 @@ extension Terra {
       package static let powerPackageWatts = "terra.power.package_watts"
       package static let powerSampleCount = "terra.power.sample_count"
 
+      // MARK: ANE hardware profiling
+      package static let aneHardwareExecutionTimeNs = "terra.ane.hardware_execution_time_ns"
+      package static let aneHostOverheadUs = "terra.ane.host_overhead_us"
+      package static let aneSegmentCount = "terra.ane.segment_count"
+      package static let aneFullyANE = "terra.ane.fully_ane"
+      package static let aneAvailable = "terra.ane.available"
+
       // MARK: Execution route diagnostics
       package static let execRouteRequested = "terra.exec.route.requested"
       package static let execRouteObserved = "terra.exec.route.observed"
