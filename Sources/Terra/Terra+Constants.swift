@@ -116,6 +116,19 @@ extension Terra {
       package static let latencyModelLoadMs = "terra.coreml.load.duration_ms"
       package static let latencyE2EMs = "terra.latency.e2e_ms"
 
+      // MARK: Thermal monitoring
+      package static let thermalPeakState = "terra.thermal.peak_state"
+      package static let thermalTimeThrottledS = "terra.thermal.time_throttled_s"
+
+      // MARK: Model size & bandwidth
+      package static let modelSizeBytes = "terra.model.size_bytes"
+      package static let modelSizeMB = "terra.model.size_mb"
+      package static let modelWeightFileCount = "terra.model.weight_file_count"
+      package static let modelFormat = "terra.model.format"
+      package static let modelBandwidthGBps = "terra.model.bandwidth_gbps"
+      package static let modelInferenceTimeMs = "terra.model.inference_time_ms"
+      package static let modelComputeDeviceGuess = "terra.model.compute_device_guess"
+
       // MARK: Execution route diagnostics
       package static let execRouteRequested = "terra.exec.route.requested"
       package static let execRouteObserved = "terra.exec.route.observed"
