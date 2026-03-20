@@ -235,6 +235,15 @@ extension Terra {
     if config.profiling.enableThermalMonitor {
       ThermalMonitor.install()
     }
+    // Note: .power and .ane profilers require opt-in targets (TerraPowerProfiler,
+    // TerraANEProfiler) that are not dependencies of the Terra umbrella. Users
+    // wanting those profilers import and install them directly. The settings flags
+    // are reserved so downstream wrappers can read and act on them.
+    #if os(macOS)
+    if config.profiling.enableEspressoCapture {
+      EspressoLogCapture.start()
+    }
+    #endif
 
     // 4. Enable HTTP AI API auto-instrumentation (and optional OpenClaw gateway coverage)
     var monitoredHosts = config.aiAPIHosts

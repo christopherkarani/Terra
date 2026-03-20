@@ -44,13 +44,14 @@ enum EspressoLogParser {
 
   static func parse(_ output: String) -> [CostModelEntry] {
     output.components(separatedBy: "\n").compactMap { line in
-      let nsLine = line as NSString
-      guard let match = pattern.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)),
+      let range = NSRange(line.startIndex..., in: line)
+      guard let match = pattern.firstMatch(in: line, range: range),
             match.numberOfRanges == 9
       else { return nil }
 
       func str(_ index: Int) -> String {
-        nsLine.substring(with: match.range(at: index))
+        guard let swiftRange = Range(match.range(at: index), in: line) else { return "" }
+        return String(line[swiftRange])
       }
 
       return CostModelEntry(

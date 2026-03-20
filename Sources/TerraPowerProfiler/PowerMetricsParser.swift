@@ -38,13 +38,11 @@ enum PowerMetricsParser {
   }
 
   private static func extractMilliwatts(from line: String) -> Double? {
-    // Extract numeric value before "mW"
-    let components = line.components(separatedBy: ":")
-    guard components.count >= 2 else { return nil }
-    let valuePart = components[1].trimmingCharacters(in: .whitespaces)
-    // Remove " mW" suffix
-    let numericString = valuePart
-      .replacingOccurrences(of: " mW", with: "")
+    // Split on first ":" only — preserves any subsequent colons in label text
+    let parts = line.split(separator: ":", maxSplits: 1)
+    guard parts.count == 2 else { return nil }
+    let numericString = parts[1]
+      .replacingOccurrences(of: "mW", with: "")
       .trimmingCharacters(in: .whitespaces)
     return Double(numericString)
   }

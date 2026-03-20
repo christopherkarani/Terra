@@ -18,8 +18,13 @@ static void _terra_ane_ensure_lock(void) {
 }
 
 bool terra_ane_is_available(void) {
-    Class cls = NSClassFromString(@"_ANEPerformanceStats");
-    return cls != nil;
+    static BOOL _cached = NO;
+    static BOOL _result = NO;
+    if (!_cached) {
+        _result = NSClassFromString(@"_ANEPerformanceStats") != nil;
+        _cached = YES;
+    }
+    return _result;
 }
 
 bool terra_ane_install_swizzling(void) {

@@ -116,7 +116,8 @@ extension Terra {
       package static let latencyModelLoadMs = "terra.coreml.load.duration_ms"
       package static let latencyE2EMs = "terra.latency.e2e_ms"
 
-      // MARK: Thermal monitoring
+      // MARK: Thermal monitoring (profiled state from ThermalProfile)
+      package static let thermalProfileState = "terra.thermal.state"
       package static let thermalPeakState = "terra.thermal.peak_state"
       package static let thermalTimeThrottledS = "terra.thermal.time_throttled_s"
 
