@@ -138,6 +138,7 @@ let package = Package(
     .target(
       name: "TerraMetalProfiler",
       dependencies: [
+        "TerraSystemProfiler",
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
       ],
       path: "Sources/TerraMetalProfiler"
@@ -198,6 +199,14 @@ let package = Package(
 
     // MARK: - Test Targets
 
+    .testTarget(
+      name: "TerraSystemProfilerTests",
+      dependencies: [
+        "TerraSystemProfiler",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+      ],
+      path: "Tests/TerraSystemProfilerTests"
+    ),
     .testTarget(
       name: "TerraTests",
       dependencies: [

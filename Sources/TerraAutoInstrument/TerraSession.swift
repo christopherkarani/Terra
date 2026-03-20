@@ -342,7 +342,7 @@ package actor TerraSession {
           computeUnits: configuration.computeUnits,
           captureMode: .heuristic,
           confidence: .low
-        ).attributes
+        ).telemetryAttributes
       )
       span.setAttributes(computePlanSummary.telemetryAttributes)
 
@@ -395,7 +395,7 @@ package actor TerraSession {
             computeUnits: computeUnits,
             captureMode: .heuristic,
             confidence: .low
-          ).attributes
+          ).telemetryAttributes
         ) { _, newValue in newValue }
       }
       span.setAttributes(attributes)

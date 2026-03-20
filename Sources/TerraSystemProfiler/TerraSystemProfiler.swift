@@ -6,36 +6,26 @@ import Darwin
 #endif
 
 public enum TerraSystemProfiler {
-  public struct MemorySnapshot: Sendable {
+  public struct MemorySnapshot: Sendable, TelemetryAttributeConvertible {
     public let residentBytes: UInt64
     public let timestamp: Date
-  }
 
-  private final class MemoryProfilerState: @unchecked Sendable {
-    private let lock = NSLock()
-    private var enabled = false
-
-    func enable() {
-      lock.lock()
-      enabled = true
-      lock.unlock()
-    }
-
-    func readIsEnabled() -> Bool {
-      lock.lock()
-      defer { lock.unlock() }
-      return enabled
+    public var telemetryAttributes: [String: AttributeValue] {
+      [
+        "process.memory.resident_bytes": .int(Int(residentBytes)),
+        "process.memory.resident_mb": .double(Double(residentBytes) / 1_048_576),
+      ]
     }
   }
 
-  private static let memoryProfilerState = MemoryProfilerState()
+  private static let state = ProfilerInstallState<TerraSystemProfiler>()
 
-  public static func installMemoryProfiler() {
-    memoryProfilerState.enable()
+  public static func install() {
+    state.install()
   }
 
-  public static var isMemoryProfilerEnabled: Bool {
-    memoryProfilerState.readIsEnabled()
+  public static var isInstalled: Bool {
+    state.isInstalled
   }
 
   public static func captureMemorySnapshot() -> MemorySnapshot? {

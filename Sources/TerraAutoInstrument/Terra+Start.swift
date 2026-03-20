@@ -213,7 +213,7 @@ extension Terra {
 
     // 3b. Optional low-level profilers.
     if config.profiling.enableMemoryProfiler {
-      TerraSystemProfiler.installMemoryProfiler()
+      TerraSystemProfiler.install()
     }
     if config.profiling.enableMetalProfiler {
       TerraMetalProfiler.install()

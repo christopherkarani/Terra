@@ -1,36 +1,20 @@
 import Foundation
 import OpenTelemetryApi
+import TerraSystemProfiler
 
 /// Runtime-toggleable Metal profiling hooks.
 ///
 /// This target intentionally starts as a light wrapper so adopters can opt in
 /// without paying overhead until counters are attached.
 public enum TerraMetalProfiler {
-  private final class InstallState: @unchecked Sendable {
-    private let lock = NSLock()
-    private var isInstalled = false
-
-    func install() {
-      lock.lock()
-      isInstalled = true
-      lock.unlock()
-    }
-
-    func readIsInstalled() -> Bool {
-      lock.lock()
-      defer { lock.unlock() }
-      return isInstalled
-    }
-  }
-
-  private static let installState = InstallState()
+  private static let state = ProfilerInstallState<TerraMetalProfiler>()
 
   public static func install() {
-    installState.install()
+    state.install()
   }
 
   public static var isInstalled: Bool {
-    installState.readIsInstalled()
+    state.isInstalled
   }
 
   public static func attributes(

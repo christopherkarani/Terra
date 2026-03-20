@@ -1,4 +1,5 @@
 import OpenTelemetryApi
+import TerraSystemProfiler
 
 extension Terra {
   package enum ExecutionRouteCaptureMode: String, Sendable {
@@ -14,7 +15,7 @@ extension Terra {
     case low
   }
 
-  package struct ExecutionRouteEvidence: Sendable {
+  package struct ExecutionRouteEvidence: Sendable, TelemetryAttributeConvertible {
     package var requested: String?
     package var observed: String?
     package var estimatedPrimary: String?
@@ -38,7 +39,7 @@ extension Terra {
       self.confidence = confidence
     }
 
-    package var attributes: [String: AttributeValue] {
+    package var telemetryAttributes: [String: AttributeValue] {
       var attributes: [String: AttributeValue] = [:]
       if let requested {
         attributes[Keys.Terra.execRouteRequested] = .string(requested)
