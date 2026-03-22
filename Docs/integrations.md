@@ -1,66 +1,289 @@
-# Integrations (Core ML, MLX)
+# Integrations
 
-Terra keeps its core API runtime-agnostic. You instrument your boundaries and attach backend metadata as low-cardinality attributes.
+Terra integrates with Apple ML frameworks and popular GenAI backends. This guide covers setup and best practices for each integration.
 
 ## Core ML
 
-Capture deterministic runtime facts:
+Capture deterministic runtime facts from CoreML model executions.
 
-- model identifier (stable string)
-- compute units (`cpuAndGPU`, `all`, etc.)
-- bounded input shape/batch metadata
+### Automatic Span Emission
+
+Terra automatically instruments CoreML via method swizzling when enabled:
 
 ```swift
 import CoreML
-import TerraCoreML
 import Terra
 
-let result = await Terra
+try await Terra.start(.init(preset: .production))
+
+// Auto-instrumented — spans created automatically
+let model = try MLModel(contentsOf: modelURL)
+let prediction = try model.prediction(from: inputProvider)
+
+// Spans include:
+// - gen_ai.operation.name = "infer"
+// - gen_ai.request.model = model identifier
+// - terra.auto_instrumented = true
+```
+
+### MLModelConfiguration
+
+Configure compute units for your workload:
+
+```swift
+import CoreML
+
+let config = MLModelConfiguration()
+
+// CPU + GPU (default, balanced)
+config.computeUnits = .cpuAndGPU
+
+// All accelerators including Neural Engine
+config.computeUnits = .all
+
+// Debugging: CPU only
+config.computeUnits = .cpuOnly
+
+// GPU only
+config.computeUnits = .gpuOnly
+```
+
+### Manual Attribution
+
+Attach model-specific metadata using Terra's canonical API:
+
+```swift
+import CoreML
+import Terra
+
+try await Terra.start(.init(preset: .quickstart))
+
+let result = try await Terra
   .infer(
-    Terra.ModelID("coreml/com.yourorg.model@v3"),
+    Terra.ModelID("coreml/com.yourorg.StableDiffusion@v2"),
     runtime: Terra.RuntimeID("coreml"),
     provider: Terra.ProviderID("coreml")
   )
-  .attr(.init("terra.coreml.compute_units"), "all")
-  .run {
+  .run { trace in
+    trace.tag("terra.coreml.compute_units", "all")
+    trace.tag("terra.coreml.model_version", "2.1")
+    trace.tag("terra.coreml.batch_size", "1")
     let config = MLModelConfiguration()
     config.computeUnits = .all
-    // call Core ML here
-    return "ok"
+    let model = try MLModel(contentsOf: modelURL, configuration: config)
+    let prediction = try model.prediction(from: inputProvider)
+    return "generated"
   }
-
-_ = result
 ```
 
-## MLX
+### Excluding Models
 
-Capture bounded runtime labels:
-
-- device: `cpu`, `gpu`, `ane`
-- quantization/dtype: `q4`, `fp16`, etc.
-- bounded batch size
+Exclude low-latency models from tracing overhead:
 
 ```swift
+// When using Terra.start() with feature flags, CoreML instrumentation
+// is controlled via Configuration.Features.coreML
+
+// For fine-grained exclusion, use CoreMLInstrumentation directly:
+CoreMLInstrumentation.install(.init(
+  enabled: true,
+  excludedModels: ["low-latency-model-id", "streaming-model-id"]
+))
+```
+
+## MLX (Apple Silicon ML)
+
+Track MLX model executions with bounded metadata:
+
+```swift
+import MLX
 import Terra
 
-let result = await Terra
+try await Terra.start(.init(preset: .quickstart))
+
+// Capture bounded runtime labels for MLX models
+let result = try await Terra
   .infer(
     Terra.ModelID("mlx/local/llama-3.2-1b"),
     runtime: Terra.RuntimeID("mlx"),
     provider: Terra.ProviderID("mlx")
   )
-  .attr(.init("terra.mlx.device"), "gpu")
-  .attr(.init("terra.mlx.quantization"), "q4")
-  .run {
-    // call MLX here
-    return "ok"
+  .run { trace in
+    trace.tag("terra.mlx.device", "gpu")           // cpu, gpu, ane
+    trace.tag("terra.mlx.quantization", "q4")      // q4, q8, fp16, fp32
+    trace.tag("terra.mlx.batch_size", "1")
+    // MLX inference here
+    let output = try await mlxModel.generate(prompt: "Hello")
+    return output
   }
-
-_ = result
 ```
 
-## Cardinality + Privacy Rules
+### Device Selection
 
-- Do not attach raw prompts/tool args/model outputs as attributes.
-- Prefer counts/latencies and bounded labels.
-- For content capture on specific calls, use `.capture(.includeContent)`.
+```swift
+// Device types for terra.mlx.device:
+// - "cpu" — CPU only
+// - "gpu" — Apple GPU (unified memory)
+// - "ane" — Apple Neural Engine (int8 quantization)
+```
+
+### Quantization Labels
+
+```swift
+// Quantization types for terra.mlx.quantization:
+// - "fp32" — Full precision
+// - "fp16" — Half precision
+// - "q8" — 8-bit quantization
+// - "q4" — 4-bit quantization (most compressed)
+```
+
+## FoundationModels (Apple On-Device AI)
+
+Trace Foundation Models sessions with automatic transcript capture:
+
+```swift
+import FoundationModels
+import Terra
+
+try await Terra.start(.init(preset: .quickstart))
+
+@available(macOS 26.0, iOS 26.0, *)
+func chat() async throws {
+  let session = Terra.TracedSession(
+    model: .default,
+    instructions: "You are a helpful assistant.",
+    modelIdentifier: Terra.ModelID("apple/on-device-model")
+  )
+
+  // Automatic span with generation options, tool calls, guardrail events
+  let response = try await session.respond(to: "Hello!")
+  print(response)
+}
+```
+
+### Streaming Responses
+
+```swift
+@available(macOS 26.0, iOS 26.0, *)
+func streamChat() async throws {
+  let session = Terra.TracedSession()
+
+  let stream = session.streamResponse(to: "Write a story...")
+
+  for try await chunk in stream {
+    print(chunk, terminator: "")
+  }
+}
+```
+
+### Structured Output with Generable
+
+```swift
+@available(macOS 26.0, iOS 26.0, *)
+struct WeatherInfo: Generable {
+  var city: String
+  var temperature: Int
+  var condition: String
+}
+
+@available(macOS 26.0, iOS 26.0, *)
+func structuredOutput() async throws {
+  let session = Terra.TracedSession()
+
+  let weather = try await session.respond(
+    to: "What's the weather in San Francisco?",
+    generating: WeatherInfo.self
+  )
+  // weather.city, weather.temperature, weather.condition
+}
+```
+
+### Content Capture Control
+
+```swift
+@available(macOS 26.0, iOS 26.0, *)
+func contentCapture() async throws {
+  let session = Terra.TracedSession()
+
+  // Default: no content captured (respects privacy policy)
+  let privateResponse = try await session.respond(to: "Sensitive query")
+
+  // Development: include full prompt/response
+  let debugResponse = try await session.respond(
+    to: "Query with debug",
+    promptCapture: .includeContent
+  )
+}
+```
+
+## Privacy and Cardinality Rules
+
+**Critical**: Follow these rules to prevent sensitive data leaks and cardinality explosions:
+
+### Do
+
+- Attach counts and latencies as numeric attributes
+- Use bounded string labels for model/device/runtime identifiers
+- Capture content only with explicit `.includeContent()` and only in development
+- Use ``Terra/PrivacyPolicy`` to control default behavior
+
+### Don't
+
+- Attach raw prompts or tool arguments as attributes
+- Attach model outputs as attributes
+- Use unbounded array attributes
+- Capture content in production
+
+### Example: Proper Attribution
+
+```swift
+// GOOD: Bounded labels, numeric metrics via trace handle
+Terra
+  .infer(modelID, prompt: "...")
+  .run { trace in
+    trace.tag("gen_ai.usage.input_tokens", "150")
+    trace.tag("gen_ai.usage.output_tokens", "42")
+    trace.tag("gen_ai.response.model", "gpt-4o")
+    // ...
+  }
+
+// Note: Use trace.tag() for string attributes. For numeric metrics,
+// use trace.tokens(input:output:) instead.
+```
+
+## HTTP AI API Auto-Instrumentation
+
+Terra automatically instruments HTTP requests to known AI API endpoints:
+
+```swift
+import Terra
+
+// HTTP auto-instrumentation is enabled by default
+try await Terra.start(.init(preset: .quickstart))
+
+// Requests to monitored hosts are automatically traced
+let client = OpenAIClient(apiKey: "...")  // OpenAI, Anthropic, etc.
+let response = try await client.chat.create(model: "gpt-4o", messages: [...])
+
+// Spans include:
+// - http.method, http.url, http.status_code
+// - gen_ai.operation.name, gen_ai.request.model
+// - gen_ai.usage.input_tokens, gen_ai.usage.output_tokens
+```
+
+Configure monitored hosts explicitly:
+
+```swift
+var config = Terra.Configuration(preset: .quickstart)
+config.features = [.http]
+
+// Custom hosts are monitored alongside defaults
+try await Terra.start(config)
+```
+
+## See Also
+
+- <doc:TerraCore> — Privacy, lifecycle, configuration
+- <doc:CoreML-Integration> — CoreML integration details
+- <doc:FoundationModels> — FoundationModels integration details
+- <doc:API-Reference> — Complete API reference

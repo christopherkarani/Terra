@@ -8,48 +8,205 @@ import OpenTelemetryApi
 import OpenTelemetrySdk
 
 extension Terra {
+  /// Configuration for Terra initialization.
+  ///
+  /// `Configuration` groups all runtime settings for Terra — including privacy policy,
+  /// telemetry destination, enabled features, persistence, and hardware profiling. Use
+  /// one of the built-in `Preset` values for common setups, or configure each option
+  /// individually for fine-grained control.
+  ///
+  /// - Note: All properties have sensible defaults via the `.quickstart` preset.
+  ///   Call `Terra.start()` with no arguments for zero-config setup.
+  ///
+  /// - SeeAlso: `Terra.start(_:)`
   public struct Configuration: Sendable, Equatable {
 
+    /// Predefined configuration presets for common use cases.
+    ///
+    /// Each preset applies a specific combination of privacy, features, persistence,
+    /// and profiling settings tuned for the target environment.
     public enum Preset: Sendable, Equatable {
+      /// Minimal setup for local development.
+      ///
+      /// Privacy is set to `.redacted`, CoreML and HTTP instrumentation are enabled,
+      /// and no persistence or profiling is active. Traces are sent to the local
+      /// dashboard endpoint (`http://127.0.0.1:4318`).
       case quickstart
+
+      /// Production configuration with local persistence.
+      ///
+      /// Privacy is set to `.redacted`, CoreML and HTTP instrumentation are enabled,
+      /// signposts are disabled, and traces/metrics are persisted to disk in balanced
+      /// mode (optimized for write performance). Use this for app-store builds.
       case production
+
+      /// Diagnostics configuration with profiling enabled.
+      ///
+      /// All features are enabled including signposts and logs, with balanced persistence
+      /// and standard hardware profiling (memory and thermal). Use this when you need
+      /// detailed performance data during development or QA.
       case diagnostics
     }
 
+    /// Where telemetry data is sent.
     public enum Destination: Sendable, Equatable {
+      /// Sends telemetry to the local development dashboard (default).
+      ///
+      /// Points to `http://127.0.0.1:4318`, the local OpenTelemetry Collector
+      /// expected by the Terra dashboard app.
       case localDashboard
+
+      /// Sends telemetry to a custom OTLP-compatible endpoint.
+      ///
+      /// Use this to route telemetry to your own OpenTelemetry Collector,
+      /// Grafana Tempo, or other compatible backends.
+      ///
+      /// - Parameter URL: A valid OTLP endpoint URL (must use `http` or `https` scheme
+      ///   and include a host). Terra validates this when `Terra.start()` is called.
       case endpoint(URL)
     }
 
+    /// Persistence settings for offline telemetry storage.
+    ///
+    /// When persistence is enabled, Terra stores telemetry to disk when the network
+    /// is unavailable and exports it automatically when connectivity is restored.
     public enum Persistence: Sendable, Equatable {
+      /// Disables persistence — telemetry is only exported when a backend is reachable.
       case off
+
+      /// Balances write performance and export frequency for general use.
+      ///
+      /// Suitable for production. Writes are batched and exported every ~5 seconds,
+      /// with file rotation to prevent unbounded disk usage.
+      ///
+      /// - Parameter URL: The directory where persistence files are stored.
+      ///   Terra creates a `Terra` subdirectory within this location.
       case balanced(URL)
+
+      /// Maximizes data durability at the cost of write throughput.
+      ///
+      /// Suitable when you cannot tolerate any data loss. Each export is written
+      /// synchronously before returning.
+      ///
+      /// - Parameter URL: The directory where persistence files are stored.
       case instant(URL)
     }
 
-    public enum Profiling: Sendable, Equatable {
-      case off
-      case memory
-      case metal
-      case all
+    /// Hardware profiling options to collect system-level metrics alongside telemetry.
+    ///
+    /// Profiling data (memory pressure, GPU utilization, thermal state) is recorded as
+    /// OpenTelemetry metrics on each span, enabling correlation of model performance
+    /// with system resource state in dashboards.
+    ///
+    /// - Note: `.power` and `.ane` require opt-in targets (`TerraPowerProfiler`,
+    ///   `TerraANEProfiler`) that are not dependencies of the Terra umbrella.
+    ///   The flag values are reserved so downstream wrappers can read and act on them.
+    public struct Profiling: OptionSet, Sendable, Hashable {
+      public let rawValue: Int
+      public init(rawValue: Int) { self.rawValue = rawValue }
+
+      /// Records system memory pressure and allocation metrics.
+      public static let memory   = Profiling(rawValue: 1 << 0)
+
+      /// Records Metal GPU utilization and memory metrics for CoreML model execution.
+      public static let metal    = Profiling(rawValue: 1 << 1)
+
+      /// Records the device thermal state (nominal/fair/serious/critical).
+      public static let thermal  = Profiling(rawValue: 1 << 2)
+
+      /// Records battery power and energy consumption metrics (macOS only).
+      public static let power    = Profiling(rawValue: 1 << 3)
+
+      /// Records CPU frequency and performance state metrics (macOS only).
+      public static let espresso = Profiling(rawValue: 1 << 4)
+
+      /// Records Apple Neural Engine (ANE) utilization via private APIs.
+      ///
+      /// - Warning: Uses private APIs (`ANEDeviceMonitor`). Not suitable for App Store
+      ///   distribution. Import `TerraANEProfiler` and install it directly if needed.
+      public static let ane      = Profiling(rawValue: 1 << 5)
+
+      /// Progressive disclosure tier: memory + thermal profiling.
+      ///
+      /// Good balance of insight with minimal overhead. Suitable for most diagnostic scenarios.
+      public static let standard: Profiling = [.memory, .thermal]
+
+      /// Extended profiling: memory, thermal, Metal, and power.
+      ///
+      /// Provides comprehensive hardware visibility for detailed performance investigations.
+      public static let extended: Profiling = [.memory, .thermal, .metal, .power]
+
+      /// All profiling features enabled.
+      ///
+      /// Maximum data collection. May have meaningful performance overhead.
+      public static let all: Profiling      = [.memory, .thermal, .metal, .power, .espresso, .ane]
     }
 
+    /// Feature flags enabling specific Terra instrumentation modules.
     public struct Features: OptionSet, Sendable, Equatable {
       public let rawValue: Int
       public init(rawValue: Int) { self.rawValue = rawValue }
+
+      /// Auto-instrument CoreML `MLModel.prediction(from:)` calls.
+      ///
+      /// Traces all CoreML model invocations with input/output shapes, latency,
+      /// and hardware routing (CPU/GPU/ANE).
       public static let coreML    = Features(rawValue: 1 << 0)
+
+      /// Auto-instrument HTTP requests to known AI API endpoints (OpenAI, Anthropic, Google, etc.).
       public static let http      = Features(rawValue: 1 << 1)
+
+      /// Enable session-level correlation IDs for grouping traces by user session.
       public static let sessions  = Features(rawValue: 1 << 2)
+
+      /// Record OS Signpost intervals for fine-grained performance profiling in Instruments.
       public static let signposts = Features(rawValue: 1 << 3)
+
+      /// Export structured diagnostic logs via OpenClaw.
+      ///
+      /// When enabled, Terra exports diagnostic logs (startup, shutdown, configuration)
+      /// to the OTLP logs endpoint. Requires `destination` to point to an OTLP-compatible backend.
       public static let logs      = Features(rawValue: 1 << 4)
     }
 
+    /// The privacy policy controlling how content (prompts, responses) is handled in traces.
+    ///
+    /// Defaults to `.redacted`, which strips content from spans and only records metadata
+    /// (model IDs, token counts, latency). Set to `.capturing` to include raw content when
+    /// the calling code opts in via `Operation.capture(.includeContent)`.
     public var privacy: Terra.PrivacyPolicy
+
+    /// The destination for telemetry export.
+    ///
+    /// Defaults to `.localDashboard` which routes to `http://127.0.0.1:4318`
+    /// (the local OpenTelemetry Collector). Change to `.endpoint` to export to
+    /// your own OTLP-compatible backend.
     public var destination: Destination
+
+    /// The set of instrumentation features enabled.
+    ///
+    /// Each feature corresponds to a specific auto-instrumentation module.
+    /// For example, `.coreML` enables CoreML call tracing and `.http` enables
+    /// AI API HTTP request tracing. Combine multiple features with `.union`.
     public var features: Features
+
+    /// Persistence configuration for offline storage and retry on network failure.
+    ///
+    /// When set to `.off` (default in quickstart), telemetry is only exported when
+    /// the network is available. Enable persistence to survive network outages and
+    /// ensure no data is lost.
     public var persistence: Persistence
+
+    /// Hardware profiling options for system-level metrics collection.
+    ///
+    /// Each option enables recording of specific system metrics (memory, GPU, thermal)
+    /// alongside telemetry spans, making it possible to correlate model performance
+    /// with hardware state in dashboards.
     public var profiling: Profiling
 
+    /// Creates a configuration from a preset, or the `.quickstart` preset by default.
+    ///
+    /// - Parameter preset: One of `.quickstart`, `.production`, or `.diagnostics`.
     public init(preset: Preset = .quickstart) {
       switch preset {
       case .quickstart:
@@ -57,19 +214,19 @@ extension Terra {
         destination = .localDashboard
         features = [.coreML, .http, .sessions, .signposts]
         persistence = .off
-        profiling = .off
+        profiling = []
       case .production:
         privacy = .redacted
         destination = .localDashboard
         features = [.coreML, .http, .sessions]
         persistence = .balanced(Terra.defaultPersistenceStorageURL())
-        profiling = .off
+        profiling = []
       case .diagnostics:
         privacy = .redacted
         destination = .localDashboard
         features = [.coreML, .http, .sessions, .signposts, .logs]
         persistence = .balanced(Terra.defaultPersistenceStorageURL())
-        profiling = .all
+        profiling = .standard
       }
     }
 
@@ -96,8 +253,12 @@ extension Terra {
 
       // derive profiling
       let profilingSettings = _ProfilingSettings(
-        enableMemoryProfiler: profiling == .memory || profiling == .all,
-        enableMetalProfiler: profiling == .metal || profiling == .all
+        enableMemoryProfiler: profiling.contains(.memory),
+        enableMetalProfiler: profiling.contains(.metal),
+        enableThermalMonitor: profiling.contains(.thermal),
+        enablePowerProfiler: profiling.contains(.power),
+        enableEspressoCapture: profiling.contains(.espresso),
+        enableANEProfiler: profiling.contains(.ane)
       )
 
       // derive instrumentations
@@ -213,11 +374,23 @@ extension Terra {
 
     // 3b. Optional low-level profilers.
     if config.profiling.enableMemoryProfiler {
-      TerraSystemProfiler.installMemoryProfiler()
+      TerraSystemProfiler.install()
     }
     if config.profiling.enableMetalProfiler {
       TerraMetalProfiler.install()
     }
+    if config.profiling.enableThermalMonitor {
+      ThermalMonitor.install()
+    }
+    // Note: .power and .ane profilers require opt-in targets (TerraPowerProfiler,
+    // TerraANEProfiler) that are not dependencies of the Terra umbrella. Users
+    // wanting those profilers import and install them directly. The settings flags
+    // are reserved so downstream wrappers can read and act on them.
+    #if os(macOS)
+    if config.profiling.enableEspressoCapture {
+      EspressoLogCapture.start()
+    }
+    #endif
 
     // 4. Enable HTTP AI API auto-instrumentation (and optional OpenClaw gateway coverage)
     var monitoredHosts = config.aiAPIHosts
@@ -273,13 +446,25 @@ extension Terra {
   package struct _ProfilingSettings: Sendable, Equatable {
     package var enableMemoryProfiler: Bool
     package var enableMetalProfiler: Bool
+    package var enableThermalMonitor: Bool
+    package var enablePowerProfiler: Bool
+    package var enableEspressoCapture: Bool
+    package var enableANEProfiler: Bool
 
     package init(
       enableMemoryProfiler: Bool = false,
-      enableMetalProfiler: Bool = false
+      enableMetalProfiler: Bool = false,
+      enableThermalMonitor: Bool = false,
+      enablePowerProfiler: Bool = false,
+      enableEspressoCapture: Bool = false,
+      enableANEProfiler: Bool = false
     ) {
       self.enableMemoryProfiler = enableMemoryProfiler
       self.enableMetalProfiler = enableMetalProfiler
+      self.enableThermalMonitor = enableThermalMonitor
+      self.enablePowerProfiler = enablePowerProfiler
+      self.enableEspressoCapture = enableEspressoCapture
+      self.enableANEProfiler = enableANEProfiler
     }
   }
 

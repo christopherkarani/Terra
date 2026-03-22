@@ -116,6 +116,53 @@ extension Terra {
       package static let latencyModelLoadMs = "terra.coreml.load.duration_ms"
       package static let latencyE2EMs = "terra.latency.e2e_ms"
 
+      // MARK: Thermal monitoring (profiled state from ThermalProfile)
+      package static let thermalProfileState = "terra.thermal.state"
+      package static let thermalPeakState = "terra.thermal.peak_state"
+      package static let thermalTimeThrottledS = "terra.thermal.time_throttled_s"
+
+      // MARK: Model size & bandwidth
+      package static let modelSizeBytes = "terra.model.size_bytes"
+      package static let modelSizeMB = "terra.model.size_mb"
+      package static let modelWeightFileCount = "terra.model.weight_file_count"
+      package static let modelFormat = "terra.model.format"
+      package static let modelBandwidthGBps = "terra.model.bandwidth_gbps"
+      package static let modelInferenceTimeMs = "terra.model.inference_time_ms"
+      package static let modelComputeDeviceGuess = "terra.model.compute_device_guess"
+
+      // MARK: Espresso log capture (macOS)
+      package static let espressoTotalGFlops = "terra.espresso.total_gflops"
+      package static let espressoMemoryBoundOps = "terra.espresso.memory_bound_ops"
+      package static let espressoComputeBoundOps = "terra.espresso.compute_bound_ops"
+      package static let espressoAvgWorkUnitEfficiency = "terra.espresso.avg_work_unit_efficiency"
+
+      // MARK: Power metrics (macOS)
+      package static let powerCpuWatts = "terra.power.cpu_watts"
+      package static let powerGpuWatts = "terra.power.gpu_watts"
+      package static let powerAneWatts = "terra.power.ane_watts"
+      package static let powerPackageWatts = "terra.power.package_watts"
+      package static let powerSampleCount = "terra.power.sample_count"
+
+      // MARK: Compute plan analysis
+      package static let computePlanTotalOps = "terra.compute_plan.total_ops"
+      package static let computePlanAneOps = "terra.compute_plan.ane_ops"
+      package static let computePlanGpuOps = "terra.compute_plan.gpu_ops"
+      package static let computePlanCpuOps = "terra.compute_plan.cpu_ops"
+      package static let computePlanAneUtilization = "terra.compute_plan.ane_utilization"
+      package static let computePlanDominantDevice = "terra.compute_plan.dominant_device"
+      package static let computePlanIsMixedExecution = "terra.compute_plan.is_mixed_execution"
+
+      // MARK: ANE fallback assessment
+      package static let aneFallbackLikely = "terra.ane.fallback_likely"
+      package static let aneFallbackConfidence = "terra.ane.fallback_confidence"
+
+      // MARK: ANE hardware profiling
+      package static let aneHardwareExecutionTimeNs = "terra.ane.hardware_execution_time_ns"
+      package static let aneHostOverheadUs = "terra.ane.host_overhead_us"
+      package static let aneSegmentCount = "terra.ane.segment_count"
+      package static let aneFullyANE = "terra.ane.fully_ane"
+      package static let aneAvailable = "terra.ane.available"
+
       // MARK: Execution route diagnostics
       package static let execRouteRequested = "terra.exec.route.requested"
       package static let execRouteObserved = "terra.exec.route.observed"

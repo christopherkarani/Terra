@@ -210,13 +210,13 @@ public enum Terra {
     spanBuilder.setAttribute(key: Keys.Terra.thermalState, value: .string(Runtime.thermalStateLabel()))
 
     let span = spanBuilder.startSpan()
-    let startMemorySnapshot = TerraSystemProfiler.isMemoryProfilerEnabled
+    let startMemorySnapshot = TerraSystemProfiler.isInstalled
       ? TerraSystemProfiler.captureMemorySnapshot()
       : nil
 
     let scope = Scope<Kind>(span: span)
     defer {
-      let endMemorySnapshot = TerraSystemProfiler.isMemoryProfilerEnabled
+      let endMemorySnapshot = TerraSystemProfiler.isInstalled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
       let memoryDelta = TerraSystemProfiler.memoryDeltaAttributes(

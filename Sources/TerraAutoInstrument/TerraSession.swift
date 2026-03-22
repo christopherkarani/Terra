@@ -342,7 +342,7 @@ package actor TerraSession {
           computeUnits: configuration.computeUnits,
           captureMode: .heuristic,
           confidence: .low
-        ).attributes
+        ).telemetryAttributes
       )
       span.setAttributes(computePlanSummary.telemetryAttributes)
 
@@ -395,7 +395,7 @@ package actor TerraSession {
             computeUnits: computeUnits,
             captureMode: .heuristic,
             confidence: .low
-          ).attributes
+          ).telemetryAttributes
         ) { _, newValue in newValue }
       }
       span.setAttributes(attributes)
@@ -673,18 +673,7 @@ private enum TerraSessionDefaults {
   #endif
 
   static func thermalStateLabel(_ state: ProcessInfo.ThermalState) -> String {
-    switch state {
-    case .nominal:
-      return "nominal"
-    case .fair:
-      return "fair"
-    case .serious:
-      return "serious"
-    case .critical:
-      return "critical"
-    @unknown default:
-      return "unknown"
-    }
+    ThermalMonitor.stateLabel(state)
   }
 
   static func serializedFeatureSummary(_ summaries: [TerraSession.FeatureSummary]) -> String {
@@ -697,23 +686,14 @@ private enum TerraSessionDefaults {
   }
 
   static func monotonicTime() -> UInt64 {
-    #if canImport(Darwin)
-    return mach_absolute_time()
-    #else
-    return UInt64(Date().timeIntervalSince1970 * 1_000_000_000)
-    #endif
+    MachTime.now().rawValue
   }
 
   static func elapsedMilliseconds(since start: UInt64) -> Double {
-    #if canImport(Darwin)
-    let elapsed = mach_absolute_time() - start
-    var timebase = mach_timebase_info_data_t()
-    mach_timebase_info(&timebase)
-    let nanos = Double(elapsed) * Double(timebase.numer) / Double(timebase.denom)
-    return nanos / 1_000_000
-    #else
-    return 0
-    #endif
+    MachTime.elapsedMilliseconds(
+      from: MachTime.Timestamp(rawValue: start),
+      to: MachTime.now()
+    )
   }
 
   static func capturePhysFootprintBytes() -> UInt64? {

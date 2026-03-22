@@ -22,6 +22,8 @@ let package = Package(
     .library(name: "TerraMetalProfiler", targets: ["TerraMetalProfiler"]),
     .library(name: "TerraSystemProfiler", targets: ["TerraSystemProfiler"]),
     .library(name: "TerraAccelerate", targets: ["TerraAccelerate"]),
+    .library(name: "TerraPowerProfiler", targets: ["TerraPowerProfiler"]),
+    .library(name: "TerraANEProfiler", targets: ["TerraANEProfiler"]),
     .library(name: "TerraTracedMacro", targets: ["TerraTracedMacro"]),
     .executable(name: "TerraSample", targets: ["TerraSample"]),
     .executable(name: "TerraSDKBenchmarks", targets: ["TerraSDKBenchmarks"])
@@ -138,6 +140,7 @@ let package = Package(
     .target(
       name: "TerraMetalProfiler",
       dependencies: [
+        "TerraSystemProfiler",
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
       ],
       path: "Sources/TerraMetalProfiler"
@@ -148,6 +151,34 @@ let package = Package(
         .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
       ],
       path: "Sources/TerraSystemProfiler"
+    ),
+    .target(
+      name: "CTerraANEBridge",
+      path: "Sources/CTerraANEBridge",
+      publicHeadersPath: "include",
+      cSettings: [
+        .define("APP_STORE", .when(configuration: .release)),
+      ]
+    ),
+    .target(
+      name: "TerraANEProfiler",
+      dependencies: [
+        "CTerraANEBridge",
+        "TerraSystemProfiler",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+      ],
+      path: "Sources/TerraANEProfiler",
+      swiftSettings: [
+        .define("APP_STORE", .when(configuration: .release)),
+      ]
+    ),
+    .target(
+      name: "TerraPowerProfiler",
+      dependencies: [
+        "TerraSystemProfiler",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+      ],
+      path: "Sources/TerraPowerProfiler"
     ),
     .target(
       name: "TerraLlama",
@@ -198,6 +229,31 @@ let package = Package(
 
     // MARK: - Test Targets
 
+    .testTarget(
+      name: "TerraANEProfilerTests",
+      dependencies: [
+        "TerraANEProfiler",
+        "CTerraANEBridge",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+      ],
+      path: "Tests/TerraANEProfilerTests"
+    ),
+    .testTarget(
+      name: "TerraPowerProfilerTests",
+      dependencies: [
+        "TerraPowerProfiler",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+      ],
+      path: "Tests/TerraPowerProfilerTests"
+    ),
+    .testTarget(
+      name: "TerraSystemProfilerTests",
+      dependencies: [
+        "TerraSystemProfiler",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+      ],
+      path: "Tests/TerraSystemProfilerTests"
+    ),
     .testTarget(
       name: "TerraTests",
       dependencies: [

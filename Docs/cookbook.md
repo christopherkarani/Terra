@@ -73,6 +73,118 @@ let plan = try await Terra.agent("trip-planner", id: "agent-42").run {
 }
 ```
 
+## Agentic Workflow Instrumentation
+
+### Multi-Step Agent with Tool Calls
+
+```swift
+func runAgent(query: String) async throws -> String {
+    let result = try await Terra
+        .agent("research-assistant", id: UUID().uuidString)
+        .run { trace in
+            // Step 1: Web search
+            let searchResults = try await Terra
+                .tool("web_search", callID: Terra.ToolCallID("search-1"))
+                .run { trace in
+                    trace.tag("search.query", query)
+                    trace.event("tool.search.start")
+                    let results = performWebSearch(query: query)
+                    trace.event("tool.search.complete")
+                    return results
+                }
+
+            // Step 2: Summarize findings
+            let summary = try await Terra
+                .infer(
+                    Terra.ModelID("gpt-4o-mini"),
+                    prompt: "Summarize: \(searchResults)"
+                )
+                .run { trace in
+                    trace.tag("step.name", "summarize")
+                    trace.tokens(input: 500, output: 100)
+                    return try synthesizeResults(searchResults)
+                }
+
+            // Step 3: Validate
+            let validated = try await Terra
+                .tool("validator", callID: Terra.ToolCallID("validate-1"))
+                .run { trace in
+                    trace.event("validation.start")
+                    return try validateOutput(summary)
+                }
+
+            return validated
+        }
+    return result
+}
+```
+
+### Sequential Tool Orchestration
+
+```swift
+func processWithTools(userRequest: String) async throws -> [String] {
+    var results: [String] = []
+
+    // Tool 1: Intent classification
+    let intent = try await Terra
+        .tool("classify", callID: Terra.ToolCallID("classify-1"))
+        .run { trace in
+            trace.tag("user.request", userRequest)
+            trace.event("intent.classify")
+            return classifyIntent(userRequest)
+        }
+    results.append(intent)
+
+    // Tool 2: Entity extraction (dependent on intent)
+    let entities = try await Terra
+        .tool("extract", callID: Terra.ToolCallID("extract-1"))
+        .run { trace in
+            trace.tag("intent", intent)
+            trace.event("entity.extract")
+            return extractEntities(userRequest)
+        }
+    results.append(contentsOf: entities)
+
+    // Tool 3: Generate response (dependent on both)
+    let response = try await Terra
+        .infer(Terra.ModelID("gpt-4o-mini"), prompt: "\(intent): \(entities)")
+        .run { trace in
+            trace.tokens(input: 200, output: 150)
+            return generateResponse(intent: intent, entities: entities)
+        }
+    results.append(response)
+
+    return results
+}
+```
+
+### Parallel Tool Execution
+
+```swift
+func fetchAll(query: String) async throws -> [String] {
+    async let web = Terra
+        .tool("web_search", callID: Terra.ToolCallID("web"))
+        .run { "web results for \(query)" }
+
+    async let news = Terra
+        .tool("news_search", callID: Terra.ToolCallID("news"))
+        .run { "news results for \(query)" }
+
+    async let academic = Terra
+        .tool("academic_search", callID: Terra.ToolCallID("academic"))
+        .run { "academic results for \(query)" }
+
+    let (webResults, newsResults, academicResults) = try await (web, news, academic)
+
+    // Synthesize results
+    let synthesis = try await Terra
+        .infer(Terra.ModelID("gpt-4o-mini"), prompt: "Combine: \(webResults), \(newsResults), \(academicResults)")
+        .run { "combined results" }
+
+    return [webResults, newsResults, academicResults, synthesis]
+}
+```
+
 ## Embeddings
 
 ```swift
@@ -108,9 +220,9 @@ let result = try await Terra
         runtime: Terra.RuntimeID("http_api")
     )
     .capture(.includeContent)
-    .attr(.init("app.request_id"), UUID().uuidString)
-    .attr(.init("app.user_tier"), "pro")
     .run { trace in
+        trace.tag("app.request_id", UUID().uuidString)
+        trace.tag("app.user_tier", "pro")
         trace.tokens(input: 120, output: 60)
         return try await llm.generate(prompt)
     }
@@ -132,6 +244,66 @@ _ = try await Terra
     }
 ```
 
+## Error Handling Patterns
+
+### Catch and Record
+
+```swift
+try await Terra
+    .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+    .run { trace in
+        do {
+            return try await llm.generate(prompt)
+        } catch {
+            trace.recordError(error)
+            trace.event("inference.fallback")
+            throw error
+        }
+    }
+```
+
+### Conditional Error Handling
+
+```swift
+let result = try await Terra
+    .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+    .run { trace in
+        do {
+            return try await llm.generate(prompt)
+        } catch let error as APIError {
+            switch error {
+            case .rateLimited:
+                trace.tag("error.type", "rate_limit")
+                trace.event("retry.scheduled")
+            case .timeout:
+                trace.tag("error.type", "timeout")
+                trace.event("timeout.retry")
+            }
+            throw error
+        }
+    }
+```
+
+### Error Recovery with Fallback
+
+```swift
+func inferWithFallback(prompt: String) async throws -> String {
+    do {
+        return try await Terra
+            .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+            .run { try await primaryModel.generate(prompt) }
+    } catch {
+        // Fallback to local model
+        return try await Terra
+            .infer(Terra.ModelID("local-model"), prompt: prompt)
+            .run { trace in
+                trace.event("inference.fallback")
+                return try await localModel.generate(prompt)
+            }
+    }
+}
+```
+
 ## Custom Configuration
 
 ```swift
@@ -144,6 +316,87 @@ config.persistence = .balanced(
         .appendingPathComponent("terra-demo", isDirectory: true)
 )
 try await Terra.start(config)
+```
+
+## Privacy Configuration Recipes
+
+### Maximum Privacy
+
+```swift
+var config = Terra.Configuration()
+config.privacy = .lengthOnly  // Only record lengths, no hashes
+config.features = [.coreML]   // Minimal instrumentation
+config.persistence = .off      // No local persistence
+try await Terra.start(config)
+// Prompts emit: terra.prompt.length = 11
+// No content or hashes are recorded
+```
+
+### Debug Configuration
+
+```swift
+var config = Terra.Configuration()
+config.privacy = .capturing  // Capture content with hashing
+config.features = [.coreML, .http, .sessions, .signposts, .logs]
+config.persistence = .instant(
+    FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("TerraDebug")
+)
+try await Terra.start(config)
+// Full telemetry with content for debugging
+// Content is HMAC'd for privacy but available for analysis
+```
+
+### HIPAA-Compliant Configuration
+
+```swift
+var config = Terra.Configuration(preset: .production)
+config.privacy = .silent      // Drop all content
+config.features = [.coreML]    // Only local inference
+config.persistence = .balanced(secureStorageURL)
+try await Terra.start(config)
+// No PHI leaves the device
+```
+
+### Multi-Tenant Privacy
+
+```swift
+// Per-request privacy override using capture policy
+try await Terra
+    .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+    .capture(.includeContent)  // Override default privacy for this call
+    .run { trace in
+        trace.tag("tenant_id", tenantID)
+        trace.tokens(input: 120, output: 60)
+        return try await llm.generate(prompt)
+    }
+```
+
+### Session Privacy Tiers
+
+```swift
+enum PrivacyTier {
+    case standard   // .redacted
+    case debug     // .capturing
+    case strict    // .silent
+
+    var config: Terra.Configuration {
+        var cfg = Terra.Configuration()
+        switch self {
+        case .standard:
+            cfg.privacy = .redacted
+        case .debug:
+            cfg.privacy = .capturing
+        case .strict:
+            cfg.privacy = .silent
+        }
+        return cfg
+    }
+}
+
+// Use based on user preference
+let userTier: PrivacyTier = .strict
+try await Terra.start(userTier.config)
 ```
 
 ## `@Traced` Macro
@@ -194,11 +447,16 @@ let text = try await TerraMLX.traced(
 }
 ```
 
-## Engine Injection (Testing)
+## Testing with Telemetry Engine Injection
 
-Replace the telemetry backend for deterministic tests:
+> **Note:** Telemetry engine injection APIs are `package`-visibility and intended for internal Terra testing. For custom telemetry backends in your own testing, use the `TerraCore` module directly or contact Terra support for testing utilities.
+
+### For Terra SDK Developers
+
+If you're extending TerraCore for custom telemetry engines:
 
 ```swift
+// Internal testing API (package visibility)
 struct TestEngine: Terra.TelemetryEngine {
     func run<R: Sendable>(
         context: Terra.TelemetryContext,
@@ -213,11 +471,4 @@ struct TestEngine: Terra.TelemetryEngine {
         return try await body(trace)
     }
 }
-
-let result = try await Terra
-    .tool("search", callID: Terra.ToolCallID("call-1"))
-    .run(using: TestEngine()) { trace in
-        trace.event("tool.mocked")
-        return "stubbed"
-    }
 ```

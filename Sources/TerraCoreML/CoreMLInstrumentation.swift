@@ -111,7 +111,7 @@ public enum CoreMLInstrumentation {
 
       let span = CoreMLInstrumentation.buildSpan(modelName: modelName, model: model)
       let startedAt = ContinuousClock.now
-      let startMemory = TerraSystemProfiler.isMemoryProfilerEnabled
+      let startMemory = TerraSystemProfiler.isInstalled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
       OpenTelemetry.instance.contextProvider.setActiveSpan(span)
@@ -122,7 +122,7 @@ public enum CoreMLInstrumentation {
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
         span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
       }
-      let endMemory = TerraSystemProfiler.isMemoryProfilerEnabled
+      let endMemory = TerraSystemProfiler.isInstalled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
       span.setAttributes(TerraSystemProfiler.memoryDeltaAttributes(start: startMemory, end: endMemory))
@@ -171,7 +171,7 @@ public enum CoreMLInstrumentation {
 
       let span = CoreMLInstrumentation.buildSpan(modelName: modelName, model: model)
       let startedAt = ContinuousClock.now
-      let startMemory = TerraSystemProfiler.isMemoryProfilerEnabled
+      let startMemory = TerraSystemProfiler.isInstalled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
       OpenTelemetry.instance.contextProvider.setActiveSpan(span)
@@ -182,7 +182,7 @@ public enum CoreMLInstrumentation {
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
         span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
       }
-      let endMemory = TerraSystemProfiler.isMemoryProfilerEnabled
+      let endMemory = TerraSystemProfiler.isInstalled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
       span.setAttributes(TerraSystemProfiler.memoryDeltaAttributes(start: startMemory, end: endMemory))
