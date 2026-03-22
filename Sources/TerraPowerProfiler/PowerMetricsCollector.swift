@@ -1,6 +1,28 @@
 #if os(macOS)
 import Foundation
 
+/// Collector for hardware power metrics using `powermetrics`.
+///
+/// ``PowerMetricsCollector`` wraps the macOS `powermetrics` tool to capture CPU, GPU, and ANE
+/// power consumption samples. This collector is only available on macOS and requires
+/// elevated privileges.
+///
+/// - Important: `powermetrics` requires sudo access. The collector will fail silently
+///   if run without sufficient privileges.
+///
+/// ## Usage
+/// ```swift
+/// // Start collecting power metrics
+/// PowerMetricsCollector.start(domains: [.cpu, .gpu, .ane], intervalMs: 500)
+///
+/// // ... run your workload ...
+///
+/// // Stop and get the summary
+/// let summary = PowerMetricsCollector.stop()
+/// span.setAttributes(summary)
+/// ```
+///
+/// - SeeAlso: ``PowerSummary``, ``PowerSample``
 public enum PowerMetricsCollector {
   private static let lock = NSLock()
   private static var process: Process?
@@ -8,10 +30,26 @@ public enum PowerMetricsCollector {
 
   private static let _isAvailable: Bool = FileManager.default.isExecutableFile(atPath: "/usr/bin/powermetrics")
 
+  /// Returns `true` if powermetrics is available on this system.
+  ///
+  /// Checks whether the `powermetrics` executable exists at `/usr/bin/powermetrics`.
+  /// Returns `false` on non-macOS platforms or if the tool is not installed.
   public static func isAvailable() -> Bool {
     _isAvailable
   }
 
+  /// Starts collecting power metrics.
+  ///
+  /// Spawns a background `powermetrics` process that samples power consumption
+  /// at the specified interval. Collection continues in the background until
+  /// ``stop()`` is called.
+  ///
+  /// - Parameters:
+  ///   - domains: Which power domains to sample (CPU, GPU, ANE). Defaults to `.all`.
+  ///   - intervalMs: Sampling interval in milliseconds. Defaults to `1000`.
+  ///
+  /// - Note: Call ``stop()`` to end collection and retrieve the summary.
+  ///   Nested calls while a session is active are ignored.
   public static func start(domains: PowerDomains = .all, intervalMs: Int = 1000) {
     lock.lock()
     defer { lock.unlock() }
@@ -45,6 +83,13 @@ public enum PowerMetricsCollector {
     }
   }
 
+  /// Stops power metrics collection and returns a summary.
+  ///
+  /// Terminates the background `powermetrics` process, parses all collected samples,
+  /// and returns a ``PowerSummary`` with averaged power consumption across all domains.
+  ///
+  /// - Returns: ``PowerSummary`` containing average power consumption.
+  ///   If collection was not active, returns a zero-filled summary.
   public static func stop() -> PowerSummary {
     lock.lock()
     let proc = process

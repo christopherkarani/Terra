@@ -2,13 +2,45 @@ import Foundation
 import OpenTelemetryApi
 import TerraSystemProfiler
 
+/// Aggregated power metrics summary over a collection of samples.
+///
+/// ``PowerSummary`` computes average power consumption across all domains from
+/// a collection of ``PowerSample`` instances. Attach to traces via
+/// ``TelemetryAttributeConvertible``.
+///
+/// ## Usage
+/// ```swift
+/// PowerMetricsCollector.start(domains: .all, intervalMs: 500)
+/// // ... run workload ...
+/// let summary = PowerMetricsCollector.stop()
+/// span.setAttributes(summary)
+/// ```
+///
+/// - SeeAlso: ``PowerMetricsCollector``
 public struct PowerSummary: Sendable, TelemetryAttributeConvertible {
+  /// Average CPU power consumption in watts, computed over all samples.
   public let averageCpuWatts: Double
+
+  /// Average GPU power consumption in watts, computed over all samples.
   public let averageGpuWatts: Double
+
+  /// Average ANE power consumption in watts, computed over all samples.
   public let averageAneWatts: Double
+
+  /// Average total package power consumption in watts, computed over all samples.
   public let averagePackageWatts: Double
+
+  /// Number of samples aggregated in this summary.
   public let sampleCount: Int
 
+  /// Converts the power summary into OpenTelemetry span attributes.
+  ///
+  /// Produces:
+  /// - `terra.power.cpu_watts` (double): Average CPU power in watts.
+  /// - `terra.power.gpu_watts` (double): Average GPU power in watts.
+  /// - `terra.power.ane_watts` (double): Average ANE power in watts.
+  /// - `terra.power.package_watts` (double): Average total package power in watts.
+  /// - `terra.power.sample_count` (int): Number of samples in the summary.
   public var telemetryAttributes: [String: AttributeValue] {
     [
       "terra.power.cpu_watts": .double(averageCpuWatts),
@@ -19,6 +51,11 @@ public struct PowerSummary: Sendable, TelemetryAttributeConvertible {
     ]
   }
 
+  /// Creates a summary by averaging a collection of power samples.
+  ///
+  /// - Parameter samples: Array of ``PowerSample`` instances to aggregate.
+  /// - Returns: ``PowerSummary`` with averaged values; if `samples` is empty,
+  ///   returns a summary with all averages set to `0` and `sampleCount` of `0`.
   public static func from(_ samples: [PowerSample]) -> PowerSummary {
     guard !samples.isEmpty else {
       return PowerSummary(
