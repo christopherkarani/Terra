@@ -3,6 +3,7 @@ import CoreML
 import Foundation
 import OpenTelemetryApi
 import TerraCore
+import TerraSystemProfiler
 
 package struct TerraCoreMLComputePlanOperationEstimate: Codable, Hashable, Sendable {
   package let identifier: String
@@ -11,7 +12,7 @@ package struct TerraCoreMLComputePlanOperationEstimate: Codable, Hashable, Senda
   package let supportedDevices: [String]
 }
 
-package struct TerraCoreMLComputePlanSummary: Codable, Hashable, Sendable {
+package struct TerraCoreMLComputePlanSummary: Codable, Hashable, Sendable, TelemetryAttributeConvertible {
   package enum CaptureStatus: String, Codable, Hashable, Sendable {
     case captured
     case unsupportedOS = "unsupported_os"
@@ -43,7 +44,7 @@ package struct TerraCoreMLComputePlanSummary: Codable, Hashable, Sendable {
         supported: supportedDevices,
         captureMode: .planEstimated,
         confidence: captureStatus == .captured ? .medium : .low
-      ).attributes
+      ).telemetryAttributes
     ) { _, newValue in newValue }
 
     if !operationEstimates.isEmpty,

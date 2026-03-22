@@ -1,8 +1,24 @@
 import Foundation
 
 extension Terra {
+  /// Controls whether raw content (prompts, responses) is captured in traces.
+  ///
+  /// By default, Terra redacts content from traces to protect sensitive data and
+  /// reduce storage costs. Set `.includeContent` to capture raw prompts and
+  /// responses when you need full fidelity for debugging or compliance.
+  ///
+  /// - Note: Content capture is also controlled by `Terra.PrivacyPolicy`. Even with
+  ///   `.includeContent`, privacy settings may redact or anonymize content before it
+  ///   reaches the trace exporter.
   public enum CapturePolicy: Sendable, Hashable {
+    /// The default capture policy — content is handled according to the active privacy policy.
     case `default`
+
+    /// Captures raw content (prompts, responses) in traces regardless of privacy policy.
+    ///
+    /// Use this when you need full content capture for a specific operation and
+    /// understand the privacy implications. Commonly used for debugging or when
+    /// operating under a regime where user consent has been obtained.
     case includeContent
   }
 
@@ -117,10 +133,33 @@ extension Terra {
     ) async throws -> R
   }
 
+  /// Creates a metadata entry representing a named event, for use in the `@Terra.MetadataBuilder` result builder.
+  ///
+  /// Use this within the `metadata:` closure of a composable operation to attach
+  /// arbitrary named events to the span before the operation body runs.
+  ///
+  /// ```swift
+  /// Terra.infer("gpt-4o-mini", ...)
+  ///     .run { handle in
+  ///         // ...
+  ///     }
+  /// ```
+  ///
+  /// - Parameter name: A meaningful name for the event (e.g., `"preprocessing-complete"`).
+  /// - Returns: A `Metadata` event entry for use in `@Terra.MetadataBuilder`.
   package static func event(_ name: String) -> Metadata {
     .event(name)
   }
 
+  /// Creates a metadata entry representing a typed attribute, for use in the `@Terra.MetadataBuilder` result builder.
+  ///
+  /// Use this within the `metadata:` closure to attach attributes to the span
+  /// before the operation body runs. The attribute name is derived from the `TraceKey`.
+  ///
+  /// - Parameters:
+  ///   - key: The `TraceKey` that names the attribute (e.g., `Terra.TraceKeys.temperature`).
+  ///   - value: The value for the attribute. Must conform to `ScalarValue` (String, Int, Double, Bool).
+  /// - Returns: A `Metadata` attribute entry for use in `@Terra.MetadataBuilder`.
   package static func attr<Value: ScalarValue>(_ key: TraceKey<Value>, _ value: Value) -> Metadata {
     .attribute(.init(name: key.name, value: value.traceScalar))
   }
@@ -135,6 +174,20 @@ extension Terra {
     static let maxOutputTokens = TraceKey<Int>("gen_ai.request.max_tokens")
   }
 
+  /// A handle for adding events, attributes, and tokens to the current span.
+  ///
+  /// `TraceHandle` is passed into the body of a composable operation (e.g., `Terra.infer(...)`)
+  /// and provides methods to add rich context to the active trace span. All methods return
+  /// `self` for fluent chaining.
+  ///
+  /// ```swift
+  /// try await Terra.infer("gpt-4o-mini", prompt: "Hello") { handle in
+  ///     handle.event("prompt-processed")
+  ///         .tokens(input: 5, output: nil)
+  ///         .responseModel("gpt-4o-mini")
+  ///     return response
+  /// }
+  /// ```
   public struct TraceHandle: Sendable {
     private let onEvent: @Sendable (String) -> Void
     private let onAttribute: @Sendable (String, TraceScalar) -> Void
@@ -165,6 +218,14 @@ extension Terra {
       self.onFirstToken = onFirstToken
     }
 
+    /// Records a named event on the current span.
+    ///
+    /// Events are zero-attribute timestamped markers useful for marking significant
+    /// moments in the operation (e.g., "first-token", "streaming-started").
+    ///
+    /// - Parameters:
+    ///   - name: A meaningful name for the event (e.g., "tool-call-start", "content-filter-triggered").
+    /// - Returns: `self` for chaining.
     @discardableResult
     public func event(_ name: String) -> Self {
       onEvent(name)
@@ -183,41 +244,107 @@ extension Terra {
       return self
     }
 
+    /// Records the number of input and output tokens consumed by the operation.
+    ///
+    /// Token counts are recorded as OpenTelemetry metrics (`gen_ai.usage.input_tokens`
+    /// and `gen_ai.usage.output_tokens`) on the span, enabling usage analytics and
+    /// cost tracking per model or provider.
+    ///
+    /// - Parameters:
+    ///   - input: Number of tokens in the prompt/request. Pass `nil` if unknown.
+    ///   - output: Number of tokens in the response. Pass `nil` if streaming is not yet complete.
+    /// - Returns: `self` for chaining.
     @discardableResult
     public func tokens(input: Int? = nil, output: Int? = nil) -> Self {
       onTokens(input, output)
       return self
     }
 
+    /// Records the model that generated the response.
+    ///
+    /// Use this when the model used for the response may differ from the requested model
+    /// (e.g., when a provider routes to a different model). The value is recorded as the
+    /// `gen_ai.response.model` span attribute.
+    ///
+    /// - Parameter value: The model ID that generated the response.
+    /// - Returns: `self` for chaining.
     @discardableResult
     public func responseModel(_ value: ModelID) -> Self {
       onResponseModel(value)
       return self
     }
 
+    /// Records a streaming chunk of tokens.
+    ///
+    /// Each call represents a batch of tokens received during streaming. The cumulative
+    /// total across all `chunk` calls is used to compute total output tokens unless
+    /// `outputTokens(_:)` is called separately.
+    ///
+    /// - Parameter tokens: Number of tokens in this chunk. Defaults to `1`.
+    /// - Returns: `self` for chaining.
     @discardableResult
     public func chunk(_ tokens: Int = 1) -> Self {
       onChunk(tokens)
       return self
     }
 
+    /// Records the total number of output tokens after streaming is complete.
+    ///
+    /// Call this once at the end of a streaming operation instead of calling `chunk`
+    /// repeatedly. If both are called, `outputTokens` takes precedence for the final count.
+    ///
+    /// - Parameter total: Total output tokens for the entire response.
+    /// - Returns: `self` for chaining.
     @discardableResult
     public func outputTokens(_ total: Int) -> Self {
       onOutputTokens(total)
       return self
     }
 
+    /// Marks the point at which the first output token was received during streaming.
+    ///
+    /// This is useful for measuring "time to first token" (TTFT), a key latency
+    /// metric for streaming responses. The timestamp is recorded as a span event.
+    ///
+    /// - Returns: `self` for chaining.
     @discardableResult
     public func firstToken() -> Self {
       onFirstToken()
       return self
     }
 
+    /// Records an error on the current span.
+    ///
+    /// The error is recorded with its `localizedDescription` as the event name and
+    /// the full error attached as the span's error state. This ensures the span is
+    /// marked as failed in tracing backends.
+    ///
+    /// - Parameter error: The error to record on the span.
     public func recordError(_ error: any Error) {
       onError(error)
     }
   }
 
+  /// Represents a composable telemetry operation that wraps an AI call.
+  ///
+  /// `Operation` is the core type for instrumenting inference, streaming, embedding,
+  /// agent, tool, and safety-check calls. It provides a fluent, trace-aware interface
+  /// for making AI calls with automatic span creation, attribute recording, and
+  /// error propagation to the active trace.
+  ///
+  /// Use the factory methods (`Terra.infer(...)`, `Terra.stream(...)`, etc.) to create
+  /// an `Operation`, then call `.run { handle in ... }` to execute it with a trace handle
+  /// for adding custom events and attributes.
+  ///
+  /// ```swift
+  /// let operation = Terra.infer("gpt-4o-mini", prompt: "What is 2+2?")
+  ///     .capture(.includeContent)
+  ///
+  /// try await operation.run { handle in
+  ///     let response = try await model.predict(handle: handle)
+  ///     return response
+  /// }
+  /// ```
   public struct Operation: Sendable {
     private var operation: _Operation
     private var capturePolicy: CapturePolicy = .default
@@ -228,12 +355,30 @@ extension Terra {
       self.operation = operation
     }
 
+    /// Overrides the capture policy for this operation.
+    ///
+    /// By default, an operation inherits the capture policy it was created with.
+    /// Use this method to override it on a per-operation basis, for example to
+    /// temporarily capture content for a specific call while keeping others redacted.
+    ///
+    /// - Parameter policy: The capture policy to apply to this operation.
+    /// - Returns: A new `Operation` with the specified capture policy.
     public func capture(_ policy: CapturePolicy) -> Self {
       var copy = self
       copy.capturePolicy = policy
       return copy
     }
 
+    /// Executes the operation with a trace handle.
+    ///
+    /// This overload passes a `TraceHandle` to the body, allowing you to record
+    /// custom events, attributes, and metrics on the active span. The handle must
+    /// be captured and used within the async body to ensure data is attached to
+    /// the correct span.
+    ///
+    /// - Parameter body: An async closure that receives a `TraceHandle` and performs the work.
+    /// - Returns: The result of the body, propagated unchanged.
+    /// - Throws: Any error thrown by `body`, with error state recorded on the span.
     @discardableResult
     public func run<R: Sendable>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await run { _ in
@@ -241,6 +386,14 @@ extension Terra {
       }
     }
 
+    /// Executes the operation, ignoring the trace handle.
+    ///
+    /// Use this overload when you only need automatic span creation and error recording,
+    /// but do not need to add custom events or attributes.
+    ///
+    /// - Parameter body: An async closure that performs the work.
+    /// - Returns: The result of the body.
+    /// - Throws: Any error thrown by `body`, with error state recorded on the span.
     @discardableResult
     public func run<R: Sendable>(_ body: @escaping @Sendable (TraceHandle) async throws -> R) async rethrows -> R {
       let attributes = _mergedAttributes()
@@ -360,6 +513,21 @@ extension Terra {
     }
   }
 
+  /// Creates an inference operation for a non-streaming model call.
+  ///
+  /// Use this factory method to create a traced, composable inference operation
+  /// that wraps a standard (non-streaming) chat or completion call. The operation
+  /// creates an OpenTelemetry span with model, provider, and runtime attributes,
+  /// and supports recording token usage and custom events via the `TraceHandle`.
+  ///
+  /// - Parameters:
+  ///   - model: The model identifier for the inference call (e.g., `"gpt-4o-mini"`).
+  ///   - prompt: The input prompt. Content is subject to the active `CapturePolicy` and privacy settings.
+  ///   - provider: The AI provider (e.g., `.openAI`). Inferred from the runtime if `nil`.
+  ///   - runtime: The execution runtime (e.g., `.http_api`). Inferred from instrumentation if `nil`.
+  ///   - temperature: Sampling temperature passed to the model. Recorded as a span attribute.
+  ///   - maxTokens: Maximum output tokens. Recorded as a span attribute.
+  /// - Returns: A new `Operation` ready for execution via `.run { handle in ... }`.
   public static func infer(
     _ model: ModelID,
     prompt: String? = nil,
@@ -378,6 +546,21 @@ extension Terra {
     )))
   }
 
+  /// Creates a streaming inference operation for a model call with token-by-token streaming.
+  ///
+  /// Use this factory method when making streaming calls where tokens are received
+  /// incrementally. The resulting `Operation` creates a span that records chunk events,
+  /// time-to-first-token, and total output token counts.
+  ///
+  /// - Parameters:
+  ///   - model: The model identifier for the inference call.
+  ///   - prompt: The input prompt. Content is subject to the active `CapturePolicy`.
+  ///   - provider: The AI provider. Inferred from the runtime if `nil`.
+  ///   - runtime: The execution runtime. Inferred from instrumentation if `nil`.
+  ///   - temperature: Sampling temperature passed to the model.
+  ///   - maxTokens: Maximum output tokens.
+  ///   - expectedTokens: Expected total output tokens (used for progress tracking). Optional.
+  /// - Returns: A new `Operation` for streaming execution.
   public static func stream(
     _ model: ModelID,
     prompt: String? = nil,
@@ -398,6 +581,17 @@ extension Terra {
     )))
   }
 
+  /// Creates an embedding operation for generating vector representations of text.
+  ///
+  /// Use this for embedding calls where text is converted to numerical vectors.
+  /// The span records model, provider, runtime, and input token count.
+  ///
+  /// - Parameters:
+  ///   - model: The model identifier for the embedding model.
+  ///   - inputCount: Number of input text segments/items. Recorded as a span attribute.
+  ///   - provider: The AI provider. Inferred from the runtime if `nil`.
+  ///   - runtime: The execution runtime. Inferred from instrumentation if `nil`.
+  /// - Returns: A new `Operation` for embedding execution.
   public static func embed(
     _ model: ModelID,
     inputCount: Int? = nil,
@@ -412,6 +606,18 @@ extension Terra {
     )))
   }
 
+  /// Creates an agent operation representing an autonomous agentic loop.
+  ///
+  /// Use this to trace a complete agentic turn — from the model's decision-making
+  /// through any tool calls and safety checks it performs. The span covers the full
+  /// agent loop and records the agent name, provider, and runtime.
+  ///
+  /// - Parameters:
+  ///   - name: A human-readable name for the agent (e.g., `"code-reviewer"`, `"research-assistant"`).
+  ///   - id: An optional stable identifier for this specific agent instance or session.
+  ///   - provider: The AI provider powering the agent. Inferred from the runtime if `nil`.
+  ///   - runtime: The execution runtime. Inferred from instrumentation if `nil`.
+  /// - Returns: A new `Operation` for the agentic operation.
   public static func agent(
     _ name: String,
     id: String? = nil,
@@ -421,6 +627,19 @@ extension Terra {
     Operation(operation: .agent(.init(name: name, id: id, provider: provider, runtime: runtime)))
   }
 
+  /// Creates a tool-call operation representing a single tool invocation within an agentic workflow.
+  ///
+  /// `ToolCallID` is generated automatically, but can be provided explicitly when
+  /// the calling context already has a meaningful identifier. The span records
+  /// the tool name, call ID, tool type, provider, and runtime.
+  ///
+  /// - Parameters:
+  ///   - name: The name of the tool being invoked (e.g., `"web-search"`, `"calculator"`).
+  ///   - callID: A unique identifier for this tool call. Auto-generated as a UUID if `nil`.
+  ///   - type: An optional type descriptor for the tool (e.g., `"function"`, `"retrieval"`).
+  ///   - provider: The AI provider. Inferred from the runtime if `nil`.
+  ///   - runtime: The execution runtime. Inferred from instrumentation if `nil`.
+  /// - Returns: A new `Operation` for the tool call.
   public static func tool(
     _ name: String,
     callID: ToolCallID = .init(),
@@ -431,6 +650,18 @@ extension Terra {
     Operation(operation: .tool(.init(name: name, callID: callID, type: type, provider: provider, runtime: runtime)))
   }
 
+  /// Creates a safety-evaluation operation representing a content safety check.
+  ///
+  /// Use this to trace safety evaluations performed on model inputs or outputs.
+  /// The span records the name of the safety check, the subject being evaluated,
+  /// the provider, and the runtime.
+  ///
+  /// - Parameters:
+  ///   - name: The name of the safety check (e.g., `"harmful-content"`, `"pii-detection"`).
+  ///   - subject: The text or content being evaluated. Optional.
+  ///   - provider: The AI provider. Inferred from the runtime if `nil`.
+  ///   - runtime: The execution runtime. Inferred from instrumentation if `nil`.
+  /// - Returns: A new `Operation` for the safety check.
   public static func safety(
     _ name: String,
     subject: String? = nil,

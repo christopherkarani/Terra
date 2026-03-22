@@ -12,8 +12,8 @@ Terra's canonical surface is task-oriented: build an operation with ``Terra/infe
 ## Learning Progression
 
 - Beginner: <doc:Canonical-API>, <doc:Typed-IDs>
-- Intermediate: <doc:Metadata-Builder>, <doc:TerraError-Model>
-- Advanced: <doc:TelemetryEngine-Injection>
+- Intermediate: <doc:Metadata-Builder>, <doc:TerraError-Model>, <doc:API-Reference>
+- Advanced: <doc:TelemetryEngine-Injection>, <doc:Configuration-Reference>
 
 ## Core Symbols
 
@@ -37,7 +37,18 @@ Terra's canonical surface is task-oriented: build an operation with ``Terra/infe
 
 - <doc:Metadata-Builder>
 - <doc:TerraError-Model>
+- <doc:API-Reference>
+- <doc:Configuration-Reference>
+
+### Reference
+
+- <doc:API-Reference>
+- <doc:Configuration-Reference>
 
 ### Advanced
 
 - <doc:TelemetryEngine-Injection>
+
+### Platform Integrations
+
+- <doc:Integrations>
