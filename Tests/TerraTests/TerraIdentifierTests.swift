@@ -5,47 +5,41 @@ import Testing
 struct TerraIdentifierTests {
   @Test("Provider and runtime wrappers preserve raw values")
   func providerAndRuntimeWrappersPreserveRawValues() {
-    let model = Terra.ModelID("gpt-4o")
-    let toolCall = Terra.ToolCallID("call-1")
-    let generatedToolCall = Terra.ToolCallID()
     let provider = Terra.ProviderID("openai")
     let runtime = Terra.RuntimeID("mlx")
 
-    #expect(model.rawValue == "gpt-4o")
-    #expect(toolCall.rawValue == "call-1")
-    #expect(!generatedToolCall.rawValue.isEmpty)
     #expect(provider.rawValue == "openai")
     #expect(runtime.rawValue == "mlx")
   }
 
-  @Test("Deprecated wrappers bridge into the string-first API")
-  func deprecatedWrappersBridgeIntoStringFirstApi() {
-    let infer = Terra.infer(Terra.ModelID("gpt-4o"))
-    let stream = Terra.stream(Terra.ModelID("gpt-4o"))
-    let embed = Terra.embed(Terra.ModelID("text-embedding-3-small"))
-    let tool = Terra.tool("search", callID: Terra.ToolCallID("call-7"))
+  @Test("String-first factories remain uniform")
+  func stringFirstFactoriesRemainUniform() {
+    let infer = Terra.infer("gpt-4o")
+    let stream = Terra.stream("gpt-4o")
+    let embed = Terra.embed("text-embedding-3-small")
+    let tool = Terra.tool("search", callId: "call-7")
 
     #expect([infer, stream, embed, tool].count == 4)
   }
 
-  @Test("Capabilities expose the new string-first tracing surface")
-  func capabilitiesExposeStringFirstTracingSurface() {
+  @Test("Capabilities expose the workflow-first tracing surface")
+  func capabilitiesExposeWorkflowFirstTracingSurface() {
     let capabilities = Terra.capabilities()
 
     #expect(capabilities.count >= 10)
-    #expect(capabilities.contains { $0.entryPoint == "Terra.trace(name:id:_:)" && $0.preference == .primary })
-    #expect(capabilities.contains { $0.entryPoint == "Terra.loop(name:id:messages:_:)" && $0.preference == .primary })
+    #expect(capabilities.contains { $0.entryPoint == "Terra.workflow(name:id:_:)" && $0.preference == .primary })
+    #expect(capabilities.contains { $0.entryPoint == "Terra.workflow(name:id:messages:_:)" && $0.preference == .primary })
     #expect(capabilities.contains { $0.entryPoint == "Terra.startSpan(name:id:attributes:)" })
     #expect(capabilities.contains { $0.entryPoint == "Terra.currentSpan()" })
-    #expect(capabilities.contains { $0.entryPoint == "Terra.trace(name:)" && $0.preference == .compatibility })
+    #expect(!capabilities.contains { $0.preference == .compatibility })
   }
 
-  @Test("Agentic workflow guidance is actionable")
-  func agenticWorkflowGuidanceIsActionable() {
-    let guidance = Terra.ask("agentic workflow")
+  @Test("Workflow guidance is actionable")
+  func workflowGuidanceIsActionable() {
+    let guidance = Terra.ask("workflow with tools")
 
-    #expect(guidance.apiToUse.contains("Terra.agentic"))
-    #expect(guidance.codeExample.contains("agent.tool"))
+    #expect(guidance.apiToUse.contains("Terra.workflow"))
+    #expect(guidance.codeExample.contains("workflow.tool"))
     #expect(!guidance.commonMistakes.isEmpty)
   }
 }

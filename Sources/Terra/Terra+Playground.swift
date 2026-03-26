@@ -74,22 +74,22 @@ private extension Terra {
   static var _playgroundScenarios: [Playground.Scenario] {
     [
       .init(
-        id: "trace-basic",
-        title: "Trace Basic",
-        summary: "Runs the default `Terra.trace` workflow and records root-span annotations.",
-        entryPoint: "Terra.trace(name:id:_:)"
+        id: "workflow-basic",
+        title: "Workflow Basic",
+        summary: "Runs the canonical `Terra.workflow` root and records root-span annotations.",
+        entryPoint: "Terra.workflow(name:id:_:)"
       ),
       .init(
-        id: "loop-messages",
-        title: "Loop Messages",
-        summary: "Runs the buffered transcript mutation workflow through `Terra.loop(messages:)`.",
-        entryPoint: "Terra.loop(name:id:messages:_:)"
+        id: "workflow-messages",
+        title: "Workflow Messages",
+        summary: "Runs the buffered transcript workflow through `Terra.workflow(messages:)`.",
+        entryPoint: "Terra.workflow(name:id:messages:_:)"
       ),
       .init(
-        id: "agentic-turn",
-        title: "Agentic Turn",
-        summary: "Runs a multi-step `Terra.agentic` workflow with checkpoints and a child tool call.",
-        entryPoint: "Terra.agentic(name:id:_:)"
+        id: "workflow-tools",
+        title: "Workflow Tools",
+        summary: "Runs a multi-step workflow with a checkpoint and a child tool call.",
+        entryPoint: "Terra.workflow(name:id:_:)"
       ),
       .init(
         id: "stream-basic",
@@ -125,12 +125,12 @@ private extension Terra {
     }
 
     switch id {
-    case "trace-basic":
-      return try await _runTraceBasicScenario(scenario)
-    case "loop-messages":
-      return try await _runLoopMessagesScenario(scenario)
-    case "agentic-turn":
-      return try await _runAgenticTurnScenario(scenario)
+    case "workflow-basic":
+      return try await _runWorkflowBasicScenario(scenario)
+    case "workflow-messages":
+      return try await _runWorkflowMessagesScenario(scenario)
+    case "workflow-tools":
+      return try await _runWorkflowToolsScenario(scenario)
     case "stream-basic":
       return try await _runStreamBasicScenario(scenario)
     case "manual-parent":
@@ -145,40 +145,40 @@ private extension Terra {
     }
   }
 
-  static func _runTraceBasicScenario(_ scenario: Playground.Scenario) async throws -> Playground.Result {
+  static func _runWorkflowBasicScenario(_ scenario: Playground.Scenario) async throws -> Playground.Result {
     let log = _PlaygroundEventLog()
-    let spanTree = try await Terra.trace(name: "playground.trace", id: scenario.id) { span in
-      await log.append("trace.start")
-      span.event("trace.start")
+    let spanTree = try await Terra.workflow(name: "playground.workflow", id: scenario.id) { span in
+      await log.append("workflow.start")
+      span.event("workflow.start")
       span.tokens(input: 8, output: 13)
       span.responseModel("playground-model")
       let tree = Terra.visualize(Terra.activeSpans())
-      await log.append("trace.complete")
-      span.event("trace.complete")
+      await log.append("workflow.complete")
+      span.event("workflow.complete")
       return tree
     }
     let recordedEvents = await log.snapshot()
 
     return .init(
       scenario: scenario,
-      summary: "Executed the canonical Terra.trace workflow with root-span events, token counts, and a response-model annotation.",
+      summary: "Executed the canonical Terra.workflow root with events, token counts, and a response-model annotation.",
       recordedEvents: recordedEvents,
       spanTree: spanTree,
       recommendedNextSteps: [
-        "Use Terra.examples() to inspect more trace-first snippets.",
-        #"Use Terra.ask("trace vs loop") if you need a different root API shape."#,
+        "Use Terra.examples() to inspect more workflow-first snippets.",
+        #"Use Terra.ask("workflow with transcript") if you need buffered messages."#,
       ]
     )
   }
 
-  static func _runLoopMessagesScenario(_ scenario: Playground.Scenario) async throws -> Playground.Result {
+  static func _runWorkflowMessagesScenario(_ scenario: Playground.Scenario) async throws -> Playground.Result {
     var messages = [ChatMessage(role: "user", content: "Plan the fix.")]
     let log = _PlaygroundEventLog()
-    let spanTree = try await Terra.loop(name: "playground.loop", id: scenario.id, messages: &messages) { loop in
-      await log.append("loop.planning")
-      loop.checkpoint("planning")
-      await loop.appendMessage(.init(role: "assistant", content: "Draft plan"))
-      _ = await loop.tool("search", callId: "playground-call-1") { trace in
+    let spanTree = try await Terra.workflow(name: "playground.workflow.messages", id: scenario.id, messages: &messages) { workflow, transcript in
+      await log.append("workflow.start")
+      workflow.checkpoint("planning")
+      await transcript.append(.init(role: "assistant", content: "Draft plan"))
+      _ = await workflow.tool("search", callId: "playground-call-1") { trace in
         await log.append("tool.search")
         trace.event("tool.search")
         return "docs"
@@ -189,22 +189,22 @@ private extension Terra {
 
     return .init(
       scenario: scenario,
-      summary: "Executed the buffered transcript loop. The caller transcript now contains \(messages.count) messages.",
+      summary: "Executed the buffered transcript workflow. The caller transcript now contains \(messages.count) messages.",
       recordedEvents: recordedEvents,
       spanTree: spanTree,
       recommendedNextSteps: [
-        "Use Terra.guides() and look for Mutable Transcript Agent Loops.",
+        "Use Terra.guides() and look for Mutable Transcript Workflow.",
         "Await detached work before returning if later transcript mutations must be written back.",
       ]
     )
   }
 
-  static func _runAgenticTurnScenario(_ scenario: Playground.Scenario) async throws -> Playground.Result {
+  static func _runWorkflowToolsScenario(_ scenario: Playground.Scenario) async throws -> Playground.Result {
     let log = _PlaygroundEventLog()
-    let spanTree = try await Terra.agentic(name: "playground.agentic", id: scenario.id) { agent in
-      agent.checkpoint("planning")
+    let spanTree = try await Terra.workflow(name: "playground.workflow.tools", id: scenario.id) { workflow in
+      workflow.checkpoint("planning")
       await log.append("checkpoint.planning")
-      _ = await agent.tool("search", callId: "playground-call-2") { trace in
+      _ = await workflow.tool("search", callId: "playground-call-2") { trace in
         await log.append("tool.search")
         trace.event("tool.search")
         return "docs"
@@ -215,19 +215,19 @@ private extension Terra {
 
     return .init(
       scenario: scenario,
-      summary: "Executed a multi-step agentic workflow with one root span and a child tool call.",
+      summary: "Executed a multi-step workflow with one root span and a child tool call.",
       recordedEvents: recordedEvents,
       spanTree: spanTree,
       recommendedNextSteps: [
-        #"Use Terra.ask("agent loop") for the trace-first guidance on when to choose agentic vs loop."#,
-        "Use Terra.examples() to inspect additional agentic patterns.",
+        #"Use Terra.ask("workflow with tools") for the recommended root pattern."#,
+        "Use Terra.examples() to inspect additional workflow patterns.",
       ]
     )
   }
 
   static func _runStreamBasicScenario(_ scenario: Playground.Scenario) async throws -> Playground.Result {
     let log = _PlaygroundEventLog()
-    let spanTree = try await Terra.trace(name: "playground.stream", id: scenario.id) { span in
+    let spanTree = try await Terra.workflow(name: "playground.stream", id: scenario.id) { span in
       _ = await Terra.stream("playground-model", prompt: "Explain").under(span).run { trace in
         await log.append("stream.first_token")
         trace.firstToken()
@@ -242,7 +242,7 @@ private extension Terra {
 
     return .init(
       scenario: scenario,
-      summary: "Executed a streaming helper under a root trace and recorded first-token plus chunk telemetry.",
+      summary: "Executed a streaming helper under a workflow root and recorded first-token plus chunk telemetry.",
       recordedEvents: recordedEvents,
       spanTree: spanTree,
       recommendedNextSteps: [
@@ -274,8 +274,8 @@ private extension Terra {
       recordedEvents: recordedEvents,
       spanTree: spanTree,
       recommendedNextSteps: [
-        "Prefer Terra.trace for one-shot workflows and reserve startSpan for truly explicit lifecycle needs.",
-        "Use Terra.help() if you need the full primary-vs-compatibility map.",
+        "Prefer Terra.workflow for one-shot workflows and reserve startSpan for truly explicit lifecycle needs.",
+        "Use Terra.help() if you need the full start-here map.",
       ]
     )
   }

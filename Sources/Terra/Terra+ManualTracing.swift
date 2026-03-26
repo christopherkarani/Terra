@@ -18,7 +18,7 @@ extension Terra {
   /// agentic workflows need most often.
   ///
   /// ```swift
-  /// let value = try await Terra.trace(name: "inference", id: "issue-42") { span in
+  /// let value = try await Terra.workflow(name: "inference", id: "issue-42") { span in
   ///   span.event("started")
   ///   return "ok"
   /// }
@@ -84,27 +84,15 @@ extension Terra {
     /// Records input and output token counts on the span.
     @discardableResult
     public func tokens(input: Int? = nil, output: Int? = nil) -> Self {
-      if let input {
-        storage.attribute(Keys.GenAI.usageInputTokens, .int(input))
-      }
-      if let output {
-        storage.attribute(Keys.GenAI.usageOutputTokens, .int(output))
-      }
+      storage.tokens(input: input, output: output)
       return self
     }
 
     /// Records the model identifier that produced the response.
     @discardableResult
     public func responseModel(_ value: String) -> Self {
-      storage.attribute(Keys.GenAI.responseModel, .string(value))
+      storage.responseModel(value)
       return self
-    }
-
-    /// Records the model identifier that produced the response using a compatibility wrapper.
-    @available(*, deprecated, message: "Use String model names directly.")
-    @discardableResult
-    public func responseModel(_ value: ModelID) -> Self {
-      responseModel(value.rawValue)
     }
 
     /// Records an error on the span and marks it failed.
@@ -112,9 +100,36 @@ extension Terra {
       storage.recordError(error)
     }
 
+    /// Records a named checkpoint event on the span.
+    @discardableResult
+    public func checkpoint(_ name: String) -> Self {
+      event("checkpoint.\(name)")
+    }
+
+    /// Records a streaming chunk on the span.
+    @discardableResult
+    public func chunk(_ tokens: Int = 1) -> Self {
+      storage.chunk(tokens)
+      return self
+    }
+
+    /// Records the final streaming output token count on the span.
+    @discardableResult
+    public func outputTokens(_ total: Int) -> Self {
+      storage.outputTokens(total)
+      return self
+    }
+
+    /// Records the first-token marker on the span.
+    @discardableResult
+    public func firstToken() -> Self {
+      storage.firstToken()
+      return self
+    }
+
     /// Ends the span if this handle owns the lifecycle.
     ///
-    /// `Terra.trace {}` owns lifecycle automatically. `Terra.currentSpan()` may return
+    /// `Terra.workflow {}` owns lifecycle automatically. `Terra.currentSpan()` may return
     /// a handle for a span owned elsewhere, in which case `end()` is ignored and Terra
     /// emits guidance in debug builds.
     public func end() {
@@ -129,17 +144,298 @@ extension Terra {
       priority: TaskPriority? = nil,
       _ body: @escaping @Sendable (SpanHandle) async throws -> R
     ) -> Task<R, Error> {
-      Task.detached(priority: priority) {
+      let inheritedAgentContext = Terra.agentContext
+      return Task.detached(priority: priority) {
         guard !isEnded else {
           NSLog("Detached work launched from an ended Terra span; continuing without parent linkage.")
-          return try await Terra._withDetachedParentEndedMarker {
+          return try await Terra.$agentContext.withValue(inheritedAgentContext) {
+            try await Terra._withDetachedParentEndedMarker {
+              try await body(self)
+            }
+          }
+        }
+        return try await Terra.$agentContext.withValue(inheritedAgentContext) {
+          try await Terra._withActiveSpan(self) {
             try await body(self)
           }
         }
-        return try await Terra._withActiveSpan(self) {
-          try await body(self)
-        }
       }
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await infer(
+        model,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens
+      ) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
+    ) async rethrows -> R {
+      try await Terra
+        .infer(
+          model,
+          prompt: prompt,
+          provider: provider,
+          runtime: runtime,
+          temperature: temperature,
+          maxTokens: maxTokens
+        )
+        .under(self)
+        .run(body)
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      messages: [ChatMessage],
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await infer(
+        model,
+        messages: messages,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens
+      ) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      messages: [ChatMessage],
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
+    ) async rethrows -> R {
+      try await Terra
+        .infer(
+          model,
+          messages: messages,
+          prompt: prompt,
+          provider: provider,
+          runtime: runtime,
+          temperature: temperature,
+          maxTokens: maxTokens
+        )
+        .under(self)
+        .run(body)
+    }
+
+    @discardableResult
+    public func stream<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      expectedTokens: Int? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await stream(
+        model,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        expectedTokens: expectedTokens
+      ) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func stream<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      expectedTokens: Int? = nil,
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
+    ) async rethrows -> R {
+      try await Terra
+        .stream(
+          model,
+          prompt: prompt,
+          provider: provider,
+          runtime: runtime,
+          temperature: temperature,
+          maxTokens: maxTokens,
+          expectedTokens: expectedTokens
+        )
+        .under(self)
+        .run(body)
+    }
+
+    @discardableResult
+    public func tool<R: Sendable>(
+      _ name: String,
+      callId: String? = nil,
+      type: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await tool(
+        name,
+        callId: callId,
+        type: type,
+        provider: provider,
+        runtime: runtime
+      ) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func tool<R: Sendable>(
+      _ name: String,
+      callId: String? = nil,
+      type: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
+    ) async rethrows -> R {
+      let operation = if let callId {
+        Terra.tool(name, callId: callId, type: type, provider: provider, runtime: runtime)
+      } else {
+        Terra.tool(name, type: type, provider: provider, runtime: runtime)
+      }
+
+      return try await operation
+        .under(self)
+        .run(body)
+    }
+
+    @discardableResult
+    public func embed<R: Sendable>(
+      _ model: String,
+      inputCount: Int? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await embed(model, inputCount: inputCount, provider: provider, runtime: runtime) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func embed<R: Sendable>(
+      _ model: String,
+      inputCount: Int? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
+    ) async rethrows -> R {
+      try await Terra
+        .embed(model, inputCount: inputCount, provider: provider, runtime: runtime)
+        .under(self)
+        .run(body)
+    }
+
+    @discardableResult
+    public func safety<R: Sendable>(
+      _ name: String,
+      subject: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await safety(name, subject: subject, provider: provider, runtime: runtime) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func safety<R: Sendable>(
+      _ name: String,
+      subject: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
+    ) async rethrows -> R {
+      try await Terra
+        .safety(name, subject: subject, provider: provider, runtime: runtime)
+        .under(self)
+        .run(body)
+    }
+
+    @discardableResult
+    public func agent<R: Sendable>(
+      _ name: String,
+      id: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await agent(name, id: id, provider: provider, runtime: runtime) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func agent<R: Sendable>(
+      _ name: String,
+      id: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
+    ) async rethrows -> R {
+      try await Terra
+        .agent(name, id: id, provider: provider, runtime: runtime)
+        .under(self)
+        .run(body)
+    }
+
+    package func installStreamingCallbacks(
+      onChunk: @escaping @Sendable (Int) -> Void,
+      onOutputTokens: @escaping @Sendable (Int) -> Void,
+      onFirstToken: @escaping @Sendable () -> Void
+    ) {
+      storage.installStreamingCallbacks(
+        onChunk: onChunk,
+        onOutputTokens: onOutputTokens,
+        onFirstToken: onFirstToken
+      )
     }
   }
 
@@ -320,9 +616,17 @@ extension Terra {
     private let registryKey: String?
     fileprivate let ownerTaskKey: Int?
     private let guidance: String
+    private let onEvent: (@Sendable (String) -> Void)?
+    private let onAttribute: (@Sendable (String, TraceScalar) -> Void)?
+    private let onError: (@Sendable (any Error) -> Void)?
+    private let onTokens: (@Sendable (Int?, Int?) -> Void)?
+    private let onResponseModel: (@Sendable (String) -> Void)?
     private let lock = NSLock()
     private var ended = false
     private var attributes: [String: AttributeValue]
+    private var onChunk: (@Sendable (Int) -> Void)?
+    private var onOutputTokens: (@Sendable (Int) -> Void)?
+    private var onFirstToken: (@Sendable () -> Void)?
 
     init(
       name: String,
@@ -333,7 +637,15 @@ extension Terra {
       ownsLifecycle: Bool,
       registryKey: String?,
       ownerTaskKey: Int?,
-      guidance: String
+      guidance: String,
+      onEvent: (@Sendable (String) -> Void)? = nil,
+      onAttribute: (@Sendable (String, TraceScalar) -> Void)? = nil,
+      onError: (@Sendable (any Error) -> Void)? = nil,
+      onTokens: (@Sendable (Int?, Int?) -> Void)? = nil,
+      onResponseModel: (@Sendable (String) -> Void)? = nil,
+      onChunk: (@Sendable (Int) -> Void)? = nil,
+      onOutputTokens: (@Sendable (Int) -> Void)? = nil,
+      onFirstToken: (@Sendable () -> Void)? = nil
     ) {
       self.name = name
       self.id = id
@@ -347,7 +659,15 @@ extension Terra {
       self.registryKey = registryKey
       self.ownerTaskKey = ownerTaskKey
       self.guidance = guidance
+      self.onEvent = onEvent
+      self.onAttribute = onAttribute
+      self.onError = onError
+      self.onTokens = onTokens
+      self.onResponseModel = onResponseModel
       self.attributes = initialAttributes
+      self.onChunk = onChunk
+      self.onOutputTokens = onOutputTokens
+      self.onFirstToken = onFirstToken
     }
 
     var isEnded: Bool {
@@ -360,6 +680,7 @@ extension Terra {
     func event(_ name: String) {
       guard validateMutation() else { return }
       span.addEvent(name: name)
+      onEvent?(name)
     }
 
     func attribute(_ key: String, _ value: _SpanMutationValue) {
@@ -379,13 +700,99 @@ extension Terra {
       attributes[key] = telemetryValue
       lock.unlock()
       span.setAttribute(key: key, value: telemetryValue)
+      let scalar: TraceScalar
+      switch value {
+      case .string(let value): scalar = .string(value)
+      case .int(let value): scalar = .int(value)
+      case .double(let value): scalar = .double(value)
+      case .bool(let value): scalar = .bool(value)
+      }
+      onAttribute?(key, scalar)
     }
 
     func recordError(_ error: any Error) {
       guard validateMutation() else { return }
-      span.status = .error(description: String(describing: error))
-      span.recordException(error)
+      let message = String(describing: error)
+      let exceptionType = String(reflecting: type(of: error))
+      let shouldCaptureMessage = Runtime.shared.privacy.shouldCapture(includeContent: false)
+
+      span.status = .error(description: shouldCaptureMessage ? message : exceptionType)
+
+      var attributes: [String: AttributeValue] = [
+        "exception.type": .string(exceptionType),
+      ]
+      if shouldCaptureMessage {
+        attributes["exception.message"] = .string(message)
+      }
+
+      span.addEvent(name: "exception", attributes: attributes, timestamp: Date())
+      onError?(error)
       Terra._emitErrorHook(error, span: SpanHandle(storage: self))
+    }
+
+    func tokens(input: Int?, output: Int?) {
+      guard validateMutation() else { return }
+      if let input {
+        attribute(Keys.GenAI.usageInputTokens, .int(input))
+      }
+      if let output {
+        attribute(Keys.GenAI.usageOutputTokens, .int(output))
+      }
+      onTokens?(input, output)
+    }
+
+    func responseModel(_ value: String) {
+      guard validateMutation() else { return }
+      attribute(Keys.GenAI.responseModel, .string(value))
+      onResponseModel?(value)
+    }
+
+    func installStreamingCallbacks(
+      onChunk: @escaping @Sendable (Int) -> Void,
+      onOutputTokens: @escaping @Sendable (Int) -> Void,
+      onFirstToken: @escaping @Sendable () -> Void
+    ) {
+      lock.lock()
+      self.onChunk = onChunk
+      self.onOutputTokens = onOutputTokens
+      self.onFirstToken = onFirstToken
+      lock.unlock()
+    }
+
+    func chunk(_ tokens: Int) {
+      guard validateMutation() else { return }
+      lock.lock()
+      let handler = onChunk
+      lock.unlock()
+      guard let handler else {
+        emitStreamingGuidance()
+        return
+      }
+      handler(tokens)
+    }
+
+    func outputTokens(_ total: Int) {
+      guard validateMutation() else { return }
+      lock.lock()
+      let handler = onOutputTokens
+      lock.unlock()
+      guard let handler else {
+        emitStreamingGuidance()
+        return
+      }
+      handler(total)
+    }
+
+    func firstToken() {
+      guard validateMutation() else { return }
+      lock.lock()
+      let handler = onFirstToken
+      lock.unlock()
+      guard let handler else {
+        emitStreamingGuidance()
+        return
+      }
+      handler()
     }
 
     func attributeValue(for key: String) -> AttributeValue? {
@@ -435,6 +842,12 @@ extension Terra {
       assertionFailure(guidance)
     }
 
+    private func emitStreamingGuidance() {
+      assertionFailure(
+        "Streaming token helpers are only valid on spans created by Terra.stream(...).run { ... } or SpanHandle.stream(...)."
+      )
+    }
+
     func markEndedForAutoLifecycle() -> Bool {
       lock.lock()
       defer { lock.unlock() }
@@ -464,7 +877,7 @@ extension Terra {
       registryKey: registryKey,
       ownerTaskKey: ownerTaskKey,
       guidance: """
-      For agentic workflows where spans must outlive closures, use Terra.startSpan() or Terra.trace {} instead of mutating an ended or externally owned span handle.
+      For workflows where spans must outlive closures, use Terra.startSpan() or Terra.workflow(...) instead of mutating an ended or externally owned span handle.
       """
     )
     spanRegistry.set(storage)
@@ -571,7 +984,7 @@ extension Terra {
   /// trace without dropping into OpenTelemetry APIs.
   ///
   /// ```swift
-  /// let result = try await Terra.trace(name: "work") { _ in
+  /// let result = try await Terra.workflow(name: "work") { _ in
   ///   if let current = Terra.currentSpan() {
   ///     print(current.parentId ?? "root")
   ///   }
@@ -599,7 +1012,7 @@ extension Terra {
       registryKey: nil,
       ownerTaskKey: nil,
       guidance: """
-      Terra.currentSpan() returned a span owned outside Terra. Use Terra.startSpan() or Terra.trace {} when you need explicit lifecycle control.
+      Terra.currentSpan() returned a span owned outside Terra. Use Terra.workflow {} or Terra.startSpan() when you need Terra-managed lifecycle control.
       """
     )
     return SpanHandle(storage: storage)
@@ -608,7 +1021,7 @@ extension Terra {
   /// Returns `true` when the current async context is inside a Terra span.
   ///
   /// ```swift
-  /// let value = try await Terra.trace(name: "check") { _ in
+  /// let value = try await Terra.workflow(name: "check") { _ in
   ///   precondition(Terra.isTracing())
   ///   return "ok"
   /// }
@@ -660,79 +1073,49 @@ extension Terra {
     )
   }
 
-  /// Traces a unit of async work with automatic lifecycle and active-context management.
-  ///
-  /// This is Terra's default entry point for agentic workflows because it makes the
-  /// span owner explicit and keeps all later async work inside the same active context.
-  ///
-  /// ```swift
-  /// let value = try await Terra.trace(name: "inference", id: "issue-42") { span in
-  ///   span.event("start")
-  ///   return "ok"
-  /// }
-  /// ```
-  public static func trace<R: Sendable>(
+  /// Traces a workflow under one root span and exposes `SpanHandle` as the only public tracing handle.
+  public static func workflow<R: Sendable>(
     name: String,
     id: String? = nil,
     _ body: @escaping @Sendable (SpanHandle) async throws -> R
   ) async throws -> R {
-    let span = startSpan(name: name, id: id)
-    defer { span.end() }
-    return try await _withActiveSpan(span) {
+    try await _runWorkflowRoot(name: name, id: id) { span, _ in
       try await body(span)
     }
   }
 
-  /// Traces a multi-step agentic workflow under one obvious root span.
-  ///
-  /// Prefer `agentic` when a coding agent will iterate, call tools, or launch
-  /// follow-up work that should stay correlated to one long-lived parent span.
-  public static func agentic<R: Sendable>(
-    name: String,
-    id: String? = nil,
-    _ body: @escaping @Sendable (AgentHandle) async throws -> R
-  ) async throws -> R {
-    try await _runAgenticRoot(name: name, id: id) { span, context in
-      try await body(AgentHandle(span: span, context: context))
-    }
-  }
-
-  /// Traces an agent loop that mutates a chat transcript while remaining compatible with `@Sendable` closures.
-  ///
-  /// `loop(messages:)` keeps the caller-facing `inout` transcript at the API boundary and
-  /// exposes a buffered, sendable mutation surface inside the traced body. When the root
-  /// loop returns or throws, the latest buffered transcript snapshot is written back to the caller.
-  public static func loop<R: Sendable>(
+  /// Traces a workflow with a buffered transcript helper that writes back on success and failure.
+  public static func workflow<R: Sendable>(
     name: String,
     id: String? = nil,
     messages: inout [ChatMessage],
-    _ body: @escaping @Sendable (AgentLoopScope) async throws -> R
+    _ body: @escaping @Sendable (SpanHandle, WorkflowTranscript) async throws -> R
   ) async throws -> R {
     let buffer = _LoopMessageBuffer(messages: messages)
+    let transcript = WorkflowTranscript(storage: buffer)
 
     do {
-      let result = try await _runAgenticRoot(name: name, id: id) { span, context in
-        try await body(AgentLoopScope(agent: AgentHandle(span: span, context: context), messages: buffer))
+      let result = try await _runWorkflowRoot(name: name, id: id) { span, _ in
+        try await body(span, transcript)
       }
-      messages = await buffer.snapshot()
+      messages = await transcript.snapshot()
       return result
     } catch {
-      messages = await buffer.snapshot()
+      messages = await transcript.snapshot()
       throw error
     }
   }
 
-  private static func _runAgenticRoot<R: Sendable>(
+  private static func _runWorkflowRoot<R: Sendable>(
     name: String,
     id: String? = nil,
     _ body: @escaping @Sendable (SpanHandle, AgentContext) async throws -> R
   ) async throws -> R {
     var attributes: [String: AttributeValue] = [
-      Keys.GenAI.operationName: .string(OperationName.invokeAgent.rawValue),
-      Keys.GenAI.agentName: .string(name),
+      "terra.workflow.name": .string(name),
     ]
     if let id {
-      attributes[Keys.GenAI.agentID] = .string(id)
+      attributes["terra.workflow.id"] = .string(id)
     }
 
     let span = startSpan(name: name, id: id, attributes: attributes)
@@ -741,10 +1124,10 @@ extension Terra {
       try await _withActiveSpan(span) {
         defer {
           let snapshot = context.snapshot()
-          span.attribute("terra.agent.tools_used", snapshot.toolsUsed.sorted().joined(separator: ","))
-          span.attribute("terra.agent.models_used", snapshot.modelsUsed.sorted().joined(separator: ","))
-          span.attribute("terra.agent.inference_count", snapshot.inferenceCount)
-          span.attribute("terra.agent.tool_call_count", snapshot.toolCallCount)
+          span.attribute("terra.workflow.tools_used", snapshot.toolsUsed.sorted().joined(separator: ","))
+          span.attribute("terra.workflow.models_used", snapshot.modelsUsed.sorted().joined(separator: ","))
+          span.attribute("terra.workflow.inference_count", snapshot.inferenceCount)
+          span.attribute("terra.workflow.tool_call_count", snapshot.toolCallCount)
           span.end()
         }
         return try await body(span, context)
@@ -752,460 +1135,82 @@ extension Terra {
     }
   }
 
-  /// A sendable helper for agent loops that need explicit checkpoints and child operations.
-  public struct AgentHandle: Sendable {
-    private let span: SpanHandle
-    private let context: AgentContext?
+  public struct WorkflowTranscript: Sendable {
+    private let storage: _LoopMessageBuffer
 
-    fileprivate init(span: SpanHandle, context: AgentContext? = nil) {
-      self.span = span
-      self.context = context
+    fileprivate init(storage: _LoopMessageBuffer) {
+      self.storage = storage
     }
 
-    public var traceId: String { span.traceId }
-    public var spanId: String { span.spanId }
-    public var parentSpan: SpanHandle { span }
-
-    /// Records a named checkpoint event under the root agentic span.
-    @discardableResult
-    public func checkpoint(_ name: String) -> Self {
-      span.event("checkpoint.\(name)")
-      return self
+    public func snapshot() async -> [ChatMessage] {
+      await storage.snapshot()
     }
 
-    /// Records a named event on the agent root span.
-    @discardableResult
-    public func event(_ name: String) -> Self {
-      span.event(name)
-      return self
+    public func replace(with messages: [ChatMessage]) async {
+      await storage.replace(with: messages)
     }
 
-    @discardableResult
-    public func infer<R: Sendable>(
-      _ model: String,
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      _ body: @escaping @Sendable () async throws -> R
-    ) async rethrows -> R {
-      try await infer(
-        model,
-        prompt: prompt,
-        provider: provider,
-        runtime: runtime,
-        temperature: temperature,
-        maxTokens: maxTokens
-      ) { _ in
-        try await body()
-      }
+    public func append(_ message: ChatMessage) async {
+      await storage.append(message)
     }
 
-    @discardableResult
-    public func infer<R: Sendable>(
-      _ model: String,
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async rethrows -> R {
-      try await Terra
-        .infer(
-          model,
-          prompt: prompt,
-          provider: provider,
-          runtime: runtime,
-          temperature: temperature,
-          maxTokens: maxTokens
-        )
-        .under(span)
-        .run(body)
+    public func append(contentsOf messages: [ChatMessage]) async {
+      await storage.append(contentsOf: messages)
     }
 
-    @discardableResult
-    public func infer<R: Sendable>(
-      _ model: String,
-      messages: [ChatMessage],
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      _ body: @escaping @Sendable () async throws -> R
-    ) async rethrows -> R {
-      try await infer(
-        model,
-        messages: messages,
-        prompt: prompt,
-        provider: provider,
-        runtime: runtime,
-        temperature: temperature,
-        maxTokens: maxTokens
-      ) { _ in
-        try await body()
-      }
-    }
-
-    @discardableResult
-    public func infer<R: Sendable>(
-      _ model: String,
-      messages: [ChatMessage],
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async rethrows -> R {
-      try await Terra
-        .infer(
-          model,
-          messages: messages,
-          prompt: prompt,
-          provider: provider,
-          runtime: runtime,
-          temperature: temperature,
-          maxTokens: maxTokens
-        )
-        .under(span)
-        .run(body)
-    }
-
-    @discardableResult
-    public func stream<R: Sendable>(
-      _ model: String,
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      expectedTokens: Int? = nil,
-      _ body: @escaping @Sendable () async throws -> R
-    ) async rethrows -> R {
-      try await stream(
-        model,
-        prompt: prompt,
-        provider: provider,
-        runtime: runtime,
-        temperature: temperature,
-        maxTokens: maxTokens,
-        expectedTokens: expectedTokens
-      ) { _ in
-        try await body()
-      }
-    }
-
-    @discardableResult
-    public func stream<R: Sendable>(
-      _ model: String,
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      expectedTokens: Int? = nil,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async rethrows -> R {
-      try await Terra
-        .stream(
-          model,
-          prompt: prompt,
-          provider: provider,
-          runtime: runtime,
-          temperature: temperature,
-          maxTokens: maxTokens,
-          expectedTokens: expectedTokens
-        )
-        .under(span)
-        .run(body)
-    }
-
-    @discardableResult
-    public func tool<R: Sendable>(
-      _ name: String,
-      callId: String? = nil,
-      type: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      _ body: @escaping @Sendable () async throws -> R
-    ) async rethrows -> R {
-      try await tool(
-        name,
-        callId: callId,
-        type: type,
-        provider: provider,
-        runtime: runtime
-      ) { _ in
-        try await body()
-      }
-    }
-
-    @discardableResult
-    public func tool<R: Sendable>(
-      _ name: String,
-      callId: String? = nil,
-      type: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async rethrows -> R {
-      let operation = if let callId {
-        Terra.tool(name, callId: callId, type: type, provider: provider, runtime: runtime)
-      } else {
-        Terra.tool(name, type: type, provider: provider, runtime: runtime)
-      }
-
-      return try await operation
-        .under(span)
-        .run(body)
-    }
-
-    /// Runs detached work while keeping the agent root span active.
-    public func detached<R: Sendable>(
-      priority: TaskPriority? = nil,
-      _ body: @escaping @Sendable (AgentHandle) async throws -> R
-    ) -> Task<R, Error> {
-      span.detached(priority: priority) { _ in
-        if let context {
-          return try await Terra.$agentContext.withValue(context) {
-            try await body(self)
-          }
-        }
-        return try await body(self)
-      }
+    public func clear() async {
+      await storage.clear()
     }
   }
 
-  /// A sendable helper for agent loops that need checkpointed child operations and buffered transcript mutation.
-  public struct AgentLoopScope: Sendable {
-    private let agent: AgentHandle
-    private let messages: _LoopMessageBuffer
+  package static func _testSpanHandle(
+    onEvent: @escaping @Sendable (String) -> Void = { _ in },
+    onAttribute: @escaping @Sendable (String, TraceScalar) -> Void = { _, _ in },
+    onError: @escaping @Sendable (any Error) -> Void = { _ in },
+    onTokens: @escaping @Sendable (Int?, Int?) -> Void = { _, _ in },
+    onResponseModel: @escaping @Sendable (String) -> Void = { _ in },
+    onChunk: @escaping @Sendable (Int) -> Void = { _ in },
+    onOutputTokens: @escaping @Sendable (Int) -> Void = { _ in },
+    onFirstToken: @escaping @Sendable () -> Void = {}
+  ) -> SpanHandle {
+    let span = tracer().spanBuilder(spanName: "terra.test.span").startSpan()
+    let storage = _SpanHandleStorage(
+      name: "terra.test.span",
+      id: nil,
+      span: span,
+      parentSpan: nil,
+      initialAttributes: [:],
+      ownsLifecycle: false,
+      registryKey: nil,
+      ownerTaskKey: nil,
+      guidance: "Synthetic test span handle is invalid outside the test seam.",
+      onEvent: onEvent,
+      onAttribute: onAttribute,
+      onError: onError,
+      onTokens: onTokens,
+      onResponseModel: onResponseModel,
+      onChunk: onChunk,
+      onOutputTokens: onOutputTokens,
+      onFirstToken: onFirstToken
+    )
+    return SpanHandle(storage: storage)
+  }
 
-    fileprivate init(agent: AgentHandle, messages: _LoopMessageBuffer) {
-      self.agent = agent
-      self.messages = messages
-    }
-
-    public var traceId: String { agent.traceId }
-    public var spanId: String { agent.spanId }
-    public var parentSpan: SpanHandle { agent.parentSpan }
-
-    @discardableResult
-    public func checkpoint(_ name: String) -> Self {
-      _ = agent.checkpoint(name)
-      return self
-    }
-
-    @discardableResult
-    public func event(_ name: String) -> Self {
-      _ = agent.event(name)
-      return self
-    }
-
-    public func snapshotMessages() async -> [ChatMessage] {
-      await messages.snapshot()
-    }
-
-    public func replaceMessages(_ newMessages: [ChatMessage]) async {
-      await messages.replace(with: newMessages)
-    }
-
-    public func appendMessage(_ message: ChatMessage) async {
-      await messages.append(message)
-    }
-
-    public func appendMessages(_ newMessages: [ChatMessage]) async {
-      await messages.append(contentsOf: newMessages)
-    }
-
-    public func clearMessages() async {
-      await messages.clear()
-    }
-
-    @discardableResult
-    public func infer<R: Sendable>(
-      _ model: String,
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      _ body: @escaping @Sendable () async throws -> R
-    ) async rethrows -> R {
-      try await agent.infer(
-        model,
-        prompt: prompt,
-        provider: provider,
-        runtime: runtime,
-        temperature: temperature,
-        maxTokens: maxTokens,
-        body
-      )
-    }
-
-    @discardableResult
-    public func infer<R: Sendable>(
-      _ model: String,
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async rethrows -> R {
-      try await agent.infer(
-        model,
-        prompt: prompt,
-        provider: provider,
-        runtime: runtime,
-        temperature: temperature,
-        maxTokens: maxTokens,
-        body
-      )
-    }
-
-    @discardableResult
-    public func infer<R: Sendable>(
-      _ model: String,
-      messages transcript: [ChatMessage],
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      _ body: @escaping @Sendable () async throws -> R
-    ) async rethrows -> R {
-      try await agent.infer(
-        model,
-        messages: transcript,
-        prompt: prompt,
-        provider: provider,
-        runtime: runtime,
-        temperature: temperature,
-        maxTokens: maxTokens,
-        body
-      )
-    }
-
-    @discardableResult
-    public func infer<R: Sendable>(
-      _ model: String,
-      messages transcript: [ChatMessage],
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async rethrows -> R {
-      try await agent.infer(
-        model,
-        messages: transcript,
-        prompt: prompt,
-        provider: provider,
-        runtime: runtime,
-        temperature: temperature,
-        maxTokens: maxTokens,
-        body
-      )
-    }
-
-    @discardableResult
-    public func stream<R: Sendable>(
-      _ model: String,
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      expectedTokens: Int? = nil,
-      _ body: @escaping @Sendable () async throws -> R
-    ) async rethrows -> R {
-      try await agent.stream(
-        model,
-        prompt: prompt,
-        provider: provider,
-        runtime: runtime,
-        temperature: temperature,
-        maxTokens: maxTokens,
-        expectedTokens: expectedTokens,
-        body
-      )
-    }
-
-    @discardableResult
-    public func stream<R: Sendable>(
-      _ model: String,
-      prompt: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      temperature: Double? = nil,
-      maxTokens: Int? = nil,
-      expectedTokens: Int? = nil,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async rethrows -> R {
-      try await agent.stream(
-        model,
-        prompt: prompt,
-        provider: provider,
-        runtime: runtime,
-        temperature: temperature,
-        maxTokens: maxTokens,
-        expectedTokens: expectedTokens,
-        body
-      )
-    }
-
-    @discardableResult
-    public func tool<R: Sendable>(
-      _ name: String,
-      callId: String? = nil,
-      type: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      _ body: @escaping @Sendable () async throws -> R
-    ) async rethrows -> R {
-      try await agent.tool(
-        name,
-        callId: callId,
-        type: type,
-        provider: provider,
-        runtime: runtime,
-        body
-      )
-    }
-
-    @discardableResult
-    public func tool<R: Sendable>(
-      _ name: String,
-      callId: String? = nil,
-      type: String? = nil,
-      provider: ProviderID? = nil,
-      runtime: RuntimeID? = nil,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async rethrows -> R {
-      try await agent.tool(
-        name,
-        callId: callId,
-        type: type,
-        provider: provider,
-        runtime: runtime,
-        body
-      )
-    }
-
-    /// Detached work only writes back transcript mutations that finish before the root loop returns.
-    public func detached<R: Sendable>(
-      priority: TaskPriority? = nil,
-      _ body: @escaping @Sendable (AgentLoopScope) async throws -> R
-    ) -> Task<R, Error> {
-      agent.detached(priority: priority) { handle in
-        try await body(AgentLoopScope(agent: handle, messages: messages))
-      }
-    }
+  package static func _invalidSpanHandle(guidance: String) -> SpanHandle {
+    let span = tracer().spanBuilder(spanName: "terra.invalid.span").startSpan()
+    span.end()
+    let storage = _SpanHandleStorage(
+      name: "terra.invalid.span",
+      id: nil,
+      span: span,
+      parentSpan: nil,
+      initialAttributes: [:],
+      ownsLifecycle: false,
+      registryKey: nil,
+      ownerTaskKey: nil,
+      guidance: guidance
+    )
+    return SpanHandle(storage: storage)
   }
 
   /// Returns all Terra spans that are currently active in the process.
@@ -1283,106 +1288,6 @@ extension Terra {
     }
   }
 
-  /// Fluent convenience wrapper over Terra's explicit manual tracing APIs.
-  ///
-  /// Use this when you want to build a multi-step trace progressively while
-  /// still keeping `Terra.trace(name:id:_:)` as the canonical mental model.
-  @available(*, deprecated, message: "Prefer Terra.trace(name:id:_:) for one-shot traced work or Terra.startSpan(name:id:attributes:) for explicit lifecycle.")
-  public struct TraceBuilder: Sendable {
-    private final class State: @unchecked Sendable {
-      private let lock = NSLock()
-      private var ended = false
-      let root: SpanHandle
-
-      init(root: SpanHandle) {
-        self.root = root
-      }
-
-      func withActiveRoot<R: Sendable>(
-        _ body: @escaping @Sendable (SpanHandle) async throws -> R
-      ) async throws -> R {
-        let span = try rootSpan()
-        return try await Terra._withActiveSpan(span) {
-          try await body(span)
-        }
-      }
-
-      func rootSpan() throws -> SpanHandle {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !ended, !root.isEnded else {
-          throw Terra.TerraError.guidance(
-            message: "This TraceBuilder has already ended.",
-            why: "TraceBuilder reuses a single root span. Once that root span is ended, later operations cannot attach child spans or metadata to it.",
-            correctAPI: "Create a new builder with Terra.trace(name:) or use Terra.trace(name:id:_:) for one-shot traced work.",
-            example: """
-            let builder = Terra.trace(name: "request")
-            try await builder
-              .span("validation") { }
-            builder.end()
-            """,
-            context: ["builder_state": "ended"]
-          )
-        }
-        return root
-      }
-
-      func end() {
-        lock.lock()
-        let shouldEnd = !ended
-        ended = true
-        lock.unlock()
-        if shouldEnd {
-          root.end()
-        }
-      }
-    }
-
-    private let state: State
-
-    fileprivate init(root: SpanHandle) {
-      state = State(root: root)
-    }
-
-    @discardableResult
-    public func attribute(_ key: String, _ value: String) -> Self {
-      state.root.attribute(key, value)
-      return self
-    }
-
-    @discardableResult
-    public func event(_ name: String) -> Self {
-      state.root.event(name)
-      return self
-    }
-
-    @discardableResult
-    public func span(
-      _ name: String,
-      _ body: @escaping @Sendable () async throws -> Void
-    ) async throws -> Self {
-      try await state.withActiveRoot { _ in
-        try await Terra.trace(name: name) { _ in
-          try await body()
-        }
-      }
-      return self
-    }
-
-    public func end() {
-      state.end()
-    }
-  }
-
-  /// Starts a fluent trace builder for progressive multi-step workflows.
-  ///
-  /// This is additive convenience over the canonical closure-based `trace`
-  /// entry point. Prefer it when step-by-step composition reads more clearly.
-  @available(*, deprecated, message: "Prefer Terra.trace(name:id:_:) for one-shot traced work or Terra.startSpan(name:id:attributes:) for explicit lifecycle.")
-  public static func trace(name: String) -> TraceBuilder {
-    TraceBuilder(root: startSpan(name: name))
-  }
-
   /// Protocol for services that want a lightweight Terra-managed tracing wrapper.
   ///
   /// Conforming to `TerraInstrumentable` keeps the service interface small and
@@ -1405,7 +1310,7 @@ extension Terra {
     }
 
     public func terraExecute(_ input: String) async throws -> String {
-      try await Terra.trace(name: "service.\(service.terraServiceName)") { span in
+      try await Terra.workflow(name: "service.\(service.terraServiceName)") { span in
         span
           .attribute(Terra.Keys.Terra.autoInstrumented, true)
           .attribute("terra.service.name", service.terraServiceName)

@@ -23,11 +23,11 @@ enum TerraRecipeSnippets {
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api")
       )
-      .run { trace in
-        trace.event("infer.request")
-        trace.tag("sample.kind", "infer")
-        trace.tag("app.user_tier", "free")
-        trace.tokens(input: 42, output: 18)
+      .run { span in
+        span.event("infer.request")
+        span.attribute("sample.kind", "infer")
+        span.attribute("app.user_tier", "free")
+        span.tokens(input: 42, output: 18)
         return "stubbed-infer-response"
       }
   }
@@ -41,29 +41,43 @@ enum TerraRecipeSnippets {
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api")
       )
-      .run { trace in
-        trace.event("tool.invoked")
-        trace.tag("sample.kind", "tool")
-        trace.tag("tool.query.length", query.count)
+      .run { span in
+        span.event("tool.invoked")
+        span.attribute("sample.kind", "tool")
+        span.attribute("tool.query.length", query.count)
         return ["result for \(query)"]
       }
   }
 
-  static func agentRecipe(task: String) async throws -> String {
-    try await Terra
-      .agent(
-        "planner",
-        id: "agent-1",
+  static func workflowRecipe(task: String) async throws -> String {
+    try await Terra.workflow(name: "planner", id: "workflow-1") { workflow in
+      workflow.event("workflow.start")
+      workflow.attribute("sample.kind", "workflow")
+      workflow.attribute("workflow.task", task)
+
+      _ = try await workflow.tool(
+        "search",
+        callId: "workflow-tool-1",
+        type: "web_search",
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api")
-      )
-      .run { trace in
-        trace.event("agent.begin")
-        trace.tag("sample.kind", "agent")
-        trace.tag("agent.task", task)
-        _ = try await toolRecipe(query: task)
-        return try await inferRecipe(prompt: "Plan next steps for: \(task)")
+      ) { span in
+        span.event("tool.invoked")
+        span.attribute("tool.query.length", task.count)
+        return ["result for \(task)"]
       }
+
+      return try await workflow.infer(
+        "gpt-4o-mini",
+        prompt: "Plan next steps for: \(task)",
+        provider: Terra.ProviderID("openai"),
+        runtime: Terra.RuntimeID("http_api")
+      ) { span in
+        span.event("infer.followup")
+        span.tokens(input: 24, output: 16)
+        return "stubbed-workflow-response"
+      }
+    }
   }
 }
 

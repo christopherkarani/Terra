@@ -1,112 +1,94 @@
-# Terra Migration Guide (Legacy -> Current)
+# Terra Migration Guide
 
-This guide migrates existing integrations to the canonical composable API:
+This release is a deliberate workflow-first breaking cleanup.
 
-- Startup: `Terra.start(...)` (`async`)
-- Operations: `Terra.infer/stream/embed/agent/tool/safety`
-- Agent loops: `Terra.agentic(name:id:_:)`
-- Terminal: `.run { ... }`
-- Metadata: `trace.tag(...)` for `TraceHandle`, or `span.attribute(...)` when you are using `SpanHandle`
-- Per-call content capture: `.capture(.includeContent)`
-- Stable lifecycle errors: `Terra.TerraError` (`code`-based)
-- Structured chat prompts: `Terra.infer(..., messages: [Terra.ChatMessage])`
-- Typed identifiers: `Terra.ProviderID`, `Terra.RuntimeID`; `Terra.ModelID` and `Terra.ToolCallID` remain as compatibility wrappers for older call sites
+## What Changed
+
+- Root tracing now starts with `Terra.workflow(...)`
+- Transcript-owning roots now use `Terra.workflow(..., messages: &messages)`
+- Explicit long-lived parents still use `Terra.startSpan(...)`
+- `Operation.run` closures now receive `SpanHandle`
+- Model names and tool call identifiers are plain `String` values
+- `ProviderID` and `RuntimeID` remain
+
+Removed public compatibility surface:
+
+- `Terra.trace(...)`
+- `Terra.agentic(...)`
+- `Terra.loop(...)`
+- `TraceHandle`
+- `TraceBuilder`
+- `ModelID`
+- `ToolCallID`
+- `callID:`
 
 ## API Mapping
 
-| Legacy API | Current replacement |
+| Old shape | New shape |
 | --- | --- |
-| `withInferenceSpan(...)` | `Terra.infer(...).run { ... }` |
-| `withStreamingInferenceSpan(...)` | `Terra.stream(...).run { trace in ... }` |
-| `withAgentInvocationSpan(...)` | `Terra.agent(...).run { ... }` |
-| `withToolExecutionSpan(...)` | `Terra.tool(...).run { ... }` |
-| `withEmbeddingSpan(...)` | `Terra.embed(...).run { ... }` |
-| `withSafetyCheckSpan(...)` | `Terra.safety(...).run { ... }` |
-| multi-step planner / tool loop | `Terra.agentic(name:id:_:) { agent in ... }` |
-| raw `Task.detached` with tracing assumptions | `SpanHandle.detached(...)` or `AgentHandle.detached(...)` |
-| `.execute { ... }` | `.run { ... }` |
-| `.attribute(...)` | `trace.tag(...)` |
-| `.includeContent()` | `.capture(.includeContent)` |
-| `Terra.inference(...)` | `Terra.infer(...)` |
-| `Terra.embedding(...)` | `Terra.embed(...)` |
-| `Terra.safetyCheck(...)` | `Terra.safety(...)` |
+| `Terra.trace(name:id:_:)` | `Terra.workflow(name:id:_:)` |
+| `Terra.loop(name:id:messages:_:)` | `Terra.workflow(name:id:messages:_:)` |
+| `Terra.agentic(name:id:_:)` | `Terra.workflow(name:id:_:)` plus `SpanHandle` child helpers |
+| `TraceHandle` in `.run { ... }` | `SpanHandle` in `.run { ... }` |
+| `trace.tag(...)` | `span.attribute(...)` |
+| `Terra.ModelID("...")` | raw `String` model name |
+| `Terra.ToolCallID("...")` | raw `String` `callId` |
+| `callID:` | `callId:` |
 
-## Startup Migration
+## Root Workflow Migration
 
 ### Before
 
 ```swift
-try Terra.enable(.quickstart)
-```
-
-### After
-
-```swift
-try await Terra.start()
-```
-
-## Inference Call Migration
-
-### Before
-
-```swift
-let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: prompt) {
-  try await llm.generate(prompt)
+let value = try await Terra.agentic(name: "planner", id: "issue-42") { agent in
+  let draft = try await agent.infer("gpt-4o-mini", prompt: "Plan") { "draft" }
+  let docs = try await agent.tool("search", callId: "call-1") { "docs" }
+  return draft + docs
 }
 ```
 
 ### After
 
 ```swift
-let answer = try await Terra
-  .infer(
-    "gpt-4o-mini",
-    prompt: prompt,
-    provider: Terra.ProviderID("openai"),
-    runtime: Terra.RuntimeID("http_api")
-  )
-  .run {
-    try await llm.generate(prompt)
-  }
+let value = try await Terra.workflow(name: "planner", id: "issue-42") { workflow in
+  let draft = try await workflow.infer("gpt-4o-mini", prompt: "Plan") { "draft" }
+  let docs = try await workflow.tool("search", callId: "call-1") { "docs" }
+  return draft + docs
+}
 ```
 
-## Structured Prompt Migration
+## Transcript Workflow Migration
 
 ### Before
 
 ```swift
-let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: prompt) {
-  try await llm.generate(prompt)
+let result = try await Terra.loop(name: "planner", messages: &messages) { loop in
+  await loop.appendMessage(.init(role: "assistant", content: "draft"))
+  return "ok"
 }
 ```
 
 ### After
 
 ```swift
-let answer = try await Terra
-  .infer(
-    "gpt-4o-mini",
-    messages: [
-      .init(role: "system", content: "You are a precise assistant."),
-      .init(role: "user", content: prompt)
-    ]
-  )
-  .run {
-    try await llm.generate(prompt)
-  }
+let result = try await Terra.workflow(name: "planner", messages: &messages) { workflow, transcript in
+  workflow.checkpoint("planning")
+  await transcript.append(.init(role: "assistant", content: "draft"))
+  return "ok"
+}
 ```
 
-## Builder/Metadata Migration
+## Composable Operation Migration
 
 ### Before
 
 ```swift
 let answer = try await Terra
-  .inference(model: "gpt-4o-mini", prompt: prompt)
-  .attribute(.init("app.user_tier"), "pro")
-  .includeContent()
-  .execute {
-    try await llm.generate(prompt)
+  .infer("gpt-4o-mini", prompt: prompt)
+  .run { trace in
+    trace.tag("app.user_tier", "pro")
+    trace.event("request.start")
+    return try await llm.generate(prompt)
   }
 ```
 
@@ -115,50 +97,23 @@ let answer = try await Terra
 ```swift
 let answer = try await Terra
   .infer("gpt-4o-mini", prompt: prompt)
-  .capture(.includeContent)
-  .run { trace in
-    // Use trace.tag() for attributes within the run closure
-    trace.tag("app.user_tier", "pro")
-    trace.event("request.start")
+  .run { span in
+    span.attribute("app.user_tier", "pro")
+    span.event("request.start")
     return try await llm.generate(prompt)
   }
 ```
 
-## Lifecycle Error Migration
+## Detached Work
 
-Lifecycle/configuration throws now surface as `Terra.TerraError` with stable `code` values:
-
-- `invalid_endpoint`
-- `persistence_setup_failed`
-- `already_started`
-- `invalid_lifecycle_state`
-- `wrong_api_for_agentic`
-- `context_not_propagated`
-
-Example assertion:
-
-```swift
-do {
-  try await Terra.start(config)
-} catch let error as Terra.TerraError {
-  guard error.code == .invalid_endpoint else { throw error }
-}
-```
-
-## Privacy Migration
-
-Use `Terra.PrivacyPolicy` in `Terra.Configuration`:
-
-```swift
-var config = Terra.Configuration()
-config.privacy = .redacted
-try await Terra.start(config)
-```
+Use `SpanHandle.detached(...)` when parent linkage matters across detached tasks.
+If the work must outlive the current closure entirely, create an explicit parent with `Terra.startSpan(...)`.
 
 ## Recommended Migration Order
 
-1. Move startup calls to `Terra.start(...)`.
-2. Replace operation names (`inference` -> `infer`, `embedding` -> `embed`, `safetyCheck` -> `safety`).
-3. Move multi-step agent loops to `Terra.agentic(...)` and replace raw `Task.detached` trace assumptions with Terra's detached helpers. Detached work launched after a parent span ends now degrades to a warning event instead of throwing.
-4. Replace terminals/modifiers (`execute` -> `run`, `attribute` -> `tag` for `TraceHandle`, `includeContent` -> `capture(.includeContent)`).
-5. Validate traces in your OTLP backend after rollout.
+1. Replace all root `trace` / `loop` / `agentic` calls with `workflow`
+2. Replace `TraceHandle` usage with `SpanHandle`
+3. Replace `tag(...)` with `attribute(...)`
+4. Replace typed model/tool IDs with raw `String` values
+5. Replace any lingering `callID:` labels with `callId:`
+6. Run `Terra.help()`, `Terra.diagnose()`, and your trace tests to confirm the new hierarchy

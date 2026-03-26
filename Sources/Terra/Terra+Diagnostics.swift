@@ -111,13 +111,13 @@ extension Terra {
           code: "NO_SWIFT_TASK_CONTEXT",
           severity: .info,
           explanation: "diagnose() is running outside a Swift task, so it cannot verify task-local span propagation.",
-          fix: "Run Terra.diagnose() inside an async workflow or inside Terra.trace(...) when validating propagation. Hint: inspect Terra.examples() for the nearest runnable setup."
+          fix: "Run Terra.diagnose() inside an async workflow or inside Terra.workflow(...) when validating propagation. Hint: inspect Terra.examples() for the nearest runnable setup."
         )
       )
     }
 
     if _hasSwiftTaskContext(), currentSpan() == nil {
-      suggestions.append("If you expected an active span here, wrap the enclosing async workflow in Terra.trace(name:id:_:) or inspect Terra.activeSpans().")
+      suggestions.append("If you expected an active span here, wrap the enclosing async workflow in Terra.workflow(name:id:_:) or inspect Terra.activeSpans().")
     }
 
     if _hasSwiftTaskContext(), currentSpan() != nil {
@@ -125,7 +125,7 @@ extension Terra {
     }
 
     suggestions.append("Hint: print(Terra.help()) for the canonical entry-point map.")
-    suggestions.append(#"Hint: use Terra.ask("agent loop") or Terra.ask("quickstart and diagnose setup") for targeted guidance."#)
+    suggestions.append(#"Hint: use Terra.ask("workflow") or Terra.ask("quickstart and diagnose setup") for targeted guidance."#)
     suggestions.append("Hint: inspect Terra.examples() for runnable patterns and Terra.guides() for copy-paste explanations.")
 
     if issues.isEmpty {

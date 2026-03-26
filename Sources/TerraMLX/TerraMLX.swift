@@ -51,28 +51,6 @@ public enum TerraMLX {
     }
   }
 
-  @available(*, deprecated, message: "Use String model names directly.")
-  @discardableResult
-  public static func traced<R>(
-    model: Terra.ModelID,
-    maxTokens: Int? = nil,
-    temperature: Double? = nil,
-    device: String? = nil,
-    memoryFootprintMB: Double? = nil,
-    modelLoadDurationMS: Double? = nil,
-    _ body: @escaping @Sendable () async throws -> R
-  ) async throws -> R {
-    try await traced(
-      model: model.rawValue,
-      maxTokens: maxTokens,
-      temperature: temperature,
-      device: device,
-      memoryFootprintMB: memoryFootprintMB,
-      modelLoadDurationMS: modelLoadDurationMS,
-      body
-    )
-  }
-
   /// Record the first-token event on the current active Terra span.
   /// Call from inside your mlx-swift `didGenerate` callback when token count == 1.
   public static func recordFirstToken() {

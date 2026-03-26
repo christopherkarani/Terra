@@ -180,7 +180,7 @@ let _ = try await inference()
 let endMem = TerraSystemProfiler.captureMemorySnapshot()
 
 let delta = TerraSystemProfiler.memoryDeltaAttributes(start: startMem, end: endMem)
-// Attach to trace: trace.tag("memory.delta_bytes", delta)
+// Attach to a workflow or child span: span.attribute("memory.delta_bytes", delta["memory.delta_bytes"] ?? .int(0))
 ```
 
 ## Configuration

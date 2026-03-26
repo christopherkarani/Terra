@@ -179,29 +179,12 @@ public final class TerraTracedSession {
     self.backend = FoundationModelsBackend(model: model, instructions: instructions)
   }
 
-  @available(*, deprecated, message: "Use String model identifiers directly.")
-  public convenience init(
-    model: SystemLanguageModel = .default,
-    instructions: String? = nil,
-    modelIdentifier: Terra.ModelID
-  ) {
-    self.init(model: model, instructions: instructions, modelIdentifier: modelIdentifier.rawValue)
-  }
-
   internal init(
     modelIdentifier: String = "apple/foundation-model",
     backend: any TerraTracedSessionBackend
   ) {
     self.modelIdentifier = modelIdentifier
     self.backend = backend
-  }
-
-  @available(*, deprecated, message: "Use String model identifiers directly.")
-  internal convenience init(
-    modelIdentifier: Terra.ModelID,
-    backend: any TerraTracedSessionBackend
-  ) {
-    self.init(modelIdentifier: modelIdentifier.rawValue, backend: backend)
   }
 
   /// Respond to a prompt with auto-tracing.

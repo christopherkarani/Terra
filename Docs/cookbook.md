@@ -1,499 +1,80 @@
-# Cookbook
+# Terra Cookbook
 
-Copy-paste recipes for common Terra instrumentation patterns.
-
-> **Note:** These examples use raw string model names and `callId:` strings in new code. `ProviderID` and `RuntimeID` remain structured wrappers where provider/runtime attribution matters.
-
-## Quickstart
+## Chat Request
 
 ```swift
-import Terra
-
-try await Terra.start()
-// CoreML and HTTP AI calls are now automatically traced.
-```
-
-Other common presets:
-
-```swift
-try await Terra.start(.init(preset: .production))
-try await Terra.start(.init(preset: .diagnostics))
-```
-
-## Inference
-
-```swift
-let answer = try await Terra
-    .infer("gpt-4o-mini", prompt: prompt)
-    .run { try await llm.generate(prompt) }
-```
-
-Structured chat messages:
-
-```swift
-let answer = try await Terra
-    .infer(
-        "gpt-4o-mini",
-        messages: [
-            .init(role: "system", content: "You are a concise travel planner."),
-            .init(role: "user", content: prompt)
-        ],
-        provider: Terra.ProviderID("openai"),
-        runtime: Terra.RuntimeID("http_api")
-    )
-    .run { try await llm.generate(prompt) }
-```
-
-With metadata:
-
-```swift
-let answer = try await Terra
-    .infer(
-        "gpt-4o-mini",
-        prompt: prompt,
-        provider: Terra.ProviderID("openai"),
-        runtime: Terra.RuntimeID("http_api"),
-        temperature: 0.2,
-        maxTokens: 300
-    )
-    .run { trace in
-        trace.tokens(input: 120, output: 70)
-        trace.responseModel("gpt-4o-mini")
-        return try await llm.generate(prompt)
-    }
-```
-
-## Streaming
-
-```swift
-let output = try await Terra
-    .stream("gpt-4o-mini", prompt: prompt)
-    .run { trace in
-        trace.chunk(12)
-        trace.chunk(18)
-        return "final text"
-    }
-```
-
-If the underlying model call is an HTTP streaming request instrumented by `HTTPAIInstrumentation`, Terra also records `stream.chunk` events plus TTFT and chunk-count metrics automatically.
-
-## Agent Workflow
-
-Nest agents, tools, and inference naturally:
-
-```swift
-let plan = try await Terra.agentic(name: "trip-planner", id: "agent-42") { agent in
-    let docs = try await agent
-        .tool("web-search", callId: "web-search-1")
-        { "search results" }
-
-    return try await agent
-        .infer(
-            "gpt-4o-mini",
-            messages: [
-                .init(role: "system", content: "You write concise itineraries."),
-                .init(role: "user", content: docs)
-            ]
-        )
-        { "itinerary" }
+let answer = try await Terra.workflow(name: "chat.request", id: "req-1") { workflow in
+  try await workflow.infer("gpt-4o-mini", prompt: "Summarize this thread") { span in
+    span.tokens(input: 20, output: 12)
+    return "summary"
+  }
 }
 ```
 
-HTTP requests created inside this block automatically inherit the active agent span as their parent when `HTTPAIInstrumentation` is enabled.
-
-### Detached Work After Parent End
+## Streaming Generation
 
 ```swift
-let root = Terra.startSpan(name: "sync-job")
-root.end()
-
-let task = root.detached { _ in
-    try await Terra.tool("cleanup", callId: "cleanup-1").run { "done" }
-}
-
-_ = try await task.value
-```
-
-If detached work starts after the parent ended, Terra keeps the task running and records a `detached.parent.ended` event on the first replacement span instead of throwing.
-
-## Agentic Workflow Instrumentation
-
-### Multi-Step Agent with Tool Calls
-
-```swift
-func runAgent(query: String) async throws -> String {
-    let result = try await Terra
-        .agentic(name: "research-assistant", id: UUID().uuidString) { agent in
-            agent.checkpoint("search")
-
-            // Step 1: Web search
-            let searchResults = try await agent
-                .tool("web_search", callId: "search-1")
-                .run { trace in
-                    trace.tag("search.query", query)
-                    trace.event("tool.search.start")
-                    let results = performWebSearch(query: query)
-                    trace.event("tool.search.complete")
-                    return results
-                }
-
-            // Step 2: Summarize findings
-            let summary = try await agent
-                .infer(
-                    "gpt-4o-mini",
-                    prompt: "Summarize: \(searchResults)"
-                )
-                .run { trace in
-                    trace.tag("step.name", "summarize")
-                    trace.tokens(input: 500, output: 100)
-                    return try synthesizeResults(searchResults)
-                }
-
-            // Step 3: Validate
-            let validated = try await agent
-                .tool("validator", callId: "validate-1")
-                .run { trace in
-                    trace.event("validation.start")
-                    return try validateOutput(summary)
-                }
-
-            return validated
-        }
-    return result
+let answer = try await Terra.workflow(name: "chat.stream", id: "req-2") { workflow in
+  try await workflow.stream("gpt-4o-mini", prompt: "Explain the fix") { span in
+    span.firstToken()
+    span.chunk(5)
+    span.outputTokens(18)
+    return "streamed"
+  }
 }
 ```
 
-### Sequential Tool Orchestration
+## Tool Execution
 
 ```swift
-func processWithTools(userRequest: String) async throws -> [String] {
-    var results: [String] = []
-    try await Terra.agentic(name: "tool-orchestrator", id: UUID().uuidString) { agent in
-        // Tool 1: Intent classification
-        let intent = try await agent
-            .tool("classify", callId: "classify-1")
-            .run { trace in
-                trace.tag("user.request", userRequest)
-                trace.event("intent.classify")
-                return classifyIntent(userRequest)
-            }
-        results.append(intent)
-
-        // Tool 2: Entity extraction (dependent on intent)
-        let entities = try await agent
-            .tool("extract", callId: "extract-1")
-            .run { trace in
-                trace.tag("intent", intent)
-                trace.event("entity.extract")
-                return extractEntities(userRequest)
-            }
-        results.append(contentsOf: entities)
-
-        // Tool 3: Generate response (dependent on both)
-        let response = try await agent
-            .infer("gpt-4o-mini", prompt: "\(intent): \(entities)")
-            .run { trace in
-                trace.tokens(input: 200, output: 150)
-                return generateResponse(intent: intent, entities: entities)
-            }
-        results.append(response)
-        return ()
-    }
-
-    return results
+let result = try await Terra.workflow(name: "tool.request", id: "req-3") { workflow in
+  try await workflow.tool("search", callId: "search-1", type: "web_search") { span in
+    span.event("tool.invoked")
+    return "docs"
+  }
 }
 ```
 
-### Parallel Tool Execution
+## Agent Loop
 
 ```swift
-func fetchAll(query: String) async throws -> [String] {
-    try await Terra.agentic(name: "parallel-fetch", id: query) { agent in
-        async let web = agent
-            .tool("web_search", callId: "web")
-            { "web results for \(query)" }
-
-        async let news = agent
-            .tool("news_search", callId: "news")
-            { "news results for \(query)" }
-
-        async let academic = agent
-            .tool("academic_search", callId: "academic")
-            { "academic results for \(query)" }
-
-        let (webResults, newsResults, academicResults) = try await (web, news, academic)
-
-        let synthesis = try await agent
-            .infer("gpt-4o-mini", prompt: "Combine: \(webResults), \(newsResults), \(academicResults)")
-            { "combined results" }
-
-        return [webResults, newsResults, academicResults, synthesis]
-    }
+let result = try await Terra.workflow(name: "agent.request", id: "req-4") { workflow in
+  workflow.checkpoint("planning")
+  let draft = try await workflow.infer("gpt-4o-mini", prompt: "Plan") { "draft" }
+  let lookup = try await workflow.tool("search", callId: "search-2") { "lookup" }
+  return draft + lookup
 }
 ```
 
-## Embeddings
+## Mutable Transcript
 
 ```swift
-let vectors = try await Terra
-    .embed("text-embedding-3-small", inputCount: 1)
-    .run { [[0.11, 0.22, 0.33]] }
-```
+var messages = [Terra.ChatMessage(role: "user", content: "Plan the fix.")]
 
-## Safety Pipeline
-
-```swift
-let safe = try await Terra
-    .safety("input-moderation", subject: userText)
-    .run { true }
-
-let answer = try await Terra
-    .infer("gpt-4o-mini", prompt: userText)
-    .run { "response" }
-
-let passed = try await Terra
-    .safety("output-moderation", subject: answer)
-    .run { safe }
-```
-
-## Custom Attributes and Capture
-
-```swift
-let result = try await Terra
-    .infer(
-        "gpt-4o-mini",
-        prompt: prompt,
-        provider: Terra.ProviderID("openai"),
-        runtime: Terra.RuntimeID("http_api")
-    )
-    .capture(.includeContent)
-    .run { trace in
-        trace.tag("app.request_id", UUID().uuidString)
-        trace.tag("app.user_tier", "pro")
-        trace.tokens(input: 120, output: 60)
-        return try await llm.generate(prompt)
-    }
-```
-
-## Error Recording
-
-```swift
-_ = try await Terra
-    .infer("gpt-4o-mini", prompt: "Test")
-    .run { trace in
-        trace.event("guardrail.decision")
-        do {
-            throw APIError.upstream
-        } catch {
-            trace.recordError(error)
-        }
-        return "ok"
-    }
-```
-
-## Error Handling Patterns
-
-### Catch and Record
-
-```swift
-try await Terra
-    .infer("gpt-4o-mini", prompt: prompt)
-    .run { trace in
-        do {
-            return try await llm.generate(prompt)
-        } catch {
-            trace.recordError(error)
-            trace.event("inference.fallback")
-            throw error
-        }
-    }
-```
-
-### Conditional Error Handling
-
-```swift
-let result = try await Terra
-    .infer("gpt-4o-mini", prompt: prompt)
-    .run { trace in
-        do {
-            return try await llm.generate(prompt)
-        } catch let error as APIError {
-            switch error {
-            case .rateLimited:
-                trace.tag("error.type", "rate_limit")
-                trace.event("retry.scheduled")
-            case .timeout:
-                trace.tag("error.type", "timeout")
-                trace.event("timeout.retry")
-            }
-            throw error
-        }
-    }
-```
-
-### Error Recovery with Fallback
-
-```swift
-func inferWithFallback(prompt: String) async throws -> String {
-    do {
-        return try await Terra
-            .infer("gpt-4o-mini", prompt: prompt)
-            .run { try await primaryModel.generate(prompt) }
-    } catch {
-        // Fallback to local model
-        return try await Terra
-            .infer("local-model", prompt: prompt)
-            .run { trace in
-                trace.event("inference.fallback")
-                return try await localModel.generate(prompt)
-            }
-    }
+let result = try await Terra.workflow(name: "planner", messages: &messages) { workflow, transcript in
+  workflow.checkpoint("planning")
+  await transcript.append(.init(role: "assistant", content: "Draft plan"))
+  return "ok"
 }
 ```
 
-## Custom Configuration
+## Detached Work
 
 ```swift
-var config = Terra.Configuration(preset: .production)
-config.privacy = .redacted
-config.destination = .endpoint(URL(string: "http://127.0.0.1:4318")!)
-config.features = [.coreML, .http, .sessions]
-config.persistence = .balanced(
-    FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("terra-demo", isDirectory: true)
-)
-try await Terra.start(config)
-```
-
-## Privacy Configuration Recipes
-
-### Maximum Privacy
-
-```swift
-var config = Terra.Configuration()
-config.privacy = .lengthOnly  // Only record lengths, no hashes
-config.features = [.coreML]   // Minimal instrumentation
-config.persistence = .off      // No local persistence
-try await Terra.start(config)
-// Prompts emit: terra.prompt.length = 11
-// No content or hashes are recorded
-```
-
-### Debug Configuration
-
-```swift
-var config = Terra.Configuration()
-config.privacy = .capturing  // Capture hashed content telemetry
-config.features = [.coreML, .http, .sessions, .signposts, .logs]
-config.persistence = .instant(
-    FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("TerraDebug")
-)
-try await Terra.start(config)
-// Full telemetry for debugging
-// Content-derived telemetry is HMAC'd for privacy
-```
-
-### HIPAA-Compliant Configuration
-
-```swift
-var config = Terra.Configuration(preset: .production)
-config.privacy = .silent      // Drop all content
-config.features = [.coreML]    // Only local inference
-config.persistence = .balanced(secureStorageURL)
-try await Terra.start(config)
-// No PHI leaves the device
-```
-
-### Multi-Tenant Privacy
-
-```swift
-// Per-request privacy override using capture policy
-try await Terra
-    .infer("gpt-4o-mini", prompt: prompt)
-    .capture(.includeContent)  // Opt this call into capture; privacy policy still governs storage
-    .run { trace in
-        trace.tag("tenant_id", tenantID)
-        trace.tokens(input: 120, output: 60)
-        return try await llm.generate(prompt)
-    }
-```
-
-### Session Privacy Tiers
-
-```swift
-enum PrivacyTier {
-    case standard   // .redacted
-    case debug     // .capturing
-    case strict    // .silent
-
-    var config: Terra.Configuration {
-        var cfg = Terra.Configuration()
-        switch self {
-        case .standard:
-            cfg.privacy = .redacted
-        case .debug:
-            cfg.privacy = .capturing
-        case .strict:
-            cfg.privacy = .silent
-        }
-        return cfg
-    }
-}
-
-// Use based on user preference
-let userTier: PrivacyTier = .strict
-try await Terra.start(userTier.config)
-```
-
-## `@Traced` Macro
-
-```swift
-import TerraTracedMacro
-
-@Traced(model: "gpt-4o-mini")
-func summarize(prompt: String) async throws -> String {
-    try await llm.generate(prompt)
-}
-
-@Traced(agent: "planner")
-func planner() async throws -> String { "done" }
-```
-
-## Foundation Models
-
-```swift
-#if canImport(FoundationModels)
-import FoundationModels
-import TerraFoundationModels
-
-@available(macOS 26.0, iOS 26.0, *)
-func ask(_ prompt: String) async throws -> String {
-    let session = Terra.TracedSession(model: .default)
-    return try await session.respond(to: prompt)
-}
-#endif
-```
-
-## MLX
-
-```swift
-import TerraMLX
-
-let text = try await TerraMLX.traced(
-    model: "mlx-community/Llama-3.2-1B",
-    maxTokens: 256,
-    temperature: 0.7,
-    device: "ane",
-    memoryFootprintMB: 512,
-    modelLoadDurationMS: 1800
-) {
-    TerraMLX.recordFirstToken()
-    TerraMLX.recordTokenCount(32)
-    return "mlx output"
+let value = try await Terra.workflow(name: "background.sync") { workflow in
+  let task = workflow.detached { detached in
+    detached.event("background.started")
+    return "ok"
+  }
+  return try await task.value
 }
 ```
 
-## Testing with Telemetry Engine Injection
+## Manual Parent
 
-> **Note:** Telemetry engine injection APIs are `package`-visibility and intended for internal Terra testing. Public SDK consumers should prefer the canonical factories plus a test tracer provider; see <doc:TelemetryEngine-Injection>.
+```swift
+let parent = Terra.startSpan(name: "manual.parent")
+defer { parent.end() }
+
+_ = try await Terra.tool("search", callId: "manual-1").under(parent).run { "ok" }
+```

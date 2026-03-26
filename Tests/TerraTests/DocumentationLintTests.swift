@@ -15,11 +15,16 @@ func publicDocsStayOnCanonicalAPIs() throws {
     "Docs/cookbook.md",
     "Docs/integrations.md",
     "Sources/TerraAutoInstrument/Terra.docc/Canonical-API.md",
+    "Sources/TerraAutoInstrument/Terra.docc/API-Reference.md",
     "Sources/TerraAutoInstrument/Terra.docc/CoreML-Integration.md",
     "Sources/TerraAutoInstrument/Terra.docc/FoundationModels.md",
     "Sources/TerraAutoInstrument/Terra.docc/Metadata-Builder.md",
+    "Sources/TerraAutoInstrument/Terra.docc/Profiler-Integration.md",
     "Sources/TerraAutoInstrument/Terra.docc/Quickstart-90s.md",
     "Sources/TerraAutoInstrument/Terra.docc/TerraCore.md",
+    "Sources/TerraAutoInstrument/Terra.docc/Terra.md",
+    "Sources/TerraAutoInstrument/Terra.docc/TerraError-Model.md",
+    "Sources/TerraAutoInstrument/Terra.docc/TelemetryEngine-Injection.md",
     "Sources/TerraAutoInstrument/Terra.docc/Typed-IDs.md",
     "Examples/Terra Sample/RecipeSnippets.swift",
   ]
@@ -30,6 +35,10 @@ func publicDocsStayOnCanonicalAPIs() throws {
     ".execute {",
     ".includeContent()",
     "trace.attribute(",
+    "Terra.trace(",
+    "Terra.agentic(",
+    "Terra.loop(",
+    "TraceHandle",
     "Terra.ModelID(",
     "Terra.ToolCallID(",
     "callID:",
@@ -44,5 +53,20 @@ func publicDocsStayOnCanonicalAPIs() throws {
       )
     }
   }
+}
+
+@Test("Migration guide points legacy roots to workflow-first replacements")
+func migrationGuidePointsLegacyRootsToWorkflowFirstReplacements() throws {
+  let repoRoot = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+
+  let source = try String(contentsOf: repoRoot.appendingPathComponent("Docs/migration.md"))
+
+  #expect(source.contains("| `Terra.trace(name:id:_:)` | `Terra.workflow(name:id:_:)` |"))
+  #expect(source.contains("| `Terra.loop(name:id:messages:_:)` | `Terra.workflow(name:id:messages:_:)` |"))
+  #expect(source.contains("| `Terra.agentic(name:id:_:)` | `Terra.workflow(name:id:_:)` plus `SpanHandle` child helpers |"))
+  #expect(source.contains("| `TraceHandle` in `.run { ... }` | `SpanHandle` in `.run { ... }` |"))
 }
 }

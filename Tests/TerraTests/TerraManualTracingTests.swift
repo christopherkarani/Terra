@@ -9,12 +9,12 @@ struct TerraManualTracingTests {
     #expect(!Terra.isTracing())
   }
 
-  @Test("Trace exports an active span and preserves the return value")
-  func traceExportsAnActiveSpanAndPreservesTheReturnValue() async throws {
+  @Test("Workflow exports an active span and preserves the return value")
+  func workflowExportsAnActiveSpanAndPreservesTheReturnValue() async throws {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    let value = try await Terra.trace(name: "agentic-workflow", id: "issue-42") { span in
+    let value = try await Terra.workflow(name: "request-workflow", id: "issue-42") { span in
       #expect(Terra.isTracing())
 
       let current = try #require(Terra.currentSpan())
@@ -31,22 +31,23 @@ struct TerraManualTracingTests {
     #expect(Terra.currentSpan() == nil)
     #expect(!Terra.isTracing())
 
-    let exported = try #require(support.finishedSpans().first(where: { $0.name == "agentic-workflow" }))
-    #expect(exported.attributes["terra.trace.id"]?.description == "issue-42")
+    let exported = try #require(support.finishedSpans().first(where: { $0.name == "request-workflow" }))
+    #expect(exported.attributes["terra.workflow.id"]?.description == "issue-42")
+    #expect(exported.attributes["terra.workflow.name"]?.description == "request-workflow")
     #expect(exported.attributes["phase"]?.description == "planning")
     #expect(exported.events.map(\.name) == ["start"])
   }
 
-  @Test("Nested trace spans expose parent context")
-  func nestedTraceSpansExposeParentContext() async throws {
+  @Test("Nested workflow spans expose parent context")
+  func nestedWorkflowSpansExposeParentContext() async throws {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    try await Terra.trace(name: "outer", id: "issue-7") { outer in
+    try await Terra.workflow(name: "outer", id: "issue-7") { outer in
       let outerCurrent = try #require(Terra.currentSpan())
       #expect(outerCurrent.spanId == outer.spanId)
 
-      try await Terra.trace(name: "inner") { inner in
+      try await Terra.workflow(name: "inner") { inner in
         let innerCurrent = try #require(Terra.currentSpan())
         #expect(innerCurrent.spanId == inner.spanId)
         #expect(innerCurrent.parentId == outer.spanId)
@@ -95,17 +96,17 @@ struct TerraManualTracingTests {
     #expect(guidance.commonMistakes.contains(where: { $0.contains("closure") }))
   }
 
-  @Test("Agentic API keeps child inference and tool spans under one root")
-  func agenticAPIKeepsChildSpansUnderOneRoot() async throws {
+  @Test("Workflow API keeps child inference and tool spans under one root")
+  func workflowAPIKeepsChildSpansUnderOneRoot() async throws {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    let value = try await Terra.agentic(name: "planner-loop", id: "issue-42") { agent in
+    let value = try await Terra.workflow(name: "planner-loop", id: "issue-42") { workflow in
       let current = try #require(Terra.currentSpan())
-      #expect(current.spanId == agent.spanId)
+      #expect(current.spanId == workflow.spanId)
 
-      let draft = try await agent.infer("child-model", prompt: "plan") { "draft" }
-      let docs = try await agent.tool("search", callId: "call-1") { "docs" }
+      let draft = try await workflow.infer("child-model", prompt: "plan") { "draft" }
+      let docs = try await workflow.tool("search", callId: "call-1") { "docs" }
       return draft + docs
     }
 
@@ -116,13 +117,12 @@ struct TerraManualTracingTests {
     let inference = try #require(spans.first(where: { $0.name == Terra.SpanNames.inference }))
     let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
 
-    #expect(root.attributes[Terra.Keys.GenAI.operationName]?.description == Terra.OperationName.invokeAgent.rawValue)
-    #expect(root.attributes[Terra.Keys.GenAI.agentName]?.description == "planner-loop")
-    #expect(root.attributes[Terra.Keys.GenAI.agentID]?.description == "issue-42")
-    #expect(root.attributes["terra.agent.inference_count"]?.description == "1")
-    #expect(root.attributes["terra.agent.tool_call_count"]?.description == "1")
-    #expect(root.attributes["terra.agent.models_used"]?.description == "child-model")
-    #expect(root.attributes["terra.agent.tools_used"]?.description == "search")
+    #expect(root.attributes["terra.workflow.name"]?.description == "planner-loop")
+    #expect(root.attributes["terra.workflow.id"]?.description == "issue-42")
+    #expect(root.attributes["terra.workflow.inference_count"]?.description == "1")
+    #expect(root.attributes["terra.workflow.tool_call_count"]?.description == "1")
+    #expect(root.attributes["terra.workflow.models_used"]?.description == "child-model")
+    #expect(root.attributes["terra.workflow.tools_used"]?.description == "search")
     #expect(inference.parentSpanId?.hexString == root.spanId.hexString)
     #expect(tool.parentSpanId?.hexString == root.spanId.hexString)
     #expect(inference.traceId.hexString == root.traceId.hexString)
@@ -172,13 +172,13 @@ struct TerraManualTracingTests {
     #expect(tool.events.contains(where: { $0.name == "detached.parent.ended" }))
   }
 
-  @Test("AgentHandle infer messages overload records structured prompt attributes")
-  func agentHandleInferMessagesOverloadRecordsStructuredPromptAttributes() async throws {
+  @Test("Workflow infer messages overload records structured prompt attributes")
+  func workflowInferMessagesOverloadRecordsStructuredPromptAttributes() async throws {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    let result = try await Terra.agentic(name: "planner-loop", id: "issue-43") { agent in
-      try await agent.infer(
+    let result = try await Terra.workflow(name: "planner-loop", id: "issue-43") { workflow in
+      try await workflow.infer(
         "child-model",
         messages: [
           .init(role: "system", content: "You are a planner."),

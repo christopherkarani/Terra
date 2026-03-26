@@ -73,7 +73,7 @@ private final class HTTPInstrumentationTestSupport {
 
 @Suite("HTTPAIInstrumentation span linkage", .serialized)
 struct HTTPAIInstrumentationSpanLinkageTests {
-  @Test("HTTP spans created inside Terra.agentic are children of the agent span")
+  @Test("HTTP spans created inside Terra.workflow are children of the workflow span")
   func httpSpanUsesActiveTerraParent() async throws {
     let support = HTTPInstrumentationTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
@@ -86,7 +86,7 @@ struct HTTPAIInstrumentationSpanLinkageTests {
       openClawMode: "disabled"
     )
 
-    try await Terra.agentic(name: "planner") { _ in
+    try await Terra.workflow(name: "planner") { _ in
       var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
       request.httpMethod = "POST"
       request.httpBody = requestData
@@ -105,7 +105,7 @@ struct HTTPAIInstrumentationSpanLinkageTests {
 
     #expect(http.parentSpanId?.hexString == root.spanId.hexString)
     #expect(http.traceId.hexString == root.traceId.hexString)
-    #expect(http.attributes[Terra.Keys.GenAI.operationName]?.description == "invoke_agent")
+    #expect(http.attributes[Terra.Keys.GenAI.operationName]?.description == "chat")
     #expect(http.attributes[Terra.Keys.GenAI.promptMessageCount]?.description == "1")
     #expect(http.attributes[Terra.Keys.GenAI.promptRole0]?.description == "user")
   }

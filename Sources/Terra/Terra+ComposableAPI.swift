@@ -131,7 +131,7 @@ extension Terra {
     func run<R: Sendable>(
       context: TelemetryContext,
       attributes: [TraceAttribute],
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
     ) async throws -> R
   }
 
@@ -174,188 +174,6 @@ extension Terra {
     static let outputTokens = TraceKey<Int>("gen_ai.usage.output_tokens")
     static let temperature = TraceKey<Double>("gen_ai.request.temperature")
     static let maxOutputTokens = TraceKey<Int>("gen_ai.request.max_tokens")
-  }
-
-  /// A compatibility wrapper for adding events, attributes, and tokens to the current span.
-  ///
-  /// `TraceHandle` is passed into the body of a composable operation (e.g., `Terra.infer(...)`).
-  /// When Terra owns the active span, the handle delegates to the underlying `SpanHandle`
-  /// so closure-based tracing and composable operations share the same annotation model.
-  /// Streaming-only helpers such as `chunk`, `outputTokens`, and `firstToken` remain on this
-  /// wrapper because they require operation-specific state.
-  ///
-  /// ```swift
-  /// try await Terra.infer("gpt-4o-mini", prompt: "Hello") { handle in
-  ///     handle.event("prompt-processed")
-  ///         .tokens(input: 5, output: nil)
-  ///         .responseModel("gpt-4o-mini")
-  ///     return response
-  /// }
-  /// ```
-  public struct TraceHandle: Sendable {
-    private let spanHandle: SpanHandle?
-    private let onEvent: @Sendable (String) -> Void
-    private let onAttribute: @Sendable (String, TraceScalar) -> Void
-    private let onError: @Sendable (any Error) -> Void
-    private let onTokens: @Sendable (Int?, Int?) -> Void
-    private let onResponseModel: @Sendable (String) -> Void
-    private let onChunk: @Sendable (Int) -> Void
-    private let onOutputTokens: @Sendable (Int) -> Void
-    private let onFirstToken: @Sendable () -> Void
-
-    package init(
-      span: SpanHandle? = nil,
-      onEvent: @escaping @Sendable (String) -> Void,
-      onAttribute: @escaping @Sendable (String, TraceScalar) -> Void,
-      onError: @escaping @Sendable (any Error) -> Void,
-      onTokens: @escaping @Sendable (Int?, Int?) -> Void = { _, _ in },
-      onResponseModel: @escaping @Sendable (String) -> Void = { _ in },
-      onChunk: @escaping @Sendable (Int) -> Void = { _ in },
-      onOutputTokens: @escaping @Sendable (Int) -> Void = { _ in },
-      onFirstToken: @escaping @Sendable () -> Void = {}
-    ) {
-      self.spanHandle = span
-      self.onEvent = onEvent
-      self.onAttribute = onAttribute
-      self.onError = onError
-      self.onTokens = onTokens
-      self.onResponseModel = onResponseModel
-      self.onChunk = onChunk
-      self.onOutputTokens = onOutputTokens
-      self.onFirstToken = onFirstToken
-    }
-
-    /// The underlying Terra span when this handle is backed by Terra-owned tracing.
-    public var span: SpanHandle? { spanHandle }
-
-    /// Records a named event on the current span.
-    ///
-    /// Events are zero-attribute timestamped markers useful for marking significant
-    /// moments in the operation (e.g., "first-token", "streaming-started").
-    ///
-    /// - Parameters:
-    ///   - name: A meaningful name for the event (e.g., "tool-call-start", "content-filter-triggered").
-    /// - Returns: `self` for chaining.
-    @discardableResult
-    public func event(_ name: String) -> Self {
-      if let spanHandle {
-        _ = spanHandle.event(name)
-      } else {
-        onEvent(name)
-      }
-      return self
-    }
-
-    /// Attaches a span attribute using the string representation of `value`.
-    ///
-    /// All values are stored as OpenTelemetry string attributes regardless of their
-    /// Swift type, so numeric aggregation (sum, avg, percentile) on backend dashboards
-    /// will not work on values added via `tag`. Use `.tokens(input:output:)` and
-    /// `.responseModel(_:)` for structured numeric and identifier attributes.
-    @discardableResult
-    public func tag<T: CustomStringConvertible & Sendable>(_ key: StaticString, _ value: T) -> Self {
-      if let spanHandle {
-        _ = spanHandle.attribute(key.description, value.description)
-      } else {
-        onAttribute(key.description, .string(value.description))
-      }
-      return self
-    }
-
-    /// Records the number of input and output tokens consumed by the operation.
-    ///
-    /// Token counts are recorded as OpenTelemetry metrics (`gen_ai.usage.input_tokens`
-    /// and `gen_ai.usage.output_tokens`) on the span, enabling usage analytics and
-    /// cost tracking per model or provider.
-    ///
-    /// - Parameters:
-    ///   - input: Number of tokens in the prompt/request. Pass `nil` if unknown.
-    ///   - output: Number of tokens in the response. Pass `nil` if streaming is not yet complete.
-    /// - Returns: `self` for chaining.
-    @discardableResult
-    public func tokens(input: Int? = nil, output: Int? = nil) -> Self {
-      if let spanHandle {
-        _ = spanHandle.tokens(input: input, output: output)
-      } else {
-        onTokens(input, output)
-      }
-      return self
-    }
-
-    /// Records the model that generated the response.
-    ///
-    /// Use this when the model used for the response may differ from the requested model
-    /// (e.g., when a provider routes to a different model). The value is recorded as the
-    /// `gen_ai.response.model` span attribute.
-    ///
-    /// - Parameter value: The model ID that generated the response.
-    /// - Returns: `self` for chaining.
-    @discardableResult
-    public func responseModel(_ value: String) -> Self {
-      if let spanHandle {
-        _ = spanHandle.responseModel(value)
-      } else {
-        onResponseModel(value)
-      }
-      return self
-    }
-
-    /// Records the model that generated the response using a compatibility wrapper.
-    @available(*, deprecated, message: "Use String model names directly.")
-    @discardableResult
-    public func responseModel(_ value: ModelID) -> Self {
-      responseModel(value.rawValue)
-    }
-
-    /// Records a streaming chunk of tokens.
-    ///
-    /// Each call represents a batch of tokens received during streaming. The cumulative
-    /// total across all `chunk` calls is used to compute total output tokens unless
-    /// `outputTokens(_:)` is called separately.
-    ///
-    /// - Parameter tokens: Number of tokens in this chunk. Defaults to `1`.
-    /// - Returns: `self` for chaining.
-    @discardableResult
-    public func chunk(_ tokens: Int = 1) -> Self {
-      onChunk(tokens)
-      return self
-    }
-
-    /// Records the total number of output tokens after streaming is complete.
-    ///
-    /// Call this once at the end of a streaming operation instead of calling `chunk`
-    /// repeatedly. If both are called, `outputTokens` takes precedence for the final count.
-    ///
-    /// - Parameter total: Total output tokens for the entire response.
-    /// - Returns: `self` for chaining.
-    @discardableResult
-    public func outputTokens(_ total: Int) -> Self {
-      onOutputTokens(total)
-      return self
-    }
-
-    /// Marks the point at which the first output token was received during streaming.
-    ///
-    /// This is useful for measuring "time to first token" (TTFT), a key latency
-    /// metric for streaming responses. The timestamp is recorded as a span event.
-    ///
-    /// - Returns: `self` for chaining.
-    @discardableResult
-    public func firstToken() -> Self {
-      onFirstToken()
-      return self
-    }
-
-    /// Records an error on the current span.
-    ///
-    /// The error is recorded with its `localizedDescription` as the event name and
-    /// the full error attached as the span's error state. This ensures the span is
-    /// marked as failed in tracing backends.
-    ///
-    /// - Parameter error: The error to record on the span.
-    public func recordError(_ error: any Error) {
-      onError(error)
-    }
   }
 
   /// Represents a composable telemetry operation that wraps an AI call.
@@ -413,14 +231,14 @@ extension Terra {
       return copy
     }
 
-    /// Executes the operation with a trace handle.
+    /// Executes the operation with the active Terra span handle.
     ///
-    /// This overload passes a `TraceHandle` to the body, allowing you to record
+    /// This overload passes a `SpanHandle` to the body, allowing you to record
     /// custom events, attributes, and metrics on the active span. The handle must
     /// be captured and used within the async body to ensure data is attached to
     /// the correct span.
     ///
-    /// - Parameter body: An async closure that receives a `TraceHandle` and performs the work.
+    /// - Parameter body: An async closure that receives a `SpanHandle` and performs the work.
     /// - Returns: The result of the body, propagated unchanged.
     /// - Throws: Any error thrown by `body`, with error state recorded on the span.
     @discardableResult
@@ -439,7 +257,7 @@ extension Terra {
     /// - Returns: The result of the body.
     /// - Throws: Any error thrown by `body`, with error state recorded on the span.
     @discardableResult
-    public func run<R: Sendable>(_ body: @escaping @Sendable (TraceHandle) async throws -> R) async rethrows -> R {
+    public func run<R: Sendable>(_ body: @escaping @Sendable (SpanHandle) async throws -> R) async rethrows -> R {
       let attributes = _mergedAttributes()
       let events = _metadataEvents()
       return try await _run(
@@ -468,7 +286,7 @@ extension Terra {
     @discardableResult
     package func run<R: Sendable, Engine: TelemetryEngine>(
       using engine: Engine,
-      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
     ) async throws -> R {
       let context = _context(capturePolicy: capturePolicy)
       var seamAttributes = _mergedAttributes().map { TraceAttribute(name: $0.name, value: $0.value) }
@@ -567,7 +385,7 @@ extension Terra {
   /// Use this factory method to create a traced, composable inference operation
   /// that wraps a standard (non-streaming) chat or completion call. The operation
   /// creates an OpenTelemetry span with model, provider, and runtime attributes,
-  /// and supports recording token usage and custom events via the `TraceHandle`.
+  /// and supports recording token usage and custom events via the `SpanHandle`.
   ///
   /// - Parameters:
   ///   - model: The model identifier for the inference call (e.g., `"gpt-4o-mini"`).
@@ -615,19 +433,6 @@ extension Terra {
     )))
   }
 
-  /// Creates a model-inference operation using a compatibility wrapper.
-  @available(*, deprecated, message: "Use String model names directly.")
-  public static func infer(
-    _ model: ModelID,
-    prompt: String? = nil,
-    provider: ProviderID? = nil,
-    runtime: RuntimeID? = nil,
-    temperature: Double? = nil,
-    maxTokens: Int? = nil
-  ) -> Operation {
-    infer(model.rawValue, prompt: prompt, provider: provider, runtime: runtime, temperature: temperature, maxTokens: maxTokens)
-  }
-
   /// Creates a streaming inference operation for a model call with token-by-token streaming.
   ///
   /// Use this factory method when making streaming calls where tokens are received
@@ -663,28 +468,6 @@ extension Terra {
     )))
   }
 
-  /// Creates a streaming inference operation using a compatibility wrapper.
-  @available(*, deprecated, message: "Use String model names directly.")
-  public static func stream(
-    _ model: ModelID,
-    prompt: String? = nil,
-    provider: ProviderID? = nil,
-    runtime: RuntimeID? = nil,
-    temperature: Double? = nil,
-    maxTokens: Int? = nil,
-    expectedTokens: Int? = nil
-  ) -> Operation {
-    stream(
-      model.rawValue,
-      prompt: prompt,
-      provider: provider,
-      runtime: runtime,
-      temperature: temperature,
-      maxTokens: maxTokens,
-      expectedTokens: expectedTokens
-    )
-  }
-
   /// Creates an embedding operation for generating vector representations of text.
   ///
   /// Use this for embedding calls where text is converted to numerical vectors.
@@ -708,17 +491,6 @@ extension Terra {
       provider: provider,
       runtime: runtime
     )))
-  }
-
-  /// Creates an embedding operation using a compatibility wrapper.
-  @available(*, deprecated, message: "Use String model names directly.")
-  public static func embed(
-    _ model: ModelID,
-    inputCount: Int? = nil,
-    provider: ProviderID? = nil,
-    runtime: RuntimeID? = nil
-  ) -> Operation {
-    embed(model.rawValue, inputCount: inputCount, provider: provider, runtime: runtime)
   }
 
   /// Creates an agent operation representing an autonomous agentic loop.
@@ -776,42 +548,6 @@ extension Terra {
     runtime: RuntimeID? = nil
   ) -> Operation {
     Operation(operation: .tool(.init(name: name, callId: callId, type: type, provider: provider, runtime: runtime)))
-  }
-
-  /// Creates a tool-call operation using the legacy `callID:` label.
-  @available(*, deprecated, message: "Use callId: instead of callID:.")
-  public static func tool(
-    _ name: String,
-    callID: String,
-    type: String? = nil,
-    provider: ProviderID? = nil,
-    runtime: RuntimeID? = nil
-  ) -> Operation {
-    tool(name, callId: callID, type: type, provider: provider, runtime: runtime)
-  }
-
-  /// Creates a tool-call operation using a compatibility wrapper.
-  @available(*, deprecated, message: "Use String tool call identifiers directly.")
-  public static func tool(
-    _ name: String,
-    callId: ToolCallID,
-    type: String? = nil,
-    provider: ProviderID? = nil,
-    runtime: RuntimeID? = nil
-  ) -> Operation {
-    tool(name, callId: callId.rawValue, type: type, provider: provider, runtime: runtime)
-  }
-
-  /// Creates a tool-call operation using a compatibility wrapper and legacy label.
-  @available(*, deprecated, message: "Use callId: with a String identifier.")
-  public static func tool(
-    _ name: String,
-    callID: ToolCallID,
-    type: String? = nil,
-    provider: ProviderID? = nil,
-    runtime: RuntimeID? = nil
-  ) -> Operation {
-    tool(name, callId: callID.rawValue, type: type, provider: provider, runtime: runtime)
   }
 
   /// Creates a safety-evaluation operation representing a content safety check.
@@ -955,8 +691,27 @@ private extension Terra {
     capturePolicy: CapturePolicy,
     attributes: [_TraceAttribute],
     parent: SpanHandle? = nil,
-    _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    _ body: @escaping @Sendable (SpanHandle) async throws -> R
   ) async rethrows -> R {
+    @Sendable func runWithCurrentSpan(
+      fallbackName: String,
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
+    ) async throws -> R {
+      if let current = Terra.currentSpan() {
+        return try await body(current)
+      }
+
+      let guidance = """
+      Terra could not expose the active span for \(fallbackName). This indicates a Terra context propagation bug, not valid SDK usage.
+      Use Terra.workflow(...) or Terra.startSpan(...) for explicit parent control, and report this path if it reproduces.
+      """
+      assertionFailure(guidance)
+      let invalidHandle = Terra._invalidSpanHandle(
+        guidance: guidance
+      )
+      return try await body(invalidHandle)
+    }
+
     switch operation {
     case .infer(let operation):
       let request = InferenceRequest(
@@ -972,16 +727,8 @@ private extension Terra {
       if let temperature = operation.temperature { call = call.temperature(temperature) }
       if let maxTokens = operation.maxTokens { call = call.maxOutputTokens(maxTokens) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
-      return try await call.execute { trace in
-        let handle = TraceHandle(
-          span: Terra.currentSpan(),
-          onEvent: { _ = trace.event($0) },
-          onAttribute: { _recordAttribute($0, $1, on: trace) },
-          onError: { trace.recordError($0) },
-          onTokens: { _ = trace.tokens(input: $0, output: $1) },
-          onResponseModel: { _ = trace.responseModel($0) }
-        )
-        return try await body(handle)
+      return try await call.execute {
+        try await runWithCurrentSpan(fallbackName: Terra.SpanNames.inference, body)
       }
 
     case .stream(let operation):
@@ -994,17 +741,8 @@ private extension Terra {
       if let maxTokens = operation.maxTokens { call = call.maxOutputTokens(maxTokens) }
       if let expectedTokens = operation.expectedTokens { call = call.expectedOutputTokens(expectedTokens) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
-      return try await call.execute { trace in
-        let handle = TraceHandle(
-          span: Terra.currentSpan(),
-          onEvent: { _ = trace.event($0) },
-          onAttribute: { _recordAttribute($0, $1, on: trace) },
-          onError: { trace.recordError($0) },
-          onChunk: { _ = trace.chunk(tokens: $0) },
-          onOutputTokens: { _ = trace.outputTokens($0) },
-          onFirstToken: { _ = trace.firstToken() }
-        )
-        return try await body(handle)
+      return try await call.execute {
+        try await runWithCurrentSpan(fallbackName: Terra.SpanNames.inference, body)
       }
 
     case .embed(let operation):
@@ -1014,14 +752,8 @@ private extension Terra {
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
-      return try await call.execute { trace in
-        let handle = TraceHandle(
-          span: Terra.currentSpan(),
-          onEvent: { _ = trace.event($0) },
-          onAttribute: { _recordAttribute($0, $1, on: trace) },
-          onError: { trace.recordError($0) }
-        )
-        return try await body(handle)
+      return try await call.execute {
+        try await runWithCurrentSpan(fallbackName: Terra.SpanNames.embedding, body)
       }
 
     case .agent(let operation):
@@ -1031,14 +763,8 @@ private extension Terra {
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
-      return try await call.execute { trace in
-        let handle = TraceHandle(
-          span: Terra.currentSpan(),
-          onEvent: { _ = trace.event($0) },
-          onAttribute: { _recordAttribute($0, $1, on: trace) },
-          onError: { trace.recordError($0) }
-        )
-        return try await body(handle)
+      return try await call.execute {
+        try await runWithCurrentSpan(fallbackName: Terra.SpanNames.agentInvocation, body)
       }
 
     case .tool(let operation):
@@ -1048,14 +774,8 @@ private extension Terra {
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
-      return try await call.execute { trace in
-        let handle = TraceHandle(
-          span: Terra.currentSpan(),
-          onEvent: { _ = trace.event($0) },
-          onAttribute: { _recordAttribute($0, $1, on: trace) },
-          onError: { trace.recordError($0) }
-        )
-        return try await body(handle)
+      return try await call.execute {
+        try await runWithCurrentSpan(fallbackName: Terra.SpanNames.toolExecution, body)
       }
 
     case .safety(let operation):
@@ -1065,14 +785,8 @@ private extension Terra {
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
-      return try await call.execute { trace in
-        let handle = TraceHandle(
-          span: Terra.currentSpan(),
-          onEvent: { _ = trace.event($0) },
-          onAttribute: { _recordAttribute($0, $1, on: trace) },
-          onError: { trace.recordError($0) }
-        )
-        return try await body(handle)
+      return try await call.execute {
+        try await runWithCurrentSpan(fallbackName: Terra.SpanNames.safetyCheck, body)
       }
     }
   }

@@ -1,6 +1,6 @@
 # TerraError Model
 
-Lifecycle/configuration failures use ``Terra/TerraError``.
+Lifecycle, guidance, and configuration failures use ``Terra/TerraError``.
 
 ## Stable Error Codes
 
@@ -10,32 +10,31 @@ Lifecycle/configuration failures use ``Terra/TerraError``.
 - ``Terra/TerraError/Code/invalid_lifecycle_state``
 - ``Terra/TerraError/Code/start_failed``
 - ``Terra/TerraError/Code/reconfigure_failed``
-- ``Terra/TerraError/Code/wrong_api_for_agentic``
+- ``Terra/TerraError/Code/guidance``
+- ``Terra/TerraError/Code/wrong_api_for_workflow``
 - ``Terra/TerraError/Code/context_not_propagated``
+- ``Terra/TerraError/Code/misconfiguration``
+- ``Terra/TerraError/Code/invalid_operation``
 
 ## Handling Pattern
 
 ```swift
-import Terra
-
-let config = Terra.Configuration(preset: .quickstart)
-
 do {
   try await Terra.start(config)
 } catch let error as Terra.TerraError {
-  print("TerraError code: \(error.code.rawValue)")
-  print("Message: \(error.message)")
-  print("Hint: \(error.remediationHint)")
-  print("Context: \(error.context)")
-} catch {
-  print("Non-Terra error: \(error)")
+  print(error.code.rawValue)
+  print(error.message)
+  print(error.recoverySuggestion)
 }
 ```
 
 Use ``Terra/TerraError/code`` as the branching key.
 Use ``Terra/TerraError/context`` and ``Terra/TerraError/underlying`` for diagnostics.
 
-Agentic workflows can also surface guidance errors:
+## Workflow Guidance
 
-- `wrong_api_for_agentic` when a closure-scoped operation is the wrong entry point for a multi-step workflow.
-- `context_not_propagated` when detached work dropped Terra context and should be moved to `SpanHandle.detached(...)` or `AgentHandle.detached(...)`.
+Workflow-focused guidance errors surface when callers choose the wrong tracing shape:
+
+- `wrong_api_for_workflow` when a closure-scoped child operation is the wrong root entry point for a multi-step workflow
+- `context_not_propagated` when detached work drops Terra context and should move to `SpanHandle.detached(...)`
+- `invalid_operation` when a span handle has ended or the API sequence cannot succeed

@@ -46,7 +46,7 @@ extension Terra {
     public convenience init(
       model: SystemLanguageModel = .default,
       instructions: String? = nil,
-      modelIdentifier: Terra.ModelID,
+      modelIdentifier: String,
       guardrailClassifier: GuardrailClassifier? = nil
     ) {
       self.init(

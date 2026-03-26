@@ -96,6 +96,11 @@ public enum Terra {
     let startedAt = ContinuousClock.now
     return try await withInferenceSpan(streamingRequest, stream: true, parent: parent) { scope in
       let streamingScope = StreamingInferenceScope(scope: scope, startedAt: startedAt)
+      Terra.currentSpan()?.installStreamingCallbacks(
+        onChunk: { streamingScope.recordChunk(tokens: $0) },
+        onOutputTokens: { streamingScope.recordOutputTokenCount($0) },
+        onFirstToken: { streamingScope.recordFirstToken() }
+      )
       if let expectedOutputTokens = request.expectedOutputTokens, expectedOutputTokens > 0 {
         streamingScope.setAttributes([Keys.Terra.streamOutputTokens: .int(expectedOutputTokens)])
       }
@@ -244,7 +249,7 @@ public enum Terra {
       ? TerraSystemProfiler.captureMemorySnapshot()
       : nil
 
-    _ = _registerActiveSpan(
+    let handle = _registerActiveSpan(
       name: name,
       span: span,
       parentSpan: parentSpan,
@@ -272,7 +277,7 @@ public enum Terra {
     }
 
     return try await Terra._consumeDetachedParentEndedMarker { _ in
-      try await OpenTelemetry.instance.contextProvider.withActiveSpan(span) {
+      try await Terra._withActiveSpan(handle) {
         do {
           return try await body(scope)
         } catch let cancellation as CancellationError {

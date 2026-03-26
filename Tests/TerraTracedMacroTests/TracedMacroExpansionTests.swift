@@ -325,27 +325,6 @@ func toolMacroUsesOptionalCallId() {
   )
 }
 
-@Test("Tool macro uses optional ToolCallID parameter when present")
-func toolMacroUsesOptionalLegacyToolCallId() {
-  assertMacroExpansion(
-    """
-    @Traced(tool: "search")
-    func search(query: String, callId: Terra.ToolCallID?) async throws -> [Result] {
-      try await doSearch(query)
-    }
-    """,
-    expandedSource: """
-    func search(query: String, callId: Terra.ToolCallID?) async throws -> [Result] {
-      return try await (callId.map { Terra.tool("search", callId: $0) } ?? Terra.tool("search")).run { trace in
-        _ = trace
-        try await doSearch(query)
-      }
-    }
-    """,
-    macros: testMacros
-  )
-}
-
 @Test("Embedding macro basic expansion")
 func embeddingMacroBasic() {
   assertMacroExpansion(

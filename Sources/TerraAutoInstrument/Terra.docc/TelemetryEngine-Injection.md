@@ -1,21 +1,19 @@
 # Protocol Seams
 
-> **Note:** These APIs are `package` scoped — intended for internal use within the Terra package or by companion packages, not for public SDK consumption.
-
-Use ``Terra/TelemetryEngine`` to inject deterministic execution for tests or custom runtimes inside the Terra package or companion packages that share package access.
+These APIs are `package` scoped. They exist for Terra-internal tests and companion packages, not for general SDK consumption.
 
 ## Core Seam Types
 
 - ``Terra/TelemetryEngine`` (`package`)
 - ``Terra/TelemetryContext`` (`package`)
-- ``Terra/TraceHandle`` (`public`)
+- ``Terra/SpanHandle`` (`public`)
 
 The seam entry point is ``Terra/Operation/run(using:_:)`` (`package`).
-Engine implementers handle ``Terra/TelemetryEngine/run(context:attributes:_:)``.
+Engine implementations handle ``Terra/TelemetryEngine/run(context:attributes:_:)`` and receive a ``Terra/SpanHandle`` for deterministic annotation behavior.
 
 ## Public SDK Testing Guidance
 
-For public SDK tests, keep using the public API surface. Use ``Terra/agentic(name:id:_:)`` when the test covers a multi-step workflow, or bind individual operations with ``Terra/Operation/under(_:)`` when a child span must attach to a chosen parent.
+Public SDK tests should keep using the public workflow-first surface and swap the installed tracer provider for deterministic assertions.
 
 ```swift
 import Terra
@@ -27,16 +25,12 @@ Terra.install(.init(
   registerProvidersAsGlobal: false
 ))
 
-let value = try await Terra.agentic(name: "planner-test", id: "issue-42") { agent in
-  try await agent.tool(
-    "search",
-    callId: "call-1"
-  ) { trace in
-    trace.event("tool.test")
+let value = try await Terra.workflow(name: "planner-test", id: "issue-42") { workflow in
+  try await workflow.tool("search", callId: "call-1") { span in
+    span.event("tool.test")
     return "stubbed"
   }
 }
 ```
 
-Public SDK consumers should keep using the canonical public factories and swap the installed tracer provider for deterministic tests.
 Use the `TelemetryEngine` seam only when working inside the Terra package where `package` access is available.

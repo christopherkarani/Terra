@@ -1,19 +1,21 @@
 # ``Terra``
 
-OpenTelemetry-native observability for on-device GenAI workloads on Apple platforms.
+OpenTelemetry-native observability for on-device and remote GenAI workflows on Apple platforms.
 
-Terra's canonical surface is trace-first: start locally with ``Terra/quickStart()``, inspect the API map with ``Terra/help()``, validate setup with ``Terra/diagnose()``, then instrument work with ``Terra/trace(name:id:_:)-swift.method`` for single-root tasks, ``Terra/loop(name:id:messages:_:)`` for mutable chat transcripts, ``Terra/agentic(name:id:_:)`` for multi-step agent workflows, and ``Terra/startSpan(name:id:attributes:)`` when lifecycle must be ended manually. The operation helpers such as ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)`` and ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)`` remain available as secondary convenience APIs.
+Terra's public surface is workflow-first:
+
+- start locally with ``Terra/quickStart()``
+- inspect the API map with ``Terra/help()``
+- validate setup with ``Terra/diagnose()``
+- trace one request with ``Terra/workflow(name:id:_:)-swift.method``
+- use ``Terra/workflow(name:id:messages:_:)-swift.method`` when transcript mutation belongs to the root workflow
+- use ``Terra/startSpan(name:id:attributes:)`` only for explicit long-lived parent spans
 
 ## Start Here
 
 - New to Terra: <doc:Quickstart-90s>
-- Want the complete canonical API map: <doc:Canonical-API>
-
-## Learning Progression
-
-- Beginner: <doc:Canonical-API>, <doc:Typed-IDs>
-- Intermediate: <doc:Metadata-Builder>, <doc:TerraError-Model>, <doc:API-Reference>
-- Advanced: <doc:TelemetryEngine-Injection>, <doc:Configuration-Reference>
+- Canonical API map: <doc:Canonical-API>
+- Full reference: <doc:API-Reference>
 
 ## Core Symbols
 
@@ -22,19 +24,18 @@ Terra's canonical surface is trace-first: start locally with ``Terra/quickStart(
 - ``Terra/shutdown() async``
 - ``Terra/help()``
 - ``Terra/diagnose()``
-- ``Terra/trace(name:id:_:)-swift.method``
-- ``Terra/loop(name:id:messages:_:)``
-- ``Terra/agentic(name:id:_:)``
+- ``Terra/workflow(name:id:_:)-swift.method``
+- ``Terra/workflow(name:id:messages:_:)-swift.method``
 - ``Terra/startSpan(name:id:attributes:)``
 - ``Terra/SpanHandle``
+- ``Terra/WorkflowTranscript``
 - ``Terra/Operation``
-- ``Terra/TraceHandle``
-- ``Terra/capabilities()``
-- ``Terra/guides()``
+- ``Terra/currentSpan()``
+- ``Terra/activeSpans()``
 - ``Terra/examples()``
+- ``Terra/guides()``
 - ``Terra/ask(_:)``
 - ``Terra/playground()``
-- ``Terra/currentSpan()``
 
 ## Topics
 
@@ -42,27 +43,18 @@ Terra's canonical surface is trace-first: start locally with ``Terra/quickStart(
 
 - <doc:Quickstart-90s>
 
-### Beginner
+### Core Docs
 
 - <doc:Canonical-API>
-- <doc:Typed-IDs>
-
-### Intermediate
-
-- <doc:Metadata-Builder>
+- <doc:API-Reference>
 - <doc:TerraError-Model>
-- <doc:API-Reference>
-- <doc:Configuration-Reference>
-
-### Reference
-
-- <doc:API-Reference>
-- <doc:Configuration-Reference>
-
-### Advanced
-
-- <doc:TelemetryEngine-Injection>
 
 ### Platform Integrations
 
 - <doc:Integrations>
+- <doc:FoundationModels>
+- <doc:CoreML-Integration>
+
+### Advanced
+
+- <doc:TelemetryEngine-Injection>

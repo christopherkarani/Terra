@@ -32,21 +32,21 @@ struct TerraErrorRemediationTests {
     )
   }
 
-  @Test("Agentic guidance errors point to the supported workflow APIs")
-  func agenticGuidanceHints() {
-    let wrongAPI = Terra.TerraError.wrongAPIForAgentic(
+  @Test("Workflow guidance errors point to the supported workflow APIs")
+  func workflowGuidanceHints() {
+    let wrongAPI = Terra.TerraError.wrongAPIForWorkflow(
       usedAPI: "Terra.stream(...).run",
-      suggestedAPI: "Terra.agentic(name:id:_:)",
+      suggestedAPI: "Terra.workflow(name:id:_:)",
       why: "Tool work continues after the streaming callback returns.",
-      example: "try await Terra.agentic(name: \"planner\") { _ in }"
+      example: "try await Terra.workflow(name: \"planner\") { workflow in }"
     )
     let propagation = Terra.TerraError.contextNotPropagated(
       reason: "Raw Task.detached does not inherit Terra task-local trace state.",
-      fix: "Use AgentHandle.detached(...) or SpanHandle.detached(...) to rebind the parent span."
+      fix: "Use SpanHandle.detached(...) from the workflow root to rebind the parent span."
     )
 
-    #expect(wrongAPI.remediationHint.contains("Terra.agentic"))
-    #expect(wrongAPI.recoverySuggestion.contains("Terra.agentic"))
+    #expect(wrongAPI.remediationHint.contains("Terra.workflow"))
+    #expect(wrongAPI.recoverySuggestion.contains("Terra.workflow"))
     #expect(propagation.remediationHint.contains("detached"))
     #expect(propagation.recoverySuggestion.contains("SpanHandle.detached"))
   }

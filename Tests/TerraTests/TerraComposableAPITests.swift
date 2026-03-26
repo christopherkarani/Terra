@@ -32,8 +32,8 @@ struct TerraComposableAPITests {
       }
 
     for (index, call) in transformedCalls.enumerated() {
-      _ = await call.run { trace in
-        trace.tag("terra.collection.index", index)
+      _ = await call.run { span in
+        span.attribute("terra.collection.index", index)
         return "ok"
       }
     }
@@ -54,14 +54,14 @@ struct TerraComposableAPITests {
 
     let value = await Terra
       .infer("local/composable", prompt: "hello")
-      .run { trace in
-        trace.tag("terra.custom.string", "value")
-        trace.tag("terra.custom.int", 7)
-        trace.tag("terra.custom.double", 0.5)
-        trace.tag("terra.custom.bool", true)
-        trace.tag("terra.trace.string", "trace-value")
-        trace.tokens(input: 3, output: 4)
-        trace.responseModel("trace-model")
+      .run { span in
+        span.attribute("terra.custom.string", "value")
+        span.attribute("terra.custom.int", 7)
+        span.attribute("terra.custom.double", 0.5)
+        span.attribute("terra.custom.bool", true)
+        span.attribute("terra.trace.string", "trace-value")
+        span.tokens(input: 3, output: 4)
+        span.responseModel("trace-model")
         return "ok"
       }
 
@@ -88,13 +88,13 @@ struct TerraComposableAPITests {
 
     _ = await Terra
       .infer("builder/model", prompt: "hello")
-      .run { trace in
-        trace.tag("builder.attr.base", "base")
+      .run { span in
+        span.attribute("builder.attr.base", "base")
         if includeFlag {
-          trace.tag("builder.attr.conditional", 1)
+          span.attribute("builder.attr.conditional", 1)
         }
         for phase in phases {
-          trace.event("builder.event.\(phase)")
+          span.event("builder.event.\(phase)")
         }
         return "ok"
       }
@@ -112,10 +112,10 @@ struct TerraComposableAPITests {
 
     _ = await Terra
       .infer("builder/model", prompt: "hello")
-      .run { trace in
-        trace.event("trace.event.1")
-        trace.tag("trace.attr.1", "v1")
-        trace.event("trace.event.2")
+      .run { span in
+        span.event("trace.event.1")
+        span.attribute("trace.attr.1", "v1")
+        span.event("trace.event.2")
         return "ok"
       }
 
@@ -145,7 +145,7 @@ struct TerraComposableAPITests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    try await Terra.trace(name: "outer") { outer in
+    try await Terra.workflow(name: "outer") { outer in
       let manual = Terra.startSpan(name: "manual")
       defer { manual.end() }
 
@@ -185,8 +185,8 @@ struct TerraComposableAPITests {
 
     _ = await Terra
       .infer("privacy-model", prompt: "hello")
-      .run { trace in
-        trace.recordError(ExpectedError.failed)
+      .run { span in
+        span.recordError(ExpectedError.failed)
         return "ok"
       }
 

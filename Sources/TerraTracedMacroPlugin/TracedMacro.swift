@@ -324,7 +324,6 @@ public struct TracedMacro: BodyMacro {
         ?? detected.runtime
       let explicitToolCallID =
         TracedMacro.argument(named: "callId", in: arguments)
-        ?? TracedMacro.argument(named: "callID", in: arguments)
       toolCallID = explicitToolCallID ?? detected.toolCallID
       toolCallIDIsOptional = explicitToolCallID == nil ? detected.toolCallIDIsOptional : false
 
@@ -440,10 +439,6 @@ public struct TracedMacro: BodyMacro {
     case ("String", false):
       return name
     case ("String", true):
-      return name
-    case ("ToolCallID", false), ("Terra.ToolCallID", false):
-      return name
-    case ("ToolCallID", true), ("Terra.ToolCallID", true):
       return name
     default:
       return name

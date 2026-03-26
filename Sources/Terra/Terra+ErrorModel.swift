@@ -79,8 +79,8 @@ extension Terra {
       /// lifecycle-failed, for example when code tries to mutate an ended span handle.
       public static let guidance = Self("guidance")
 
-      /// Terra detected that the caller chose a closure-scoped API for a multi-step agentic workflow.
-      public static let wrong_api_for_agentic = Self("wrong_api_for_agentic")
+      /// Terra detected that the caller chose a closure-scoped API for a multi-step workflow.
+      public static let wrong_api_for_workflow = Self("wrong_api_for_workflow")
 
       /// Terra detected that trace context was dropped across an async boundary and can point to the supported fix.
       public static let context_not_propagated = Self("context_not_propagated")
@@ -198,10 +198,10 @@ extension Terra.TerraError.Code {
       return "Check TerraError.context and configuration deltas, then retry Terra.reconfigure(...). Hint: print(Terra.help()) and rerun Terra.diagnose()."
     case Terra.TerraError.Code.guidance.rawValue:
       return #"Follow the guidance message, print(Terra.help()), and use Terra.ask("tracing workflow") or Terra.examples() for the closest runnable fix."#
-    case Terra.TerraError.Code.wrong_api_for_agentic.rawValue:
-      return #"Use Terra.loop(...) for mutable transcripts or Terra.agentic(...) for multi-step workflows, then check Terra.ask("agent loop") for the copy-paste pattern."#
+    case Terra.TerraError.Code.wrong_api_for_workflow.rawValue:
+      return #"Use Terra.workflow(...) for multi-step roots, Terra.workflow(..., messages:) for transcript mutation, or Terra.startSpan(...) for explicit lifecycle. Then check Terra.ask("workflow") for the copy-paste pattern."#
     case Terra.TerraError.Code.context_not_propagated.rawValue:
-      return "Use SpanHandle.detached(...), AgentHandle.detached(...), or AgentLoopScope.detached(...) instead of raw Task.detached when parent trace linkage matters. Hint: print(Terra.help())."
+      return "Use SpanHandle.detached(...) instead of raw Task.detached when parent trace linkage matters. Hint: print(Terra.help())."
     case Terra.TerraError.Code.misconfiguration.rawValue:
       return "Apply the suggested Terra configuration fix, then rerun Terra.diagnose() to verify the setup. Hint: print(Terra.help()) and use Terra.ask(\"quickstart and diagnose setup\")."
     case Terra.TerraError.Code.invalid_operation.rawValue:
@@ -252,15 +252,15 @@ extension Terra.TerraError {
     )
   }
 
-  /// Creates a guidance error for choosing a closure-scoped API where an agentic root span is required.
-  public static func wrongAPIForAgentic(
+  /// Creates a guidance error for choosing a closure-scoped API where a workflow root span is required.
+  public static func wrongAPIForWorkflow(
     usedAPI: String,
     suggestedAPI: String,
     why: String,
     example: String
   ) -> Self {
     let message = """
-    \(usedAPI) is the wrong Terra entry point for this agentic workflow.
+    \(usedAPI) is the wrong Terra entry point for this workflow.
 
     Why this pattern does not work:
     \(why)
@@ -273,14 +273,14 @@ extension Terra.TerraError {
     """
 
     return Self(
-      code: .wrong_api_for_agentic,
+      code: .wrong_api_for_workflow,
       message: message,
       context: [
         "used_api": usedAPI,
         "correct_api": suggestedAPI,
         "why": why,
         "example": example,
-        "recovery_suggestion": #"Use \#(suggestedAPI). Hint: print(Terra.help()) and use Terra.ask("agent loop") for the canonical pattern."#,
+        "recovery_suggestion": #"Use \#(suggestedAPI). Hint: print(Terra.help()) and use Terra.ask("workflow") for the canonical pattern."#,
       ]
     )
   }

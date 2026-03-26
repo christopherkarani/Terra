@@ -16,12 +16,12 @@ struct TerraProtocolSeamsTests {
         provider: Terra.ProviderID("mock-provider"),
         runtime: Terra.RuntimeID("mock-runtime")
       )
-      .run(using: engine) { trace in
-        trace.tag("app.request.id", "req-1")
-        trace.event("request.start")
-        trace.tag("app.phase", "decode")
-        trace.tokens(input: 5, output: 7)
-        trace.responseModel("gpt-test-response")
+      .run(using: engine) { span in
+        span.attribute("app.request.id", "req-1")
+        span.event("request.start")
+        span.attribute("app.phase", "decode")
+        span.tokens(input: 5, output: 7)
+        span.responseModel("gpt-test-response")
         return "ok"
       }
 
@@ -74,7 +74,7 @@ private struct MockEngine: Terra.TelemetryEngine {
   func run<R: Sendable>(
     context: Terra.TelemetryContext,
     attributes: [Terra.TraceAttribute],
-    _ body: @escaping @Sendable (Terra.TraceHandle) async throws -> R
+    _ body: @escaping @Sendable (Terra.SpanHandle) async throws -> R
   ) async throws -> R {
     log.beginContexts.append(context)
     var merged = log.recordedAttributes
@@ -83,7 +83,7 @@ private struct MockEngine: Terra.TelemetryEngine {
     }
     log.recordedAttributes = merged
 
-    let handle = Terra.TraceHandle(
+    let handle = Terra._testSpanHandle(
       onEvent: { log.events.append($0) },
       onAttribute: { name, value in log.recordedAttributes[.init(name: name, value: value)] = true },
       onError: { log.errors.append(String(describing: $0)) },

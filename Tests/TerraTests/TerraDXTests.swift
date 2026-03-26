@@ -11,16 +11,14 @@ struct TerraDXTests {
 
     #expect(examples.count >= 50)
     #expect(guides.count >= 20)
-    #expect(examples.contains { $0.title == "Trace Basic Async Work" })
-    #expect(examples.contains { $0.title == "Loop Basic Transcript Update" })
-    #expect(examples.contains { $0.title == "Playground Run Trace Scenario" })
-    #expect(examples.contains { $0.title == "TraceBuilder Compatibility" })
+    #expect(examples.contains { $0.code.contains("Terra.workflow(") })
+    #expect(examples.contains { $0.code.contains("messages: &messages") })
+    #expect(examples.contains { $0.code.contains("Terra.playground()") })
     #expect(examples.allSatisfy { !$0.code.isEmpty })
     #expect(examples.contains { $0.code.contains("Terra.diagnose()") })
-    #expect(examples.contains { $0.code.contains("Terra.playground()") })
     #expect(examples.contains { $0.code.contains("instrumented()") })
     #expect(guides.contains { $0.title.contains("Mutable Transcript") })
-    #expect(guides.contains { $0.title.contains("Moving Off TraceBuilder") })
+    #expect(guides.contains { $0.title.contains("Choosing workflow") || $0.solution.contains("Terra.workflow") })
   }
 
   @Test("Diagnose reports local setup issues with actionable fixes")
@@ -38,16 +36,16 @@ struct TerraDXTests {
     #expect(report.isHealthy)
   }
 
-  @Test("Help output exposes the canonical trace-first progression")
-  func helpOutputExposesTraceFirstProgression() {
+  @Test("Help output exposes the canonical workflow-first progression")
+  func helpOutputExposesWorkflowFirstProgression() {
     let help = Terra.help()
 
-    #expect(help.contains("Terra.trace(name:id:_:)"))
-    #expect(help.contains("Terra.loop(name:id:messages:_: )") == false)
-    #expect(help.contains("Terra.loop(name:id:messages:_:)" ))
-    #expect(help.contains("Terra.agentic(name:id:_:)"))
-    #expect(help.contains("Terra.trace(name:)"))
-    #expect(help.contains("Compatibility APIs"))
+    #expect(help.contains("Terra.workflow(name:id:_:)"))
+    #expect(help.contains("Terra.workflow(name:id:messages:_:)"))
+    #expect(help.contains("Terra.startSpan(name:id:attributes:)"))
+    #expect(!help.contains("Terra.trace(name:id:_:)"))
+    #expect(!help.contains("Terra.agentic(name:id:_:)"))
+    #expect(!help.contains("Compatibility APIs"))
   }
 
   @Test("Active spans can be visualized as ASCII and JSON")
@@ -55,7 +53,7 @@ struct TerraDXTests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    let outputs = try await Terra.trace(name: "root", id: "trace-1") { _ in
+    let outputs = try await Terra.workflow(name: "root", id: "trace-1") { _ in
       let ascii = Terra.visualize(Terra.activeSpans())
       let json = Terra.visualize(Terra.activeSpans(), format: .json)
       return (ascii, json)
@@ -85,7 +83,7 @@ struct TerraDXTests {
     }
 
     await #expect(throws: ExpectedFailure.self) {
-      try await Terra.trace(name: "hooked") { span in
+      try await Terra.workflow(name: "hooked") { span in
         span.recordError(ExpectedFailure.boom)
         throw ExpectedFailure.boom
       }
@@ -123,23 +121,22 @@ struct TerraDXTests {
     #expect(span.attributes["terra.service.name"]?.description == "local-planner")
   }
 
-  @Test("TraceBuilder creates nested spans and preserves the root")
-  func traceBuilderCreatesNestedSpans() async throws {
+  @Test("Workflow handle creates nested child spans and preserves the root")
+  func workflowHandleCreatesNestedChildSpansAndPreservesTheRoot() async throws {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    let builder = Terra.trace(name: "process-request")
-      .attribute("request.id", "req-1")
-      .event("received")
-
-    try await builder.span("validation") { }
-    try await builder.span("inference") { }
-    builder.end()
+    try await Terra.workflow(name: "process-request") { workflow in
+      workflow.attribute("request.id", "req-1")
+      workflow.event("received")
+      _ = try await workflow.tool("validation", callId: "validation-1") { "ok" }
+      _ = try await workflow.infer("inference-model", prompt: "hello") { "ok" }
+    }
 
     let spans = support.finishedSpans()
     #expect(spans.contains { $0.name == "process-request" })
-    #expect(spans.contains { $0.name == "validation" })
-    #expect(spans.contains { $0.name == "inference" })
+    #expect(spans.contains { $0.name == Terra.SpanNames.toolExecution })
+    #expect(spans.contains { $0.name == Terra.SpanNames.inference })
   }
 
   @Test("Guidance and invalid operation errors expose recovery suggestions")
@@ -147,7 +144,7 @@ struct TerraDXTests {
     let guidance = Terra.TerraError.guidance(
       message: "This span handle is no longer active.",
       why: "The span ended before the later tool call tried to mutate it.",
-      correctAPI: "Terra.trace(name:id:_:) or Terra.startSpan(name:id:attributes:)",
+      correctAPI: "Terra.workflow(name:id:_:) or Terra.startSpan(name:id:attributes:)",
       example: """
       let span = Terra.startSpan(name: "tool")
       span.end()
@@ -155,23 +152,23 @@ struct TerraDXTests {
     )
 
     let invalid = Terra.TerraError.invalidOperation(
-      reason: "TraceBuilder already ended.",
-      correctAPI: "Create a new builder with Terra.trace(name:)",
-      example: "let builder = Terra.trace(name: \"request\")"
+      reason: "Workflow roots own span lifecycle automatically.",
+      correctAPI: "Wrap the request in Terra.workflow(name:id:_:) or keep an explicit Terra.startSpan(...) handle.",
+      example: "try await Terra.workflow(name: \"request\") { _ in }"
     )
 
-    let agentic = Terra.TerraError.wrongAPIForAgentic(
+    let workflow = Terra.TerraError.wrongAPIForWorkflow(
       usedAPI: "Terra.stream(...).run",
-      suggestedAPI: "Terra.agentic(name:id:_:)",
+      suggestedAPI: "Terra.workflow(name:id:_:)",
       why: "The workflow needs one parent span across multiple tool calls.",
-      example: "try await Terra.agentic(name: \"planner\") { _ in }"
+      example: "try await Terra.workflow(name: \"planner\") { workflow in }"
     )
 
     #expect(guidance.recoverySuggestion.contains("Terra.help()"))
     #expect(guidance.recoverySuggestion.contains("Terra.examples()"))
     #expect(guidance.message.contains("Example:"))
     #expect(invalid.recoverySuggestion.contains("Terra.help()"))
-    #expect(agentic.recoverySuggestion.contains("Terra.ask(\"agent loop\")"))
+    #expect(workflow.recoverySuggestion.contains("Terra.ask(\"workflow\")"))
   }
 }
 

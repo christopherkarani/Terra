@@ -1,3 +1,37 @@
+# Terra Workflow-First Breaking Cleanup
+
+- [x] Replace the `trace` / `agentic` / `loop` root surface with `Terra.workflow(...)` and `Terra.workflow(..., messages:)`
+- [x] Collapse the public annotation handle surface onto `SpanHandle` and remove `TraceHandle` from the public path
+- [x] Remove `ModelID`, `ToolCallID`, `callID:`, and other compatibility-only public overloads
+- [x] Move child workflow helpers onto `SpanHandle` and add transcript support via `WorkflowTranscript`
+- [x] Rename root telemetry rollups from `terra.agent.*` to `terra.workflow.*` and stop marking generic roots as `invoke_agent`
+- [x] Rewrite discovery/docs/examples/tests to the workflow-first API only
+- [x] Run targeted Swift build/test verification, fix regressions, and document results below
+
+## Baseline
+
+- The worktree is clean before implementation.
+- The current public docs and discovery surface still teach `trace`, `agentic`, `loop`, and compatibility notes for `TraceHandle`, `ModelID`, and `ToolCallID`.
+- The cookbook currently contains invalid `agent.tool(...).run { ... }` call sites that do not match the actual `AgentHandle` API and will be removed as part of the rewrite.
+- Session-memory capture was attempted via Wax CLI, but the discovered `/opt/homebrew/bin/waxmcp` entry is not executable in this environment.
+
+## Review
+
+- Replaced the root tracing entry points with `Terra.workflow(name:id:_:)` and `Terra.workflow(name:id:messages:_:)`, and removed the legacy `trace`, `agentic`, `loop`, and builder compatibility surface.
+- Unified the public span mutation model on `SpanHandle`, added child helpers (`infer`, `stream`, `tool`, `embed`, `safety`, `agent`), and added `WorkflowTranscript` for buffered message mutation with writeback on success and failure.
+- Removed `TraceHandle`, `AgentHandle`, `AgentLoopScope`, `ModelID`, `ToolCallID`, and `callID:`-only compatibility overloads from the public workflow path; `Operation.run` now exposes `SpanHandle`.
+- Rewrote discovery, README, cookbook, DocC, sample code, and playground scenarios so the canonical path is `workflow -> child operations -> startSpan` with no legacy naming in the public docs.
+- Renamed workflow rollups from `terra.agent.*` to `terra.workflow.*`, stopped treating generic roots as `invoke_agent`, and preserved child operation semantics.
+- Hardened composable span execution so `.run { span in ... }` always sees a real Terra-managed span handle; the public composable API no longer depends on the synthetic test-handle seam.
+- Updated and expanded regression coverage across manual tracing, composable operations, doc linting, macro expansion/import, HTTP span linkage, transcript handling, and workflow rollups.
+- Verification completed:
+  - `swift test --filter 'TerraComposableAPITests|TerraIdentifierTests|TerraProtocolSeamsTests|TerraManualTracingTests|TerraLoopAndPlaygroundTests|TerraAgentContextTests|TerraDXTests|TerraErrorRemediationTests|DocumentationLintTests|QuickstartRecipeSnippetTests|HTTPAIInstrumentationSpanLinkageTests|TracedMacroExpansionTests|TracedMacroImportSmokeTests'`
+  - `swift test --parallel --num-workers 1 --filter 'TerraAPIParityTests|TerraClosureAPITests|TerraFluentAPITests|TerraLegacyClosureDeprecationTests|TerraTraceProtocolTests|TracedMacroPrivacyTests'`
+  - `swift test --parallel --num-workers 1 --filter 'TerraConcurrencyPropagationTests|TerraLifecycleConcurrencyTests|TerraLifecycleTests|TerraOpenTelemetryInstallConcurrencyTests|TerraSharedSessionTests|TerraMetricsTests'`
+  - `swift test --parallel --num-workers 1 --filter 'TerraE2ETests|TerraPrivacyAuditTests|TerraPrivacyE2ETests|TerraPrivacyV3Tests|TerraRedactionPolicyTests|TerraInferenceSpanTests|TerraStreamingSpanTests|TerraSpanTypesTests|TerraTraceableTests|TerraInstrumentationNameTests|TerraInternalConstantsTests|TerraKeyV3Tests|TerraLlamaWrapperTests|ZigBackendIntegrationTests'`
+  - `swift test --parallel --num-workers 1`
+- Residual warnings remain in third-party SwiftPM plugin sources under `.build/checkouts/grpc-swift` and `.build/checkouts/swift-protobuf`; Terra-owned targets passed verification.
+
 # Terra HTTP and Manual Span Unification
 
 - [x] Add Terra-owned structured prompt/message keys and request plumbing for explicit inference spans
