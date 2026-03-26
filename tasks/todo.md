@@ -52,3 +52,18 @@
 - Residual warnings remain external to the implementation:
   - SwiftPM plugin deprecation / Sendable warnings from third-party checkouts under `.build/checkouts`
   - Next.js workspace-root warning during `website` build because multiple `package-lock.json` files exist above the app directory
+
+# Terra SDK Skill Creation
+
+- [x] Create a project-local `terra-sdk` skill with source-of-truth guidance for tracing, tree visualization, and telemetry
+- [x] Add reference docs for source selection, Viewer tree rules, metrics mapping, and hotspot patterns
+- [x] Validate the generated skill metadata and folder structure
+- [x] Remove duplicate reference files so the skill has one canonical doc per topic
+
+## Review
+
+- Created `.codex/skills/terra-sdk/SKILL.md` as the primary skill entry point and generated `agents/openai.yaml` for launcher metadata.
+- Added canonical reference docs under `.codex/skills/terra-sdk/references/` for source-of-truth selection, tree visualization, metrics, and hotspot patterns.
+- Ran `quick_validate.py` successfully after the skill and reference docs were assembled.
+- Added a TerraViewer contract plus an emission matrix so agents know the exact span-to-surface requirements for Mission Control and TraceTree.
+- Clarified resource-vs-span identity placement, content redaction fallback behavior, and TerraViewer smoke-test verification steps.

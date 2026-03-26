@@ -10,3 +10,6 @@
 - When docs mention both canonical and compatibility APIs, label the compatibility path explicitly so agents do not treat it as the preferred API.
 - If a documentation example must keep a compatibility wrapper for compileability, make the wrapper type explicit in the variable declaration rather than mixing wrapper-only APIs with plain `String` bindings.
 - When bridging a compatibility handle onto a Terra-owned span, do not bypass operation-scoped callbacks for behavior that carries privacy or policy decisions. `TraceHandle.recordError` must keep using the injected callback so composable operations preserve `captureMessage` gating.
+- For skill creation work, keep one canonical reference file per concept; duplicate topic files make the skill harder for agents to follow and add noise without adding coverage.
+- TerraViewer guidance needs an explicit emission matrix, not just a narrative contract, when the app consumes SDK telemetry across multiple surfaces.
+- TerraViewer identity guidance should split resource attributes from span attributes, and content guidance should explicitly prefer raw content vs hash vs length based on privacy.
