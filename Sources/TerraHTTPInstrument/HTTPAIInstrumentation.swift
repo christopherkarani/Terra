@@ -24,7 +24,7 @@ public enum HTTPAIInstrumentation {
     private static let lock = NSLock()
     private static var instance: URLSessionInstrumentation?
 
-    private struct Configuration: Sendable, Equatable {
+    package struct Configuration: Sendable, Equatable {
         var hosts: Set<String>
         var openClawGatewayHosts: Set<String>
         var openClawMode: String
@@ -46,22 +46,26 @@ public enum HTTPAIInstrumentation {
     package static func makeConfiguration(
         hosts: Set<String>,
         openClawGatewayHosts: Set<String>,
-        openClawMode: String
+        openClawMode: String,
+        configurationProvider: (@Sendable () -> Configuration)? = nil
     ) -> URLSessionInstrumentationConfiguration {
-        let config = Configuration(
+        let initialConfiguration = Configuration(
             hosts: hosts,
             openClawGatewayHosts: openClawGatewayHosts,
             openClawMode: openClawMode
         )
+        let resolveConfiguration = configurationProvider ?? { initialConfiguration }
 
         return URLSessionInstrumentationConfiguration(
             shouldInstrument: { request in
+                let config = resolveConfiguration()
                 guard !config.hosts.isEmpty || !config.openClawGatewayHosts.isEmpty else { return false }
                 guard let host = request.url?.host else { return false }
                 return isHostMatched(host, hosts: config.hosts)
                     || isHostMatched(host, hosts: config.openClawGatewayHosts)
             },
             nameSpan: { request in
+                let config = resolveConfiguration()
                 guard !config.hosts.isEmpty || !config.openClawGatewayHosts.isEmpty else { return nil }
                 guard let host = request.url?.host else { return nil }
                 if isHostMatched(host, hosts: config.openClawGatewayHosts) {
@@ -73,6 +77,7 @@ public enum HTTPAIInstrumentation {
                 return nil
             },
             spanCustomization: { request, spanBuilder in
+                let config = resolveConfiguration()
                 guard !config.hosts.isEmpty || !config.openClawGatewayHosts.isEmpty else { return }
 
                 if let currentSpan = Terra.currentSpan(), !currentSpan.isEnded {
@@ -163,7 +168,8 @@ public enum HTTPAIInstrumentation {
         let config = makeConfiguration(
             hosts: hosts,
             openClawGatewayHosts: openClawGatewayHosts,
-            openClawMode: openClawMode
+            openClawMode: openClawMode,
+            configurationProvider: { loadConfiguration() }
         )
 
         lock.lock()

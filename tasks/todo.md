@@ -1,3 +1,38 @@
+# Mission-Critical Audit And Remediation
+
+- [x] Audit mission-critical paths in `TerraCore`, `TerraAutoInstrument`, `TerraHTTPInstrument`, `TerraTraceKit`, and `TerraCoreML`
+- [x] Run focused build/test sweeps to surface correctness, concurrency, privacy, and lifecycle failures
+- [x] Fix confirmed bugs with the smallest safe production-grade changes
+- [x] Add or tighten regression coverage for every code bug fixed
+- [x] Run final targeted verification and document residual risks
+
+## Baseline
+
+- Worktree is clean before this audit.
+- Wax CLI is referenced by project instructions but `waxmcp` is not installed in this environment, so persistent memory capture is blocked for this session.
+- Mission-critical areas for this pass are:
+  - `Sources/Terra/*` for runtime, workflow/manual tracing, OpenTelemetry install, privacy propagation, and core span lifecycle
+  - `Sources/TerraAutoInstrument/*` for startup/lifecycle configuration and exporter wiring
+  - `Sources/TerraHTTPInstrument/*` for network interception, request parsing, streaming observers, and parent span linkage
+  - `Sources/TerraTraceKit/*` for trace ingestion/storage/decoding, where corruption or ordering bugs would damage diagnostics
+  - `Sources/TerraCoreML/*` for runtime instrumentation that uses method swizzling and asynchronous metrics capture
+
+## Review
+
+- Audited the highest-risk runtime paths in `TerraCore`, `TerraAutoInstrument`, `TerraHTTPInstrument`, `TerraTraceKit`, and `TerraCoreML` with emphasis on lifecycle correctness, parent-span linkage, sync/async bridging, and persistent diagnostics correctness.
+- Fixed a stale-configuration bug in `HTTPAIInstrumentation`: the installed `URLSessionInstrumentation` closures previously captured the first host/openclaw configuration permanently, so later `Terra.reconfigure(...)` or shutdown-driven disable flows could silently keep instrumenting old hosts. The configuration closures now resolve live config on each use, and a regression test proves the matcher updates after runtime host changes.
+- Fixed a mission-critical hang risk in `CoreMLInstrumentation`: synchronous compute-plan capture used an unbounded `DispatchSemaphore.wait()` plus unsynchronized detached-task mutation, which could block model-load instrumentation indefinitely and race the detached result handoff. The path now uses a locked result box plus a bounded timeout fallback that emits deterministic timeout telemetry instead of hanging.
+- Added regression coverage for both bugs:
+  - `HTTPAIInstrumentationTests.configurationClosuresObserveUpdates`
+  - `TerraCoreMLTopLevelTests.synchronousComputePlanCaptureTimesOut`
+- Verification completed:
+  - `swift test --parallel --num-workers 1 --filter 'TerraLifecycleAPITests|TerraLifecycleErrorMappingTests|TerraSessionTests|TerraHTTPInstrumentTests|TerraTraceKitTests|TerraCoreMLTests|TerraOpenTelemetryInstallConcurrencyTests|TerraLifecycleConcurrencyTests|TerraConcurrencyPropagationTests|TerraStreamingSpanTests'`
+  - `swift test --parallel --num-workers 1 --filter 'HTTPAIInstrumentationTests|TerraCoreMLTopLevelTests|TerraLifecycleAPITests|TerraHTTPInstrumentTests'`
+  - `swift test --parallel --num-workers 1`
+- Residual limits after this pass:
+  - Wax memory persistence remains unavailable in this environment because `waxmcp` is not installed.
+  - Third-party SwiftPM plugin warnings remain under `.build/checkouts`; the Terra-owned targets and tests passed after the fixes.
+
 # Terra Workflow-First Breaking Cleanup
 
 - [x] Replace the `trace` / `agentic` / `loop` root surface with `Terra.workflow(...)` and `Terra.workflow(..., messages:)`

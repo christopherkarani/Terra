@@ -94,5 +94,41 @@ func coreMLAttributesExcludeContent() {
   #expect(attrs[Terra.Keys.Terra.safetySubjectHMACSHA256] == nil)
   #expect(attrs[Terra.Keys.Terra.safetySubjectSHA256] == nil)
 }
+
+@Test("synchronous compute-plan capture times out instead of blocking forever")
+func synchronousComputePlanCaptureTimesOut() {
+  let previousCapture = CoreMLInstrumentation.computePlanSummaryCapture
+  let previousTimeout = CoreMLInstrumentation.synchronousCaptureTimeoutNanoseconds
+  defer {
+    CoreMLInstrumentation.computePlanSummaryCapture = previousCapture
+    CoreMLInstrumentation.synchronousCaptureTimeoutNanoseconds = previousTimeout
+  }
+
+  CoreMLInstrumentation.computePlanSummaryCapture = { _, _ in
+    try? await Task.sleep(nanoseconds: 200_000_000)
+    return TerraCoreMLComputePlanSummary(
+      captureStatus: .captured,
+      modelStructure: "program",
+      estimatedPrimaryDevice: "ane",
+      supportedDevices: ["ane"],
+      nodeCount: 1,
+      captureDurationMS: 200,
+      operationEstimates: [],
+      errorType: nil,
+      probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.captured.rawValue,
+      probeSource: "test"
+    )
+  }
+  CoreMLInstrumentation.synchronousCaptureTimeoutNanoseconds = 10_000_000
+
+  let summary = CoreMLInstrumentation.captureSummarySynchronously(
+    contentsOf: URL(fileURLWithPath: "/tmp/model.mlmodelc"),
+    configuration: MLModelConfiguration()
+  )
+
+  #expect(summary.captureStatus == .loadFailed)
+  #expect(summary.errorType == "terra.coreml.compute_plan.capture_timeout")
+  #expect(summary.probeSource == "mlcomputeplan")
+}
 }
 #endif

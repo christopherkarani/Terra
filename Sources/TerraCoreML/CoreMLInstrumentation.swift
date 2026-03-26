@@ -15,6 +15,10 @@ import TerraSystemProfiler
 /// Spans created by swizzling include `terra.auto_instrumented = true` and will be skipped if
 /// a Terra span is already active (dedup guard).
 public enum CoreMLInstrumentation {
+  private enum InternalConstants {
+    static let synchronousCaptureTimeoutNanoseconds: UInt64 = 2_000_000_000
+  }
+
   private final class AssociatedModelState: NSObject {
     let sourceURL: URL
     let computePlanSummary: TerraCoreMLComputePlanSummary
@@ -53,6 +57,11 @@ public enum CoreMLInstrumentation {
   private static let lock = NSLock()
   private static var isInstalled = false
   private static var configuration = Configuration()
+  package static var computePlanSummaryCapture: @Sendable (URL, MLModelConfiguration) async -> TerraCoreMLComputePlanSummary = {
+    url, configuration in
+    await MLComputePlanDiagnostics.captureSummary(contentsOf: url, configuration: configuration)
+  }
+  package static var synchronousCaptureTimeoutNanoseconds = InternalConstants.synchronousCaptureTimeoutNanoseconds
 
   // MARK: - Public API
 
@@ -383,36 +392,66 @@ public enum CoreMLInstrumentation {
     span.setAttributes(ComputePlanAnalysis.analyze(summary).telemetryAttributes)
   }
 
-  private static func captureSummarySynchronously(
+  package static func captureSummarySynchronously(
     contentsOf url: URL,
     configuration: MLModelConfiguration
   ) -> TerraCoreMLComputePlanSummary {
     let semaphore = DispatchSemaphore(value: 0)
-    var summary: TerraCoreMLComputePlanSummary?
+    let summaryBox = LockedSummaryBox()
 
     Task.detached(priority: .utility) {
-      let captured = await MLComputePlanDiagnostics.captureSummary(
-        contentsOf: url,
-        configuration: configuration
-      )
-      summary = captured
+      let captured = await computePlanSummaryCapture(url, configuration)
+      summaryBox.store(captured)
       semaphore.signal()
     }
 
-    semaphore.wait()
+    let waitResult = semaphore.wait(
+      timeout: .now() + .nanoseconds(Int(synchronousCaptureTimeoutNanoseconds))
+    )
+    guard waitResult == .success, let summary = summaryBox.load() else {
+      return makeTimedOutSummary()
+    }
     return summary
-      ?? TerraCoreMLComputePlanSummary(
-        captureStatus: .loadFailed,
-        modelStructure: "unsupported",
-        estimatedPrimaryDevice: "unknown",
-        supportedDevices: [],
-        nodeCount: 0,
-        captureDurationMS: 0,
-        operationEstimates: [],
-        errorType: "terra.coreml.compute_plan.capture_timeout",
-        probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.loadFailed.rawValue,
-        probeSource: "mlcomputeplan"
-      )
+  }
+
+  package static func resetTestingHooks() {
+    computePlanSummaryCapture = { url, configuration in
+      await MLComputePlanDiagnostics.captureSummary(contentsOf: url, configuration: configuration)
+    }
+    synchronousCaptureTimeoutNanoseconds = InternalConstants.synchronousCaptureTimeoutNanoseconds
+  }
+
+  private static func makeTimedOutSummary() -> TerraCoreMLComputePlanSummary {
+    TerraCoreMLComputePlanSummary(
+      captureStatus: .loadFailed,
+      modelStructure: "unsupported",
+      estimatedPrimaryDevice: "unknown",
+      supportedDevices: [],
+      nodeCount: 0,
+      captureDurationMS: 0,
+      operationEstimates: [],
+      errorType: "terra.coreml.compute_plan.capture_timeout",
+      probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.loadFailed.rawValue,
+      probeSource: "mlcomputeplan"
+    )
+  }
+
+  private final class LockedSummaryBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var summary: TerraCoreMLComputePlanSummary?
+
+    func store(_ summary: TerraCoreMLComputePlanSummary) {
+      lock.lock()
+      self.summary = summary
+      lock.unlock()
+    }
+
+    func load() -> TerraCoreMLComputePlanSummary? {
+      lock.lock()
+      let summary = self.summary
+      lock.unlock()
+      return summary
+    }
   }
 }
 #endif
