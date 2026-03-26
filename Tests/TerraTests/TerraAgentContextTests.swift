@@ -77,6 +77,10 @@ struct TerraAgentContextTests {
     let root = try #require(spans.first(where: { $0.name == "planner" }))
     let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
 
+    #expect(root.attributes[Terra.Keys.GenAI.operationName]?.description == Terra.OperationName.invokeAgent.rawValue)
+    #expect(root.attributes[Terra.Keys.GenAI.agentName]?.description == "planner")
+    #expect(root.attributes["terra.agent.tool_call_count"]?.description == "1")
+    #expect(root.attributes["terra.agent.tools_used"]?.description == "detached-helper")
     #expect(tool.parentSpanId?.hexString == root.spanId.hexString)
     #expect(tool.traceId.hexString == root.traceId.hexString)
   }

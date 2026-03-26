@@ -116,6 +116,13 @@ struct TerraManualTracingTests {
     let inference = try #require(spans.first(where: { $0.name == Terra.SpanNames.inference }))
     let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
 
+    #expect(root.attributes[Terra.Keys.GenAI.operationName]?.description == Terra.OperationName.invokeAgent.rawValue)
+    #expect(root.attributes[Terra.Keys.GenAI.agentName]?.description == "planner-loop")
+    #expect(root.attributes[Terra.Keys.GenAI.agentID]?.description == "issue-42")
+    #expect(root.attributes["terra.agent.inference_count"]?.description == "1")
+    #expect(root.attributes["terra.agent.tool_call_count"]?.description == "1")
+    #expect(root.attributes["terra.agent.models_used"]?.description == "child-model")
+    #expect(root.attributes["terra.agent.tools_used"]?.description == "search")
     #expect(inference.parentSpanId?.hexString == root.spanId.hexString)
     #expect(tool.parentSpanId?.hexString == root.spanId.hexString)
     #expect(inference.traceId.hexString == root.traceId.hexString)

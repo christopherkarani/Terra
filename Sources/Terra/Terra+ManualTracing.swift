@@ -584,19 +584,39 @@ extension Terra {
     id: String? = nil,
     _ body: @escaping @Sendable (AgentHandle) async throws -> R
   ) async throws -> R {
-    let span = startSpan(name: name, id: id)
-    defer { span.end() }
-    return try await _withActiveSpan(span) {
-      try await body(AgentHandle(span: span))
+    var attributes: [String: AttributeValue] = [
+      Keys.GenAI.operationName: .string(OperationName.invokeAgent.rawValue),
+      Keys.GenAI.agentName: .string(name),
+    ]
+    if let id {
+      attributes[Keys.GenAI.agentID] = .string(id)
+    }
+
+    let span = startSpan(name: name, id: id, attributes: attributes)
+    let context = AgentContext()
+    return try await Terra.$agentContext.withValue(context) {
+      try await _withActiveSpan(span) {
+        defer {
+          let snapshot = context.snapshot()
+          span.attribute("terra.agent.tools_used", snapshot.toolsUsed.sorted().joined(separator: ","))
+          span.attribute("terra.agent.models_used", snapshot.modelsUsed.sorted().joined(separator: ","))
+          span.attribute("terra.agent.inference_count", snapshot.inferenceCount)
+          span.attribute("terra.agent.tool_call_count", snapshot.toolCallCount)
+          span.end()
+        }
+        return try await body(AgentHandle(span: span, context: context))
+      }
     }
   }
 
   /// A sendable helper for agent loops that need explicit checkpoints and child operations.
   public struct AgentHandle: Sendable {
     private let span: SpanHandle
+    private let context: AgentContext?
 
-    fileprivate init(span: SpanHandle) {
+    fileprivate init(span: SpanHandle, context: AgentContext? = nil) {
       self.span = span
+      self.context = context
     }
 
     public var traceId: String { span.traceId }
@@ -757,7 +777,12 @@ extension Terra {
       _ body: @escaping @Sendable (AgentHandle) async throws -> R
     ) -> Task<R, Error> {
       span.detached(priority: priority) { _ in
-        try await body(self)
+        if let context {
+          return try await Terra.$agentContext.withValue(context) {
+            try await body(self)
+          }
+        }
+        return try await body(self)
       }
     }
   }
