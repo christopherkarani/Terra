@@ -2,7 +2,7 @@
 
 Copy-paste recipes for common Terra instrumentation patterns.
 
-> **Note:** These examples still show `Terra.ModelID` and `Terra.ToolCallID` in a few places for compatibility. New code should prefer raw string model names and `callId:` strings.
+> **Note:** These examples use raw string model names and `callId:` strings in new code. `ProviderID` and `RuntimeID` remain structured wrappers where provider/runtime attribution matters.
 
 ## Quickstart
 
@@ -24,7 +24,7 @@ try await Terra.start(.init(preset: .diagnostics))
 
 ```swift
 let answer = try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+    .infer("gpt-4o-mini", prompt: prompt)
     .run { try await llm.generate(prompt) }
 ```
 
@@ -33,7 +33,7 @@ With metadata:
 ```swift
 let answer = try await Terra
     .infer(
-        Terra.ModelID("gpt-4o-mini"),
+        "gpt-4o-mini",
         prompt: prompt,
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api"),
@@ -42,7 +42,7 @@ let answer = try await Terra
     )
     .run { trace in
         trace.tokens(input: 120, output: 70)
-        trace.responseModel(Terra.ModelID("gpt-4o-mini"))
+        trace.responseModel("gpt-4o-mini")
         return try await llm.generate(prompt)
     }
 ```
@@ -51,7 +51,7 @@ let answer = try await Terra
 
 ```swift
 let output = try await Terra
-    .stream(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+    .stream("gpt-4o-mini", prompt: prompt)
     .run { trace in
         trace.chunk(12)
         trace.chunk(18)
@@ -70,7 +70,7 @@ let plan = try await Terra.agent("trip-planner", id: "agent-42").run {
         .run { "search results" }
 
     return try await Terra
-        .infer(Terra.ModelID("gpt-4o-mini"), prompt: docs)
+        .infer("gpt-4o-mini", prompt: docs)
         .run { "itinerary" }
 }
 ```
@@ -98,7 +98,7 @@ func runAgent(query: String) async throws -> String {
             // Step 2: Summarize findings
             let summary = try await Terra
                 .infer(
-                    Terra.ModelID("gpt-4o-mini"),
+                    "gpt-4o-mini",
                     prompt: "Summarize: \(searchResults)"
                 )
                 .run { trace in
@@ -149,7 +149,7 @@ func processWithTools(userRequest: String) async throws -> [String] {
 
     // Tool 3: Generate response (dependent on both)
     let response = try await Terra
-        .infer(Terra.ModelID("gpt-4o-mini"), prompt: "\(intent): \(entities)")
+        .infer("gpt-4o-mini", prompt: "\(intent): \(entities)")
         .run { trace in
             trace.tokens(input: 200, output: 150)
             return generateResponse(intent: intent, entities: entities)
@@ -180,7 +180,7 @@ func fetchAll(query: String) async throws -> [String] {
 
     // Synthesize results
     let synthesis = try await Terra
-        .infer(Terra.ModelID("gpt-4o-mini"), prompt: "Combine: \(webResults), \(newsResults), \(academicResults)")
+        .infer("gpt-4o-mini", prompt: "Combine: \(webResults), \(newsResults), \(academicResults)")
         .run { "combined results" }
 
     return [webResults, newsResults, academicResults, synthesis]
@@ -191,7 +191,7 @@ func fetchAll(query: String) async throws -> [String] {
 
 ```swift
 let vectors = try await Terra
-    .embed(Terra.ModelID("text-embedding-3-small"), inputCount: 1)
+    .embed("text-embedding-3-small", inputCount: 1)
     .run { [[0.11, 0.22, 0.33]] }
 ```
 
@@ -203,7 +203,7 @@ let safe = try await Terra
     .run { true }
 
 let answer = try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: userText)
+    .infer("gpt-4o-mini", prompt: userText)
     .run { "response" }
 
 let passed = try await Terra
@@ -216,7 +216,7 @@ let passed = try await Terra
 ```swift
 let result = try await Terra
     .infer(
-        Terra.ModelID("gpt-4o-mini"),
+        "gpt-4o-mini",
         prompt: prompt,
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api")
@@ -234,7 +234,7 @@ let result = try await Terra
 
 ```swift
 _ = try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: "Test")
+    .infer("gpt-4o-mini", prompt: "Test")
     .run { trace in
         trace.event("guardrail.decision")
         do {
@@ -252,7 +252,7 @@ _ = try await Terra
 
 ```swift
 try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+    .infer("gpt-4o-mini", prompt: prompt)
     .run { trace in
         do {
             return try await llm.generate(prompt)
@@ -268,7 +268,7 @@ try await Terra
 
 ```swift
 let result = try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+    .infer("gpt-4o-mini", prompt: prompt)
     .run { trace in
         do {
             return try await llm.generate(prompt)
@@ -292,12 +292,12 @@ let result = try await Terra
 func inferWithFallback(prompt: String) async throws -> String {
     do {
         return try await Terra
-            .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+            .infer("gpt-4o-mini", prompt: prompt)
             .run { try await primaryModel.generate(prompt) }
     } catch {
         // Fallback to local model
         return try await Terra
-            .infer(Terra.ModelID("local-model"), prompt: prompt)
+            .infer("local-model", prompt: prompt)
             .run { trace in
                 trace.event("inference.fallback")
                 return try await localModel.generate(prompt)
@@ -365,7 +365,7 @@ try await Terra.start(config)
 ```swift
 // Per-request privacy override using capture policy
 try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+    .infer("gpt-4o-mini", prompt: prompt)
     .capture(.includeContent)  // Override default privacy for this call
     .run { trace in
         trace.tag("tenant_id", tenantID)
@@ -406,7 +406,7 @@ try await Terra.start(userTier.config)
 ```swift
 import TerraTracedMacro
 
-@Traced(model: Terra.ModelID("gpt-4o-mini"))
+@Traced(model: "gpt-4o-mini")
 func summarize(prompt: String) async throws -> String {
     try await llm.generate(prompt)
 }
@@ -436,7 +436,7 @@ func ask(_ prompt: String) async throws -> String {
 import TerraMLX
 
 let text = try await TerraMLX.traced(
-    model: Terra.ModelID("mlx-community/Llama-3.2-1B"),
+    model: "mlx-community/Llama-3.2-1B",
     maxTokens: 256,
     temperature: 0.7,
     device: "ane",
@@ -451,26 +451,4 @@ let text = try await TerraMLX.traced(
 
 ## Testing with Telemetry Engine Injection
 
-> **Note:** Telemetry engine injection APIs are `package`-visibility and intended for internal Terra testing. For custom telemetry backends in your own testing, use the `TerraCore` module directly or contact Terra support for testing utilities.
-
-### For Terra SDK Developers
-
-If you're extending TerraCore for custom telemetry engines:
-
-```swift
-// Internal testing API (package visibility)
-struct TestEngine: Terra.TelemetryEngine {
-    func run<R: Sendable>(
-        context: Terra.TelemetryContext,
-        attributes: [Terra.TraceAttribute],
-        _ body: @escaping @Sendable (Terra.TraceHandle) async throws -> R
-    ) async throws -> R {
-        let trace = Terra.TraceHandle(
-            onEvent: { _ in },
-            onAttribute: { _, _ in },
-            onError: { _ in }
-        )
-        return try await body(trace)
-    }
-}
-```
+> **Note:** Telemetry engine injection APIs are `package`-visibility and intended for internal Terra testing. Public SDK consumers should prefer the canonical factories plus a test tracer provider; see <doc:TelemetryEngine-Injection>.

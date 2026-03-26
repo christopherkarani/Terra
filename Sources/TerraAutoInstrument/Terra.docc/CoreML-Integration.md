@@ -56,10 +56,12 @@ let input = try MLDictionaryFeatureProvider(dictionary: [:])
 let prediction = try model.prediction(from: input)
 
 // Spans include:
-// - terra.coreml.model_name
-// - terra.coreml.compute_units
-// - gen_ai.usage.input_tokens (estimated)
-// - gen_ai.usage.output_tokens (estimated)
+// - gen_ai.operation.name = "inference"
+// - gen_ai.request.model = model identifier
+// - gen_ai.provider.name = "on_device"
+// - terra.runtime = "coreml"
+// - terra.auto_instrumented = true
+// - terra.coreml.compute_units = selected compute units
 ```
 
 ### Excluding Specific Models
@@ -144,6 +146,9 @@ CoreML auto-instrumentation adds these attributes to spans:
 | `terra.auto_instrumented` | Always `true` for swizzled spans |
 | `gen_ai.operation.name` | `infer` |
 | `gen_ai.request.model` | Model identifier |
+| `gen_ai.provider.name` | `on_device` |
+| `terra.runtime` | `coreml` |
+| `terra.coreml.compute_units` | Selected compute units |
 
 ## See Also
 

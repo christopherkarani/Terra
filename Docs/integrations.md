@@ -23,9 +23,12 @@ let model = try MLModel(contentsOf: modelURL)
 let prediction = try model.prediction(from: inputProvider)
 
 // Spans include:
-// - gen_ai.operation.name = "infer"
+// - gen_ai.operation.name = "inference"
 // - gen_ai.request.model = model identifier
+// - gen_ai.provider.name = "on_device"
+// - terra.runtime = "coreml"
 // - terra.auto_instrumented = true
+// - terra.coreml.compute_units = selected compute units
 ```
 
 ### MLModelConfiguration
@@ -62,7 +65,7 @@ try await Terra.start(.init(preset: .quickstart))
 
 let result = try await Terra
   .infer(
-    Terra.ModelID("coreml/com.yourorg.StableDiffusion@v2"),
+    "coreml/com.yourorg.StableDiffusion@v2",
     runtime: Terra.RuntimeID("coreml"),
     provider: Terra.ProviderID("coreml")
   )
@@ -106,7 +109,7 @@ try await Terra.start(.init(preset: .quickstart))
 
 // Use TerraMLX.traced() for proper MLX integration
 let result = try await TerraMLX.traced(
-  model: Terra.ModelID("mlx/local/llama-3.2-1b"),
+  model: "mlx/local/llama-3.2-1b",
   device: "gpu"
 ) {
   // MLX inference here
@@ -152,7 +155,7 @@ func chat() async throws {
   let session = Terra.TracedSession(
     model: .default,
     instructions: "You are a helpful assistant.",
-    modelIdentifier: Terra.ModelID("apple/on-device-model")
+    modelIdentifier: "apple/on-device-model"
   )
 
   // Automatic span with generation options, tool calls, guardrail events
@@ -241,14 +244,13 @@ func contentCapture() async throws {
 Terra
   .infer(modelID, prompt: "...")
   .run { trace in
-    trace.tag("gen_ai.usage.input_tokens", "150")
-    trace.tag("gen_ai.usage.output_tokens", "42")
-    trace.tag("gen_ai.response.model", "gpt-4o")
+    trace.tokens(input: 150, output: 42)
+    trace.responseModel("gpt-4o")
     // ...
   }
 
 // Note: Use trace.tag() for string attributes. For numeric metrics,
-// use trace.tokens(input:output:) instead.
+// use trace.tokens(input:output:) and trace.responseModel(_:) instead.
 ```
 
 ## HTTP AI API Auto-Instrumentation

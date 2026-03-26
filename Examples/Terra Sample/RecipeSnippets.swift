@@ -13,7 +13,7 @@ enum TerraRecipeSnippets {
   }
 
   static func inferRecipe(prompt: String) async throws -> String {
-    try await Terra
+    await Terra
       .infer(
         "gpt-4o-mini",
         prompt: prompt,
@@ -30,7 +30,7 @@ enum TerraRecipeSnippets {
   }
 
   static func toolRecipe(query: String) async throws -> [String] {
-    try await Terra
+    await Terra
       .tool(
         "search",
         callId: "tool-call-1",
@@ -41,7 +41,7 @@ enum TerraRecipeSnippets {
       .run { trace in
         trace.event("tool.invoked")
         trace.tag("sample.kind", "tool")
-        trace.tag("tool.query.length", "\(query.count)")
+        trace.tag("tool.query.length", query.count)
         return ["result for \(query)"]
       }
   }

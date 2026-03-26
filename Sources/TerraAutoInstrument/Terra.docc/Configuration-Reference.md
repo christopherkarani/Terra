@@ -308,7 +308,7 @@ config.privacy = .redacted
 // Prompt "Hello world" (11 chars) emits:
 //   terra.prompt.length = 11
 //   terra.prompt.hmac_sha256 = "a4a3f7..."
-//   terra.anonymization_key_id = "key-abc123"
+//   terra.anonymization.key_id = "key-abc123"
 ```
 
 ---

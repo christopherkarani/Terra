@@ -24,10 +24,10 @@ Use Terra's typed identifiers instead of raw strings when building calls.
 ```swift
 import Terra
 
-let model: Terra.ModelID = "gpt-4o-mini"
+let model = "gpt-4o-mini"
 let provider = Terra.ProviderID("openai")
 let runtime = Terra.RuntimeID("http_api")
-let toolCallID: Terra.ToolCallID = "call-42"
+let toolCallID = "call-42"
 
 _ = try await Terra
   .infer(model, prompt: "Hello", provider: provider, runtime: runtime)

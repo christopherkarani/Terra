@@ -63,7 +63,7 @@ let answer = try await Terra
     }
 ```
 
-For new code, prefer raw `String` model identifiers and `callId:` labels. `Terra.ModelID` and `Terra.ToolCallID` remain available as compatibility wrappers.
+For new code, prefer raw `String` model identifiers and `callId:` labels. `Terra.ModelID` and `Terra.ToolCallID` remain available as compatibility wrappers, while `Terra.ProviderID` and `Terra.RuntimeID` stay structured for attribution.
 
 For function-level instrumentation, use `@Traced` from `TerraTracedMacro`.
 

@@ -5,7 +5,7 @@ This guide migrates existing integrations to the canonical composable API:
 - Startup: `Terra.start(...)` (`async`)
 - Operations: `Terra.infer/stream/embed/agent/tool/safety`
 - Terminal: `.run { ... }`
-- Metadata: `trace.tag(...)` or `trace.attribute(...)` depending on whether you are using `TraceHandle` or `SpanHandle`
+- Metadata: `trace.tag(...)` for `TraceHandle`, or `span.attribute(...)` when you are using `SpanHandle`
 - Per-call content capture: `.capture(.includeContent)`
 - Stable lifecycle errors: `Terra.TerraError` (`code`-based)
 - Typed identifiers: `Terra.ProviderID`, `Terra.RuntimeID`; `Terra.ModelID` and `Terra.ToolCallID` remain as compatibility wrappers for older call sites
@@ -21,7 +21,7 @@ This guide migrates existing integrations to the canonical composable API:
 | `withEmbeddingSpan(...)` | `Terra.embed(...).run { ... }` |
 | `withSafetyCheckSpan(...)` | `Terra.safety(...).run { ... }` |
 | `.execute { ... }` | `.run { ... }` |
-| `.attribute(...)` | `trace.attribute(...)` |
+| `.attribute(...)` | `trace.tag(...)` |
 | `.includeContent()` | `.capture(.includeContent)` |
 | `Terra.inference(...)` | `Terra.infer(...)` |
 | `Terra.embedding(...)` | `Terra.embed(...)` |
@@ -56,14 +56,14 @@ let answer = try await Terra.inference(model: "gpt-4o-mini", prompt: prompt) {
 ```swift
 let answer = try await Terra
   .infer(
-    Terra.ModelID("gpt-4o-mini"),
+    "gpt-4o-mini",
     prompt: prompt,
     provider: Terra.ProviderID("openai"),
     runtime: Terra.RuntimeID("http_api")
   )
   .run {
-  try await llm.generate(prompt)
-}
+    try await llm.generate(prompt)
+  }
 ```
 
 ## Builder/Metadata Migration
@@ -127,5 +127,5 @@ try await Terra.start(config)
 
 1. Move startup calls to `Terra.start(...)`.
 2. Replace operation names (`inference` -> `infer`, `embedding` -> `embed`, `safetyCheck` -> `safety`).
-3. Replace terminals/modifiers (`execute` -> `run`, `attribute` -> `attr`, `includeContent` -> `capture(.includeContent)`).
+3. Replace terminals/modifiers (`execute` -> `run`, `attribute` -> `tag` for `TraceHandle`, `includeContent` -> `capture(.includeContent)`).
 4. Validate traces in your OTLP backend after rollout.

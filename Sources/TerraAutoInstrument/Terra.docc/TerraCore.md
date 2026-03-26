@@ -40,7 +40,7 @@ let result = try await Terra
   .infer("gpt-4o-mini", prompt: "Hello")
   .run { "response" }
 
-// Include content (respects privacy policy)
+// Include content for this call (privacy policy still applies)
 let resultWithContent = try await Terra
   .infer("gpt-4o-mini", prompt: "Hello")
   .capture(.includeContent)

@@ -86,6 +86,8 @@ public struct ToolCallID: Codable, Hashable, Sendable
 
 Uniquely identifies a single tool invocation within an agent workflow.
 
+**Canonical usage**: Pass a raw `String` to `callId:` on `Terra.tool(...)` in new code.
+
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `rawValue` | `String` | The tool call identifier string |
@@ -93,11 +95,14 @@ Uniquely identifies a single tool invocation within an agent workflow.
 **Auto-generation**: When initialized with `init()`, a UUID is generated automatically.
 
 ```swift
-// Auto-generated unique ID
-let callId = Terra.ToolCallID()
+// Canonical form for new code
+let callId = "call-12345"
 
-// Explicit ID
-let callId = Terra.ToolCallID("call-12345")
+// Compatibility wrapper for older call sites
+let legacyCallId = Terra.ToolCallID()
+
+// Explicit wrapper ID
+let explicitLegacyCallId = Terra.ToolCallID("call-12345")
 ```
 
 ---

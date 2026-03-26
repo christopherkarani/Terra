@@ -1,5 +1,7 @@
 # API-Reference.md Audit Report
 
+> **Archival note:** This report is historical. Treat the current source and DocC bundle as the source of truth.
+
 **Auditor:** Documentation Accuracy Auditor
 **Date:** 2026-03-22
 **Files Audited:**

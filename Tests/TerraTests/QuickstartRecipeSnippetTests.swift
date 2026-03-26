@@ -19,4 +19,6 @@ func quickstartSnippetsExistAndUseCanonicalAPIs() throws {
   #expect(source.contains(".infer("))
   #expect(source.contains(".tool("))
   #expect(source.contains(".agent("))
+  #expect(!source.contains("Terra.ModelID("))
+  #expect(!source.contains("Terra.ToolCallID("))
 }
