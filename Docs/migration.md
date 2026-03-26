@@ -85,13 +85,12 @@ let answer = try await Terra
 ```swift
 let answer = try await Terra
   .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
-  .metadata {
-    Terra.attr(.init("app.user_tier"), "pro")
-    Terra.event("request.start")
-  }
   .capture(.includeContent)
-  .run {
-    try await llm.generate(prompt)
+  .run { trace in
+    // Use trace.tag() for attributes within the run closure
+    trace.tag("app.user_tier", "pro")
+    trace.event("request.start")
+    return try await llm.generate(prompt)
   }
 ```
 

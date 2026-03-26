@@ -1,42 +1,40 @@
 # Protocol Seams
 
-Use ``Terra/TelemetryEngine`` to inject deterministic execution for tests or custom runtimes.
+> **Note:** These APIs are `package` scoped — intended for internal use within the Terra package or by companion packages, not for public SDK consumption.
+
+Use ``Terra/TelemetryEngine`` to inject deterministic execution for tests or custom runtimes inside the Terra package or companion packages that share package access.
 
 ## Core Seam Types
 
-- ``Terra/TelemetryEngine``
-- ``Terra/TelemetryContext``
-- ``Terra/TraceHandle``
+- ``Terra/TelemetryEngine`` (`package`)
+- ``Terra/TelemetryContext`` (`package`)
+- ``Terra/TraceHandle`` (`public`)
 
-The seam entry point is ``Terra/Call/run(using:_:)``.
+The seam entry point is ``Terra/Operation/run(using:_:)`` (`package`).
 Engine implementers handle ``Terra/TelemetryEngine/run(context:attributes:_:)``.
 
-## Minimal Mock Engine
+## Public SDK Testing Guidance
 
 ```swift
 import Terra
+import OpenTelemetrySdk
 
-struct MockEngine: Terra.TelemetryEngine {
-  func run<R: Sendable>(
-    context: Terra.TelemetryContext,
-    attributes: [Terra.TraceAttribute],
-    _ body: @escaping @Sendable (Terra.TraceHandle) async throws -> R
-  ) async throws -> R {
-    let trace = Terra.TraceHandle(
-      onEvent: { _ in },
-      onAttribute: { _, _ in },
-      onError: { _ in }
-    )
-    return try await body(trace)
-  }
-}
+let tracerProvider = TracerProviderBuilder().build()
+Terra.install(.init(
+  tracerProvider: tracerProvider,
+  registerProvidersAsGlobal: false
+))
 
 let value = try await Terra
-  .tool("search", callID: Terra.ToolCallID("call-1"))
-  .run(using: MockEngine()) { trace in
-    trace.event("tool.mocked")
+  .tool(
+    "search",
+    callId: "call-1"
+  )
+  .run { trace in
+    trace.event("tool.test")
     return "stubbed"
   }
 ```
 
-This keeps canonical call construction unchanged while swapping execution behavior.
+Public SDK consumers should keep using the canonical public factories and swap the installed tracer provider for deterministic tests.
+Use the `TelemetryEngine` seam only when working inside the Terra package where `package` access is available.

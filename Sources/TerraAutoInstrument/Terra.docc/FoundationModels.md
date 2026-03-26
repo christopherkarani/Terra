@@ -19,7 +19,7 @@ func chat() async throws {
   let session = Terra.TracedSession(
     model: .default,
     instructions: "You are a helpful assistant.",
-    modelIdentifier: Terra.ModelID("apple/on-device-model")
+    modelIdentifier: "apple/on-device-model"
   )
 
   let response = try await session.respond(to: "Hello!")
@@ -43,14 +43,14 @@ import Terra
 
 @available(macOS 26.0, iOS 26.0, *)
 let session = Terra.TracedSession(
-  modelIdentifier: Terra.ModelID("apple/foundation-model")
+  modelIdentifier: "apple/foundation-model"
 )
 
 // Automatic span with:
-// - terra.fm.generation.temperature
-// - terra.fm.generation.max_tokens
-// - gen_ai.usage.input_tokens
-// - gen_ai.usage.output_tokens
+// - gen_ai.request.model
+// - gen_ai.request.temperature
+// - gen_ai.request.max_tokens
+// - gen_ai.usage.output_tokens (streaming only)
 let response = try await session.respond(to: "What is Swift?")
 ```
 
@@ -63,7 +63,7 @@ import FoundationModels
 import Terra
 
 @available(macOS 26.0, iOS 26.0, *)
-let session = Terra.TracedSession(modelIdentifier: Terra.ModelID("apple/foundation-model"))
+let session = Terra.TracedSession(modelIdentifier: "apple/foundation-model")
 
 // Tool calls are automatically extracted and attached to spans
 let response = try await session.respond(to: "Search for weather in Tokyo")
@@ -114,7 +114,7 @@ for try await chunk in stream {
 }
 // Streaming spans include:
 // - gen_ai.usage.output_tokens (per-chunk when available)
-// - terra.fm.stream.first_token (first token event)
+// - terra.stream.time_to_first_token_ms (when first token is received)
 ```
 
 ## Structured Output
@@ -186,7 +186,7 @@ import Terra
 let session = Terra.TracedSession(
   model: .default,                              // Language model
   instructions: "You are a helpful assistant.",  // System instructions
-  modelIdentifier: Terra.ModelID("apple/model")  // Custom model ID
+  modelIdentifier: "apple/model"  // Custom model ID
 )
 ```
 

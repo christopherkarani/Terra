@@ -212,6 +212,20 @@ extension Terra {
   private static var installedLogProcessor: (any LogRecordProcessor)?
   private static var ownsInstalledTracerProvider: Bool = false
 
+  package static var _installedOpenTelemetryConfiguration: OpenTelemetryConfiguration? {
+    openTelemetryInstallLock.lock()
+    let value = installedOpenTelemetryConfiguration
+    openTelemetryInstallLock.unlock()
+    return value
+  }
+
+  package static var _hasInstalledOpenTelemetryProviders: Bool {
+    openTelemetryInstallLock.lock()
+    let hasProviders = installedTracerProvider != nil || installedMeterProvider != nil || installedLogProcessor != nil
+    openTelemetryInstallLock.unlock()
+    return hasProviders
+  }
+
   /// Convenience for end-to-end OpenTelemetry wiring:
   /// - Traces exported via OTLP/HTTP (optionally persisted on-device).
   /// - Metrics exported via OTLP/HTTP (optionally persisted on-device).

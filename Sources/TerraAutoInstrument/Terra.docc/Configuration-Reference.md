@@ -141,7 +141,7 @@ public enum Persistence: Sendable, Equatable {
 }
 ```
 
-**Default**: `.off` (quickstart), `.balanced(defaultStorageURL)` (production/diagnostics)
+**Default**: `.off` (quickstart), `.balanced(...)` using a cache-backed Terra storage URL (production/diagnostics)
 
 ```swift
 // Disable persistence
@@ -177,7 +177,7 @@ public struct Profiling: OptionSet, Sendable, Hashable {
     public static let metal   = Profiling(rawValue: 1 << 1)   // Metal GPU profiling
     public static let thermal = Profiling(rawValue: 1 << 2)   // Thermal state monitoring
     public static let power   = Profiling(rawValue: 1 << 3)   // Power metrics (macOS)
-    public static let espresso = Profiling(rawValue: 1 << 4)  // Espresso log capture (macOS)
+    public static let espresso = Profiling(rawValue: 1 << 4)  // CPU frequency/performance state (macOS)
     public static let ane     = Profiling(rawValue: 1 << 5)   // ANE hardware profiling
 
     // Tier presets
@@ -298,7 +298,7 @@ Controls how sensitive content is handled.
 |------|---------|------|--------|----------|
 | `.redacted` | Dropped | HMAC-SHA256 | Yes | Production default |
 | `.lengthOnly` | Dropped | None | Yes | Maximum privacy |
-| `.capturing` | Captured | HMAC-SHA256 | Yes | Debug builds |
+| `.capturing` | Hashed | HMAC-SHA256 | Yes | Debug builds |
 | `.silent` | Dropped | None | No | Testing |
 
 ### Content Redaction Behavior
@@ -357,8 +357,8 @@ config.destination = .endpoint(
 ### Default Storage Location
 
 ```swift
-Terra.defaultPersistenceStorageURL()
-// Returns: ~/Library/Caches/com.example.app/Terra
+FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+  .appendingPathComponent("Terra", isDirectory: true)
 ```
 
 ### Manual Storage Setup

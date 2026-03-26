@@ -104,18 +104,18 @@ final class TerraAPIParityTests {
       expectedAttributeKey: Terra.Keys.GenAI.toolName,
       expectedAttributeValue: "parity-tool",
       closureCall: {
-        _ = try await Terra.tool(name: "parity-tool", callID: "call-1", type: "http") { "ok" }
+        _ = try await Terra.tool(name: "parity-tool", callId: "call-1", type: "http") { "ok" }
       },
       builderCall: {
-        _ = try await Terra.tool(name: "parity-tool", callID: "call-1", type: "http").execute { "ok" }
+        _ = try await Terra.tool(name: "parity-tool", callId: "call-1", type: "http").execute { "ok" }
       },
       closureErrorCall: {
-        _ = try await Terra.tool(name: "parity-tool", callID: "call-1", type: "http") { _ in
+        _ = try await Terra.tool(name: "parity-tool", callId: "call-1", type: "http") { _ in
           throw ExpectedError.failed
         }
       },
       builderErrorCall: {
-        _ = try await Terra.tool(name: "parity-tool", callID: "call-1", type: "http").execute { _ in
+        _ = try await Terra.tool(name: "parity-tool", callId: "call-1", type: "http").execute { _ in
           throw ExpectedError.failed
         }
       }

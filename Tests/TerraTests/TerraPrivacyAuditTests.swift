@@ -69,7 +69,7 @@ struct TerraPrivacyAuditTests {
 
     let span = try await captureSpan(privacy: privacy) {
       _ = await Terra
-        .infer(Terra.ModelID("audit-model"), prompt: secret)
+        .infer("audit-model", prompt: secret)
         .capture(.includeContent)
         .run { "ok" }
     }
@@ -100,8 +100,8 @@ struct TerraPrivacyAuditTests {
       privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256)
     ) {
       _ = await Terra.agent("planner").run {
-        _ = await Terra.infer(Terra.ModelID("planner-model"), prompt: secret).run { "ok" }
-        _ = await Terra.tool("search", callID: Terra.ToolCallID("call-1")).run { "ok" }
+        _ = await Terra.infer("planner-model", prompt: secret).run { "ok" }
+        _ = await Terra.tool("search", callId: "call-1").run { "ok" }
         return "done"
       }
     }

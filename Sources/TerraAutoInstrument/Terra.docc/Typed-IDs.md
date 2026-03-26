@@ -20,18 +20,34 @@ Use Terra's typed identifiers instead of raw strings when building calls.
 ```swift
 import Terra
 
-let model = Terra.ModelID("gpt-4o-mini")
+let model = "gpt-4o-mini"
 let provider = Terra.ProviderID("openai")
 let runtime = Terra.RuntimeID("http_api")
-let toolCallID = Terra.ToolCallID("call-42")
+let toolCallID = "call-42"
 
 _ = try await Terra
   .infer(model, prompt: "Hello", provider: provider, runtime: runtime)
   .run { "ok" }
 
 _ = try await Terra
-  .tool("search", callID: toolCallID, provider: provider, runtime: runtime)
+  .tool("search", callId: toolCallID, provider: provider, runtime: runtime)
   .run { ["result"] }
 ```
+
+## Protocol Conformance
+
+All typed IDs conform to ``Codable``, ``Hashable``, and ``Sendable``:
+
+```swift
+public struct ModelID: Codable, Hashable, Sendable
+public struct ProviderID: Codable, Hashable, Sendable
+public struct RuntimeID: Codable, Hashable, Sendable
+public struct ToolCallID: Codable, Hashable, Sendable
+```
+
+This enables:
+- **Codable**: JSON encoding/decoding for network transmission
+- **Hashable**: Usage as dictionary keys and in `Set` collections
+- **Sendable**: Safe usage across concurrency contexts
 
 Continue with <doc:Metadata-Builder> to add structured metadata.

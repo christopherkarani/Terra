@@ -38,7 +38,7 @@ private struct MacroPrivacyHarness {
 }
 
 private struct MacroPrivacySubject {
-  @Traced(model: Terra.ModelID("privacy-model"))
+  @Traced(model: "privacy-model")
   func generate(prompt: String) async throws -> String {
     return "ok"
   }

@@ -37,12 +37,12 @@ import Terra
 
 // Default: no content capture
 let result = try await Terra
-  .infer(Terra.ModelID("gpt-4o-mini"), prompt: "Hello")
+  .infer("gpt-4o-mini", prompt: "Hello")
   .run { "response" }
 
 // Include content (respects privacy policy)
 let resultWithContent = try await Terra
-  .infer(Terra.ModelID("gpt-4o-mini"), prompt: "Hello")
+  .infer("gpt-4o-mini", prompt: "Hello")
   .capture(.includeContent)
   .run { "response" }
 ```
@@ -109,12 +109,14 @@ await Terra.shutdown()
 
 ## TelemetryEngine Protocol
 
-``Terra/TelemetryEngine`` enables deterministic execution for testing or custom telemetry backends.
+> These seams are `package` scoped and are intended for internal Terra package use, not external SDK consumers.
 
-### Protocol Definition
+``Terra/TelemetryEngine`` enables deterministic execution for testing or custom telemetry backends inside the Terra package.
+
+### Package-only Protocol Shape
 
 ```swift
-public protocol TelemetryEngine: Sendable {
+package protocol TelemetryEngine: Sendable {
   func run<R: Sendable>(
     context: Terra.TelemetryContext,
     attributes: [Terra.TraceAttribute],
@@ -123,56 +125,29 @@ public protocol TelemetryEngine: Sendable {
 }
 ```
 
-### Implementing a Custom Engine
+### Public SDK Alternative
 
-Create a custom engine to swap execution behavior while keeping canonical call construction unchanged:
-
-```swift
-import Terra
-
-struct MockEngine: Terra.TelemetryEngine {
-  func run<R: Sendable>(
-    context: Terra.TelemetryContext,
-    attributes: [Terra.TraceAttribute],
-    _ body: @escaping @Sendable (Terra.TraceHandle) async throws -> R
-  ) async throws -> R {
-    // Capture events without actual telemetry
-    var capturedEvents: [String] = []
-    var capturedAttributes: [(String, Terra.TraceScalar)] = []
-
-    let trace = Terra.TraceHandle(
-      onEvent: { event in capturedEvents.append(event) },
-      onAttribute: { name, value in capturedAttributes.append((name, value)) },
-      onError: { _ in }
-    )
-
-    let result = try await body(trace)
-
-    // Verify in tests
-    print("Events: \(capturedEvents)")
-    print("Attributes: \(capturedAttributes)")
-
-    return result
-  }
-}
-```
-
-### Using a Custom Engine
-
-Pass the engine via ``Terra/Operation/run(using:_:)``:
+External SDK consumers should keep using the public operation factories and install a test tracer provider for deterministic verification:
 
 ```swift
 import Terra
+import OpenTelemetrySdk
 
-let mockEngine = MockEngine()
+let tracerProvider = TracerProviderBuilder().build()
+Terra.install(.init(
+  tracerProvider: tracerProvider,
+  registerProvidersAsGlobal: false
+))
 
 let result = try await Terra
-  .tool("search", callID: Terra.ToolCallID("call-1"))
-  .run(using: mockEngine) { trace in
+  .tool("search", callId: "call-1")
+  .run { trace in
     trace.event("tool.invoked")
     return "stubbed result"
   }
 ```
+
+See <doc:TelemetryEngine-Injection> for package-only seam details.
 
 ## Configuration
 

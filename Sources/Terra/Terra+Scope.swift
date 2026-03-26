@@ -45,6 +45,10 @@ extension Terra {
         attributes: attributes,
         timestamp: Date()
       )
+
+      if let active = Terra.currentSpan() {
+        Terra._emitErrorHook(error, span: active)
+      }
     }
 
     func setAttributes(_ attributes: [String: AttributeValue]) {

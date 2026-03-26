@@ -166,7 +166,7 @@ import TerraANEProfiler
 let snapshot = ModelStatsSnapshot(
     memorySnapshot,    // TerraSystemProfiler.MemorySnapshot
     thermalProfile,    // ThermalProfile
-    metalAttrs,        // ANEHardwareMetrics (via TelemetryAttributeConvertible)
+    metalAttrs,        // MetalAttributes (via TelemetryAttributeConvertible)
 )
 span.setAttributes(snapshot)
 ```

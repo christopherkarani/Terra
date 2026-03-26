@@ -87,10 +87,10 @@ Uniquely identifies a single tool invocation within an agent workflow.
 
 ```swift
 // Auto-generated unique ID
-let callID = Terra.ToolCallID()
+let callID = 
 
 // Explicit ID
-let callID = Terra.ToolCallID("call-12345")
+let callID = "call-12345"
 ```
 
 ---
@@ -130,7 +130,7 @@ Creates an inference operation for non-streaming model responses.
 ```swift
 try await Terra
     .infer(
-        Terra.ModelID("gpt-4o-mini"),
+        "gpt-4o-mini",
         prompt: "What is machine learning?",
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api"),
@@ -173,7 +173,7 @@ Creates a streaming inference operation.
 ```swift
 try await Terra
     .stream(
-        Terra.ModelID("gpt-4o-mini"),
+        "gpt-4o-mini",
         prompt: "Write a story",
         expectedTokens: 1000
     )
@@ -212,7 +212,7 @@ Creates an embedding operation.
 ```swift
 try await Terra
     .embed(
-        Terra.ModelID("text-embedding-3-small"),
+        "text-embedding-3-small",
         inputCount: 5
     )
     .run { [[0.1, 0.2, 0.3]] }
@@ -253,7 +253,7 @@ try await Terra
 ```swift
 public static func tool(
     _ name: String,
-    callID: ToolCallID = .init(),
+    callId: ToolCallID = .init(),
     type: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
@@ -278,7 +278,7 @@ Creates a tool execution operation.
 try await Terra
     .tool(
         "web_search",
-        callID: Terra.ToolCallID("call-1"),
+        callId: "call-1",
         type: "web_search"
     )
     .run { ["search results"] }
@@ -329,7 +329,7 @@ enum CapturePolicy: Sendable, Hashable {
 
 ```swift
 Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: "debug query")
+    .infer("gpt-4o-mini", prompt: "debug query")
     .capture(.includeContent)
     .run { "response" }
 ```
@@ -364,36 +364,18 @@ Executes the operation with optional trace handle access.
 ```swift
 // Without trace handle
 try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: "Hello")
+    .infer("gpt-4o-mini", prompt: "Hello")
     .run { "response" }
 
 // With trace handle
 try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: "Hello")
+    .infer("gpt-4o-mini", prompt: "Hello")
     .run { trace in
         trace.event("inference.start")
         trace.tokens(input: 5, output: 12)
         return "response"
     }
 ```
-
-### run(using:_:)
-
-```swift
-@discardableResult
-public func run<R: Sendable, Engine: TelemetryEngine>(
-    using engine: Engine,
-    _ body: @escaping @Sendable () async throws -> R
-) async rethrows -> R
-
-@discardableResult
-public func run<R: Sendable, Engine: TelemetryEngine>(
-    using engine: Engine,
-    _ body: @escaping @Sendable (TraceHandle) async throws -> R
-) async rethrows -> R
-```
-
-Executes using a custom ``TelemetryEngine`` for testing or custom backends.
 
 ---
 
@@ -485,7 +467,7 @@ Records the actual model that generated the response.
 **Example**:
 
 ```swift
-trace.responseModel(Terra.ModelID("gpt-4o-mini"))
+trace.responseModel("gpt-4o-mini")
 ```
 
 ### chunk(_:)
@@ -735,7 +717,7 @@ import Terra
 
 // Use in operations
 try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+    .infer("gpt-4o-mini", prompt: prompt)
     .run { trace in
         trace.tag("app.user_tier", "pro")
         trace.tag("app.request_id", UUID().uuidString)
@@ -745,24 +727,6 @@ try await Terra
 
 > **Note:** ``TraceHandle/tag(_:_:)`` stores values as OpenTelemetry string attributes.
 > For numeric aggregation (sums, percentiles), use ``TraceHandle/tokens(input:output:)`` instead.
-
----
-
-## TelemetryEngine Protocol
-
-For custom telemetry backends in tests:
-
-```swift
-public protocol TelemetryEngine: Sendable {
-    func run<R: Sendable>(
-        context: TelemetryContext,
-        attributes: [TraceAttribute],
-        _ body: @escaping @Sendable (TraceHandle) async throws -> R
-    ) async throws -> R
-}
-```
-
-See <doc:TelemetryEngine-Injection> for full usage.
 
 ---
 

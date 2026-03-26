@@ -10,7 +10,7 @@ import Terra
 let includeDebug = true
 
 _ = try await Terra
-  .tool("search", callID: Terra.ToolCallID("call-1"), type: "web_search")
+  .tool("search", callId: "call-1", type: "web_search")
   .run { trace in
     trace.event("tool.invoked")
     trace.tag("tool.name", "search")
@@ -30,7 +30,7 @@ Inside ``Terra/Operation/run(_:)-swift.method``, annotate streaming progress dir
 import Terra
 
 _ = try await Terra
-  .stream(Terra.ModelID("gpt-4o-mini"), prompt: "Explain OTLP quickly")
+  .stream("gpt-4o-mini", prompt: "Explain OTLP quickly")
   .run { trace in
     trace.event("stream.first_chunk")
     trace.tag("stream.chunk_index", "0")

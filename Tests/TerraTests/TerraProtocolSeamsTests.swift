@@ -11,7 +11,7 @@ struct TerraProtocolSeamsTests {
 
     let result = try await Terra
       .infer(
-        Terra.ModelID("gpt-test"),
+        "gpt-test",
         prompt: "hello",
         provider: Terra.ProviderID("mock-provider"),
         runtime: Terra.RuntimeID("mock-runtime")
@@ -21,7 +21,7 @@ struct TerraProtocolSeamsTests {
         trace.event("request.start")
         trace.tag("app.phase", "decode")
         trace.tokens(input: 5, output: 7)
-        trace.responseModel(Terra.ModelID("gpt-test-response"))
+        trace.responseModel("gpt-test-response")
         return "ok"
       }
 
@@ -31,7 +31,7 @@ struct TerraProtocolSeamsTests {
 
     let context = try #require(log.beginContexts.first)
     #expect(context.operation == .inference)
-    #expect(context.model == Terra.ModelID("gpt-test"))
+    #expect(context.model == "gpt-test")
     #expect(context.provider == Terra.ProviderID("mock-provider"))
     #expect(context.runtime == Terra.RuntimeID("mock-runtime"))
     #expect(context.capturePolicy == .default)
@@ -55,7 +55,7 @@ struct TerraProtocolSeamsTests {
 
     await #expect(throws: ExpectedError.self) {
       _ = try await Terra
-        .tool("search", callID: Terra.ToolCallID("call-1"))
+        .tool("search", callId: "call-1")
         .run(using: engine) { _ in
           throw ExpectedError.boom
         }
@@ -91,7 +91,7 @@ private struct MockEngine: Terra.TelemetryEngine {
         if let input { log.recordedAttributes[.init(name: Terra.Keys.GenAI.usageInputTokens, value: .int(input))] = true }
         if let output { log.recordedAttributes[.init(name: Terra.Keys.GenAI.usageOutputTokens, value: .int(output))] = true }
       },
-      onResponseModel: { log.recordedAttributes[.init(name: Terra.Keys.GenAI.responseModel, value: .string($0.rawValue))] = true }
+      onResponseModel: { log.recordedAttributes[.init(name: Terra.Keys.GenAI.responseModel, value: .string($0))] = true }
     )
 
     do {

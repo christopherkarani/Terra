@@ -72,6 +72,24 @@ extension Terra {
       /// If the start phase fails, this code is returned.
       /// Check `TerraError.context` and `TerraError.underlying` for details.
       public static let reconfigure_failed = Self("reconfigure_failed")
+
+      /// Terra rejected a usage pattern and is returning guidance toward the correct API.
+      ///
+      /// Use this when an operation is structurally invalid rather than transport- or
+      /// lifecycle-failed, for example when code tries to mutate an ended span handle.
+      public static let guidance = Self("guidance")
+
+      /// Terra detected configuration that is syntactically valid but incomplete for the requested workflow.
+      ///
+      /// Use this for actionable setup problems where the SDK can point callers to the
+      /// exact fix, such as a missing exporter endpoint or missing provider registration.
+      public static let misconfiguration = Self("misconfiguration")
+
+      /// Terra rejected an API sequence that cannot succeed in the current state.
+      ///
+      /// Use this when the call shape is wrong rather than the runtime configuration,
+      /// for example reusing an ended trace builder or mutating an ended span handle.
+      public static let invalid_operation = Self("invalid_operation")
     }
 
     /// Wraps an underlying error from the system or a dependency.
@@ -140,6 +158,15 @@ extension Terra {
     public var remediationHint: String {
       code.remediationHint
     }
+
+    /// A human-readable recovery suggestion derived from the error code or explicit context.
+    ///
+    /// Prefer this when rendering developer-facing diagnostics because it preserves
+    /// Terra's structured remediation while allowing more specific guidance for
+    /// individual failures through the `"fix"` or `"recovery_suggestion"` context keys.
+    public var recoverySuggestion: String {
+      context["recovery_suggestion"] ?? context["fix"] ?? remediationHint
+    }
   }
 }
 
@@ -163,8 +190,88 @@ extension Terra.TerraError.Code {
       return "Check TerraError.context and exporter/runtime configuration, then retry Terra.start()."
     case Terra.TerraError.Code.reconfigure_failed.rawValue:
       return "Check TerraError.context and configuration deltas, then retry Terra.reconfigure(...)."
+    case Terra.TerraError.Code.guidance.rawValue:
+      return "Follow the guidance message and prefer Terra.trace(...) or Terra.startSpan(...) for explicit lifecycle workflows."
+    case Terra.TerraError.Code.misconfiguration.rawValue:
+      return "Apply the suggested Terra configuration fix, then rerun Terra.diagnose() to verify the setup."
+    case Terra.TerraError.Code.invalid_operation.rawValue:
+      return "Adjust the Terra API sequence to the suggested pattern and retry the operation."
     default:
       return "Inspect TerraError.context and TerraError.underlying, then retry with corrected configuration/state."
     }
+  }
+}
+
+extension Terra.TerraError {
+  static func guidance(_ message: String, context: [String: String] = [:]) -> Self {
+    Self(code: .guidance, message: message, context: context)
+  }
+
+  /// Creates a guidance error that teaches the correct Terra API with a copy-paste example.
+  ///
+  /// Use this when the caller chose a structurally wrong pattern. The resulting error is
+  /// optimized for coding agents and humans because it explains why the call failed,
+  /// which API should replace it, and includes a complete example in the payload.
+  public static func guidance(
+    message: String,
+    why: String,
+    correctAPI: String,
+    example: String,
+    context: [String: String] = [:]
+  ) -> Self {
+    var merged = context
+    merged["why"] = why
+    merged["correct_api"] = correctAPI
+    merged["example"] = example
+    merged["recovery_suggestion"] = "Use \(correctAPI)."
+    return Self(
+      code: .guidance,
+      message: """
+      \(message)
+
+      Why this pattern does not work:
+      \(why)
+
+      Use this API instead:
+      \(correctAPI)
+
+      Example:
+      \(example)
+      """,
+      context: merged
+    )
+  }
+
+  /// Creates a misconfiguration error with a stable remediation payload.
+  public static func misconfiguration(
+    code: String,
+    message: String,
+    fix: String,
+    context: [String: String] = [:]
+  ) -> Self {
+    var merged = context
+    merged["configuration_code"] = code
+    merged["fix"] = fix
+    return Self(code: .misconfiguration, message: message, context: merged)
+  }
+
+  /// Creates an invalid-operation error with concrete recovery guidance.
+  public static func invalidOperation(
+    reason: String,
+    correctAPI: String? = nil,
+    example: String? = nil,
+    context: [String: String] = [:]
+  ) -> Self {
+    var merged = context
+    if let correctAPI {
+      merged["correct_api"] = correctAPI
+    }
+    if let example {
+      merged["example"] = example
+    }
+    if let correctAPI {
+      merged["recovery_suggestion"] = "Use \(correctAPI)."
+    }
+    return Self(code: .invalid_operation, message: reason, context: merged)
   }
 }

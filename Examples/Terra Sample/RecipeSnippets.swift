@@ -15,7 +15,7 @@ enum TerraRecipeSnippets {
   static func inferRecipe(prompt: String) async throws -> String {
     try await Terra
       .infer(
-        Terra.ModelID("gpt-4o-mini"),
+        "gpt-4o-mini",
         prompt: prompt,
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api")
@@ -33,7 +33,7 @@ enum TerraRecipeSnippets {
     try await Terra
       .tool(
         "search",
-        callID: Terra.ToolCallID("tool-call-1"),
+        callId: "tool-call-1",
         type: "web_search",
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api")

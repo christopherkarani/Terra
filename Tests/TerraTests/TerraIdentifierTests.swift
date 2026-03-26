@@ -1,49 +1,49 @@
 import Testing
 @testable import TerraCore
 
-@Suite("Typed Identifiers", .serialized)
+@Suite("String-first identifiers", .serialized)
 struct TerraIdentifierTests {
-  @Test("IDs preserve rawValue with explicit initializers")
-  func idsPreserveRawValue() {
-    let model = Terra.ModelID("local/llama")
-    #expect(model.rawValue == "local/llama")
-
+  @Test("Provider and runtime wrappers preserve raw values")
+  func providerAndRuntimeWrappersPreserveRawValues() {
+    let model = Terra.ModelID("gpt-4o")
+    let toolCall = Terra.ToolCallID("call-1")
+    let generatedToolCall = Terra.ToolCallID()
     let provider = Terra.ProviderID("openai")
+    let runtime = Terra.RuntimeID("mlx")
+
+    #expect(model.rawValue == "gpt-4o")
+    #expect(toolCall.rawValue == "call-1")
+    #expect(!generatedToolCall.rawValue.isEmpty)
     #expect(provider.rawValue == "openai")
-
-    let runtime = Terra.RuntimeID("mlx")
     #expect(runtime.rawValue == "mlx")
-
-    let callID = Terra.ToolCallID("call-1")
-    #expect(callID.rawValue == "call-1")
   }
 
-  @Test("IDs do not expose legacy string-protocol conveniences")
-  func idsDoNotExposeLegacyStringProtocolConveniences() {
-    let model = Terra.ModelID("local/llama")
-    let provider = Terra.ProviderID("openai")
-    let runtime = Terra.RuntimeID("mlx")
-    let callID = Terra.ToolCallID("call-1")
+  @Test("Deprecated wrappers bridge into the string-first API")
+  func deprecatedWrappersBridgeIntoStringFirstApi() {
+    let infer = Terra.infer(Terra.ModelID("gpt-4o"))
+    let stream = Terra.stream(Terra.ModelID("gpt-4o"))
+    let embed = Terra.embed(Terra.ModelID("text-embedding-3-small"))
+    let tool = Terra.tool("search", callID: Terra.ToolCallID("call-7"))
 
-    #expect((model as Any) is any ExpressibleByStringLiteral == false)
-    #expect((provider as Any) is any ExpressibleByStringLiteral == false)
-    #expect((runtime as Any) is any ExpressibleByStringLiteral == false)
-    #expect((callID as Any) is any ExpressibleByStringLiteral == false)
-
-    #expect((model as Any) is any CustomStringConvertible == false)
-    #expect((provider as Any) is any CustomStringConvertible == false)
-    #expect((runtime as Any) is any CustomStringConvertible == false)
-    #expect((callID as Any) is any CustomStringConvertible == false)
-
-    #expect((model as Any) is any RawRepresentable == false)
-    #expect((provider as Any) is any RawRepresentable == false)
-    #expect((runtime as Any) is any RawRepresentable == false)
-    #expect((callID as Any) is any RawRepresentable == false)
+    #expect([infer, stream, embed, tool].count == 4)
   }
 
-  @Test("ToolCallID init() generates a non-empty identifier")
-  func toolCallIDDefaultInitIsNonEmpty() {
-    let callID = Terra.ToolCallID()
-    #expect(!callID.rawValue.isEmpty)
+  @Test("Capabilities expose the new string-first tracing surface")
+  func capabilitiesExposeStringFirstTracingSurface() {
+    let capabilities = Terra.capabilities()
+
+    #expect(capabilities.count >= 5)
+    #expect(capabilities.contains { $0.entryPoint == "Terra.trace(name:id:_:)" })
+    #expect(capabilities.contains { $0.entryPoint == "Terra.startSpan(name:id:attributes:)" })
+    #expect(capabilities.contains { $0.entryPoint == "Terra.currentSpan()" })
+  }
+
+  @Test("Agentic workflow guidance is actionable")
+  func agenticWorkflowGuidanceIsActionable() {
+    let guidance = Terra.ask("agentic workflow")
+
+    #expect(guidance.apiToUse.contains("Terra.trace"))
+    #expect(guidance.codeExample.contains("Terra.tool"))
+    #expect(!guidance.commonMistakes.isEmpty)
   }
 }

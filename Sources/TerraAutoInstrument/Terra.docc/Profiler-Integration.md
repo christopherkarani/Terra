@@ -115,10 +115,10 @@ let delta = TerraSystemProfiler.memoryDeltaAttributes(start: start, end: end)
 #### Thermal Monitoring
 
 ```swift
-let thermal = ThermalMonitor.currentProfile()
-// thermal: ThermalProfile with thermalState, throttling percentage
+let thermal = ThermalMonitor.sample()
+// thermal: ThermalSample with state (ProcessInfo.ThermalState)
 
-if thermal.thermalState == .critical {
+if thermal.state == .critical {
   // Reduce workload or skip heavy inference
 }
 ```

@@ -6,11 +6,11 @@ struct TerraComposableAPITests {
   @Test("Factory methods return a uniform call type")
   func factoryMethodsReturnUniformCallType() {
     let calls: [Terra.Operation] = [
-      Terra.infer(Terra.ModelID("model")),
-      Terra.stream(Terra.ModelID("model")),
-      Terra.embed(Terra.ModelID("model")),
+      Terra.infer("model"),
+      Terra.stream("model"),
+      Terra.embed("model"),
       Terra.agent("planner"),
-      Terra.tool("search", callID: Terra.ToolCallID("call-1")),
+      Terra.tool("search", callId: "call-1"),
       Terra.safety("toxicity"),
     ]
     #expect(calls.count == 6)
@@ -22,8 +22,8 @@ struct TerraComposableAPITests {
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let transformedCalls: [Terra.Operation] = [
-      Terra.infer(Terra.ModelID("model-a"), prompt: "hello"),
-      Terra.stream(Terra.ModelID("model-b"), prompt: "world"),
+      Terra.infer("model-a", prompt: "hello"),
+      Terra.stream("model-b", prompt: "world"),
     ]
       .enumerated()
       .map { index, call in
@@ -53,7 +53,7 @@ struct TerraComposableAPITests {
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let value = await Terra
-      .infer(Terra.ModelID("local/composable"), prompt: "hello")
+      .infer("local/composable", prompt: "hello")
       .run { trace in
         trace.tag("terra.custom.string", "value")
         trace.tag("terra.custom.int", 7)
@@ -61,7 +61,7 @@ struct TerraComposableAPITests {
         trace.tag("terra.custom.bool", true)
         trace.tag("terra.trace.string", "trace-value")
         trace.tokens(input: 3, output: 4)
-        trace.responseModel(Terra.ModelID("trace-model"))
+        trace.responseModel("trace-model")
         return "ok"
       }
 
@@ -87,7 +87,7 @@ struct TerraComposableAPITests {
     let phases = ["prepare", "dispatch"]
 
     _ = await Terra
-      .infer(Terra.ModelID("builder/model"), prompt: "hello")
+      .infer("builder/model", prompt: "hello")
       .run { trace in
         trace.tag("builder.attr.base", "base")
         if includeFlag {
@@ -111,7 +111,7 @@ struct TerraComposableAPITests {
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = await Terra
-      .infer(Terra.ModelID("builder/model"), prompt: "hello")
+      .infer("builder/model", prompt: "hello")
       .run { trace in
         trace.event("trace.event.1")
         trace.tag("trace.attr.1", "v1")
@@ -130,7 +130,7 @@ struct TerraComposableAPITests {
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = await Terra
-      .infer(Terra.ModelID("builder/model"), prompt: "hello")
+      .infer("builder/model", prompt: "hello")
       .run { _ in
         return "ok"
       }

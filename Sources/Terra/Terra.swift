@@ -120,7 +120,7 @@ public enum Terra {
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.executeTool.rawValue),
       Keys.GenAI.toolName: .string(tool.name),
-      Keys.GenAI.toolCallID: .string(tool.callID),
+      Keys.GenAI.toolCallID: .string(tool.callId),
     ]
     if let type = tool.type {
       attributes[Keys.GenAI.toolType] = .string(type)
@@ -209,11 +209,21 @@ public enum Terra {
     }
     spanBuilder.setAttribute(key: Keys.Terra.thermalState, value: .string(Runtime.thermalStateLabel()))
 
+    let parentSpan = Terra.currentSpan()?.otelSpan ?? OpenTelemetry.instance.contextProvider.activeSpan
+    if let parentSpan {
+      spanBuilder.setParent(parentSpan)
+    }
     let span = spanBuilder.startSpan()
     let startMemorySnapshot = TerraSystemProfiler.isInstalled
       ? TerraSystemProfiler.captureMemorySnapshot()
       : nil
 
+    _ = _registerActiveSpan(
+      name: name,
+      span: span,
+      parentSpan: parentSpan,
+      ownsLifecycle: false
+    )
     let scope = Scope<Kind>(span: span)
     defer {
       let endMemorySnapshot = TerraSystemProfiler.isInstalled
@@ -226,6 +236,7 @@ public enum Terra {
       if !memoryDelta.isEmpty {
         scope.setAttributes(memoryDelta)
       }
+      _unregisterActiveSpan(span)
       span.end()
     }
 
@@ -368,7 +379,7 @@ public enum Terra {
     }
   }
 
-  private static func tracer() -> any Tracer {
+  package static func tracer() -> any Tracer {
     let tracerProvider = Runtime.shared.tracerProvider ?? OpenTelemetry.instance.tracerProvider
 
     if let version = instrumentationVersion {

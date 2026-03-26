@@ -66,13 +66,13 @@ let result = try await Terra
   )
   .run { trace in
     trace.tag("terra.coreml.compute_units", "all")
-    trace.tag("terra.coreml.model_version", "2.1")
-    trace.tag("terra.coreml.batch_size", "1")
+    // Note: Custom attributes can use any key namespace
+    // trace.tag("custom.model_version", "2.1")
     let config = MLModelConfiguration()
     config.computeUnits = .all
     let model = try MLModel(contentsOf: modelURL, configuration: config)
     let prediction = try model.prediction(from: inputProvider)
-    return "generated"
+    return prediction
   }
 ```
 
@@ -98,25 +98,23 @@ Track MLX model executions with bounded metadata:
 ```swift
 import MLX
 import Terra
+import TerraMLX
 
 try await Terra.start(.init(preset: .quickstart))
 
-// Capture bounded runtime labels for MLX models
-let result = try await Terra
-  .infer(
-    Terra.ModelID("mlx/local/llama-3.2-1b"),
-    runtime: Terra.RuntimeID("mlx"),
-    provider: Terra.ProviderID("mlx")
-  )
-  .run { trace in
-    trace.tag("terra.mlx.device", "gpu")           // cpu, gpu, ane
-    trace.tag("terra.mlx.quantization", "q4")      // q4, q8, fp16, fp32
-    trace.tag("terra.mlx.batch_size", "1")
-    // MLX inference here
-    let output = try await mlxModel.generate(prompt: "Hello")
-    return output
-  }
+// Use TerraMLX.traced() for proper MLX integration
+let result = try await TerraMLX.traced(
+  model: Terra.ModelID("mlx/local/llama-3.2-1b"),
+  device: "gpu"
+) {
+  // MLX inference here
+  let output = try await mlxModel.generate(prompt: "Hello")
+  return output
+}
 ```
+
+> **Note:** The `TerraMLX.traced()` API automatically sets provider to "mlx" and tracks device correctly.
+> Available MLX attribute keys: `terra.mlx.device`, `terra.mlx.memory_footprint_mb`, `terra.mlx.model_load_duration_ms`
 
 ### Device Selection
 

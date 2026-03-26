@@ -28,7 +28,7 @@ final class TerraSpanTypesTests: XCTestCase {
 
   func testWithToolExecutionSpan_setsExpectedAttributes() async throws {
     await Terra.withToolExecutionSpan(
-      tool: .init(name: "search", callID: "call-123", type: "http")
+      tool: .init(name: "search", callId: "call-123", type: "http")
     ) { _ in }
 
     let span = try XCTUnwrap(support.finishedSpans().first)

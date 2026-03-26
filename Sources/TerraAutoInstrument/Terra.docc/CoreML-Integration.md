@@ -88,7 +88,7 @@ import CoreML
 
 let result = try await Terra
   .infer(
-    Terra.ModelID("coreml/com.yourorg.model@v3"),
+    "coreml/com.yourorg.model@v3",
     runtime: Terra.RuntimeID("coreml"),
     provider: Terra.ProviderID("coreml")
   )
@@ -117,7 +117,7 @@ import CoreML
 
 let result = try await Terra
   .infer(
-    Terra.ModelID("coreml/custom-model"),
+    "coreml/custom-model",
     runtime: Terra.RuntimeID("coreml"),
     provider: Terra.ProviderID("coreml")
   )

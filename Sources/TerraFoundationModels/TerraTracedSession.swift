@@ -168,23 +168,40 @@ internal final class FoundationModelsBackend: TerraTracedSessionBackend, @unchec
 @available(macOS 26.0, iOS 26.0, *)
 public final class TerraTracedSession {
   private let backend: any TerraTracedSessionBackend
-  public let modelIdentifier: Terra.ModelID
+  public let modelIdentifier: String
 
   public init(
     model: SystemLanguageModel = .default,
     instructions: String? = nil,
-    modelIdentifier: Terra.ModelID = Terra.ModelID("apple/foundation-model")
+    modelIdentifier: String = "apple/foundation-model"
   ) {
     self.modelIdentifier = modelIdentifier
     self.backend = FoundationModelsBackend(model: model, instructions: instructions)
   }
 
+  @available(*, deprecated, message: "Use String model identifiers directly.")
+  public convenience init(
+    model: SystemLanguageModel = .default,
+    instructions: String? = nil,
+    modelIdentifier: Terra.ModelID
+  ) {
+    self.init(model: model, instructions: instructions, modelIdentifier: modelIdentifier.rawValue)
+  }
+
   internal init(
-    modelIdentifier: Terra.ModelID = Terra.ModelID("apple/foundation-model"),
+    modelIdentifier: String = "apple/foundation-model",
     backend: any TerraTracedSessionBackend
   ) {
     self.modelIdentifier = modelIdentifier
     self.backend = backend
+  }
+
+  @available(*, deprecated, message: "Use String model identifiers directly.")
+  internal convenience init(
+    modelIdentifier: Terra.ModelID,
+    backend: any TerraTracedSessionBackend
+  ) {
+    self.init(modelIdentifier: modelIdentifier.rawValue, backend: backend)
   }
 
   /// Respond to a prompt with auto-tracing.
@@ -263,7 +280,7 @@ public final class TerraTracedSession {
   /// Stream a response with auto-tracing.
   public func streamResponse(to prompt: String, promptCapture: Terra.CapturePolicy = .default) -> AsyncThrowingStream<String, Error> {
     let request = Terra.StreamingRequest(
-      model: modelIdentifier.rawValue,
+      model: modelIdentifier,
       prompt: prompt,
       includeContent: promptCapture == .includeContent,
     )
@@ -300,7 +317,7 @@ public final class TerraTracedSession {
 
   private func makeInferenceCall(prompt: String, promptCapture: Terra.CapturePolicy) -> Terra.InferenceCall {
     var call = Terra
-      .inference(model: modelIdentifier.rawValue, prompt: prompt)
+      .inference(model: modelIdentifier, prompt: prompt)
       .provider("apple/foundation-model")
       .runtime("foundation_models")
       .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)

@@ -10,7 +10,7 @@ struct TerraAgentContextTests {
 
     _ = try await Terra.agent(name: "planner").execute {
       _ = try await Terra.inference(model: "m1") { "ok" }
-      _ = try await Terra.tool(name: "search", callID: "call-1") { "ok" }
+      _ = try await Terra.tool(name: "search", callId: "call-1") { "ok" }
       return "done"
     }
 
@@ -29,7 +29,7 @@ struct TerraAgentContextTests {
 
     _ = try await Terra.agent(name: "planner").execute {
       let task = Task {
-        _ = try await Terra.tool(name: "structured", callID: "call-1") { "ok" }
+        _ = try await Terra.tool(name: "structured", callId: "call-1") { "ok" }
       }
       _ = try await task.value
       return "done"
@@ -48,7 +48,7 @@ struct TerraAgentContextTests {
 
     _ = try await Terra.agent(name: "planner").execute {
       let task = Task.detached {
-        _ = try await Terra.tool(name: "detached", callID: "call-1") { "ok" }
+        _ = try await Terra.tool(name: "detached", callId: "call-1") { "ok" }
       }
       _ = try await task.value
       return "done"

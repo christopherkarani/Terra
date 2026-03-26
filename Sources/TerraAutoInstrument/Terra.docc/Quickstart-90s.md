@@ -9,7 +9,7 @@ Initialize once with ``Terra/start(_:)``.
 ```swift
 import Terra
 
-try await Terra.start(.init(preset: .quickstart))
+try await Terra.start()
 ```
 
 ## 2) Run One Instrumented Inference
@@ -19,7 +19,7 @@ import Terra
 
 let answer = try await Terra
   .infer(
-    Terra.ModelID("gpt-4o-mini"),
+    "gpt-4o-mini",
     prompt: "Give me a one-line status update.",
     provider: Terra.ProviderID("openai"),
     runtime: Terra.RuntimeID("http_api")

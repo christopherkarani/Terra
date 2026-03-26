@@ -150,8 +150,13 @@ extension Terra {
     AgentCall(runtime: .shared, request: request)
   }
 
+  package static func tool(name: String, callId: String, type: String? = nil) -> ToolCall {
+    tool(.init(name: name, callId: callId, type: type))
+  }
+
+  @available(*, deprecated, message: "Use callId: instead of callID:.")
   package static func tool(name: String, callID: String, type: String? = nil) -> ToolCall {
-    tool(.init(name: name, callID: callID, type: type))
+    tool(name: name, callId: callID, type: type)
   }
 
   package static func tool(_ request: ToolRequest) -> ToolCall {
@@ -324,7 +329,7 @@ extension Terra {
   @discardableResult
   package static func tool<R>(
     name: String,
-    callID: String,
+    callId: String,
     type: String? = nil,
     provider: String? = nil,
     runtime: String? = nil,
@@ -332,7 +337,7 @@ extension Terra {
   ) async rethrows -> R {
     try await tool(
       name: name,
-      callID: callID,
+      callId: callId,
       type: type,
       provider: provider,
       runtime: runtime
@@ -341,7 +346,36 @@ extension Terra {
     }
   }
 
+  @available(*, deprecated, message: "Use callId: instead of callID:.")
+  @discardableResult
+  package static func tool<R>(
+    name: String,
+    callID: String,
+    type: String? = nil,
+    provider: String? = nil,
+    runtime: String? = nil,
+    _ body: @Sendable () async throws -> R
+  ) async rethrows -> R {
+    try await tool(name: name, callId: callID, type: type, provider: provider, runtime: runtime, body)
+  }
+
   @available(*, deprecated, message: "Use Terra.tool(...).run { ... }")
+  @discardableResult
+  package static func tool<R>(
+    name: String,
+    callId: String,
+    type: String? = nil,
+    provider: String? = nil,
+    runtime: String? = nil,
+    _ body: @Sendable (ToolTrace) async throws -> R
+  ) async rethrows -> R {
+    var call = tool(name: name, callId: callId, type: type)
+    if let provider { call = call.provider(provider) }
+    if let runtime { call = call.runtime(runtime) }
+    return try await call.execute(body)
+  }
+
+  @available(*, deprecated, message: "Use callId: instead of callID:.")
   @discardableResult
   package static func tool<R>(
     name: String,
@@ -351,10 +385,7 @@ extension Terra {
     runtime: String? = nil,
     _ body: @Sendable (ToolTrace) async throws -> R
   ) async rethrows -> R {
-    var call = tool(name: name, callID: callID, type: type)
-    if let provider { call = call.provider(provider) }
-    if let runtime { call = call.runtime(runtime) }
-    return try await call.execute(body)
+    try await tool(name: name, callId: callID, type: type, provider: provider, runtime: runtime, body)
   }
 
   @available(*, deprecated, message: "Use Terra.safety(...).run { ... }")
@@ -428,8 +459,13 @@ extension Terra {
       AgentCall(runtime: .session(self), request: request)
     }
 
+    package nonisolated func tool(name: String, callId: String, type: String? = nil) -> ToolCall {
+      tool(.init(name: name, callId: callId, type: type))
+    }
+
+    @available(*, deprecated, message: "Use callId: instead of callID:.")
     package nonisolated func tool(name: String, callID: String, type: String? = nil) -> ToolCall {
-      tool(.init(name: name, callID: callID, type: type))
+      tool(name: name, callId: callID, type: type)
     }
 
     package nonisolated func tool(_ request: ToolRequest) -> ToolCall {

@@ -509,135 +509,9 @@ public struct Underlying: Sendable, Equatable, Hashable {
 
 ---
 
-## Agent Context
-
-### Terra.agentContext
-TaskLocal static property for agent context propagation.
-
-```swift
-@TaskLocal static var agentContext: AgentContext?
-```
-
-### Terra.AgentContext
-Context for tracking agentic workflow telemetry.
-
-```swift
-final class AgentContext: @unchecked Sendable {
-    func recordTool(_ name: String)
-    func recordModel(_ name: String)
-    func snapshot() -> Snapshot
-
-    struct Snapshot: Sendable {
-        let toolsUsed: Set<String>
-        let modelsUsed: Set<String>
-        let inferenceCount: Int
-        let toolCallCount: Int
-    }
-}
-```
-
----
-
-## Span Scope Helper
-
-### Terra.Scope<Kind>
-A lightweight helper passed to `Terra.with*Span` bodies.
-
-```swift
-final class Scope<Kind>: @unchecked Sendable {
-    /// Advanced escape hatch for integrations that already depend on OpenTelemetry APIs.
-    var span: any Span { underlyingSpan }
-
-    func addEvent(_ name: String, attributes: [String: AttributeValue] = [:])
-    func recordError(_ error: any Error, captureMessage: Bool? = nil)
-    func setAttributes(_ attributes: [String: AttributeValue])
-}
-```
-
----
-
-## Typed Span Markers
-
-```swift
-extension Terra {
-    enum InferenceSpan: Sendable {}
-    enum EmbeddingSpan: Sendable {}
-    enum AgentInvocationSpan: Sendable {}
-    enum ToolExecutionSpan: Sendable {}
-    enum SafetyCheckSpan: Sendable {}
-}
-```
-
----
-
-## TraceKeys
-
-### Terra.TraceKeys
-Standard trace attribute keys for telemetry.
-
-```swift
-enum TraceKeys {
-    static let runtime = TraceKey<RuntimeID>("terra.runtime")
-    static let provider = TraceKey<ProviderID>("gen_ai.provider.name")
-    static let responseModel = TraceKey<ModelID>("gen_ai.response.model")
-    static let inputTokens = TraceKey<Int>("gen_ai.usage.input_tokens")
-    static let outputTokens = TraceKey<Int>("gen_ai.usage.output_tokens")
-    static let temperature = TraceKey<Double>("gen_ai.request.temperature")
-    static let maxOutputTokens = TraceKey<Int>("gen_ai.request.max_tokens")
-}
-```
-
----
-
-## Metric Names
-
-```swift
-enum MetricNames {
-    static let inferenceCount = "terra.inference.count"
-    static let inferenceDurationMs = "terra.inference.duration_ms"
-}
-```
-
----
-
-## Span Names
-
-```swift
-enum SpanNames {
-    static let inference = "gen_ai.inference"
-    static let embedding = "gen_ai.embeddings"
-    static let agentInvocation = "gen_ai.agent"
-    static let toolExecution = "gen_ai.tool"
-    static let safetyCheck = "terra.safety_check"
-    static let session = "terra.session"
-    static let modelLoad = "terra.coreml.model_load"
-}
-```
-
----
-
-## Operation Names
-
-```swift
-enum OperationName: String, Sendable {
-    case inference
-    case embeddings
-    case invokeAgent = "invoke_agent"
-    case executeTool = "execute_tool"
-    case safetyCheck = "safety_check"
-}
-```
-
----
-
-## Default Persistence Storage URL
-
-### Terra.defaultPersistenceStorageURL()
-Returns the default URL for telemetry persistence storage.
-
-```swift
-public static func defaultPersistenceStorageURL() -> URL
-```
+> **Note:** The following types are documented here for reference but are **NOT public APIs**:
+> - `Terra.AgentContext`, `Terra.Scope<Kind>`, `Terra.TraceKeys`, `Terra.MetricNames`, `Terra.SpanNames`, `Terra.OperationName`
+> - These are `internal` or `package` scoped and should not be used directly by consumers.
 
 ---
 
@@ -1116,7 +990,7 @@ package final class SimulatorAwareLogExporter: LogRecordExporter { /* ... */ }
 extension Terra {
     package static func lockTestingIsolation()
     package static func unlockTestingIsolation()
-    static func resetOpenTelemetryForTesting()
+    internal static func resetOpenTelemetryForTesting()
 }
 #endif
 ```

@@ -15,11 +15,11 @@ try await Terra
   .run { trace in
     trace.event("agent.start")
 
-    try await Terra.infer(Terra.ModelID("local/demo"), prompt: "Hello").run {
+    try await Terra.infer("local/demo", prompt: "Hello").run {
       try await Task.sleep(nanoseconds: 50_000_000)
     }
 
-    try await Terra.tool("search", callID: Terra.ToolCallID("call-1")).run {
+    try await Terra.tool("search", callId: "call-1").run {
       try await Task.sleep(nanoseconds: 20_000_000)
     }
 

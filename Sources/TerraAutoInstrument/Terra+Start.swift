@@ -332,6 +332,25 @@ extension Terra {
     try await _lifecycleController.start(config)
   }
 
+  /// Starts Terra with local-development defaults that are explicit and easy to teach.
+  ///
+  /// Use `quickStart()` when you want one obvious "make it work on this machine"
+  /// entry point for coding agents and developers. This keeps the older `start()`
+  /// defaults intact while giving local workflows a stronger, copy-pasteable setup:
+  /// localhost OTLP export and `.capturing` privacy.
+  ///
+  /// ```swift
+  /// try await Terra.quickStart()
+  /// let report = Terra.diagnose()
+  /// print(report.isHealthy)
+  /// ```
+  public static func quickStart() async throws {
+    var config = Configuration(preset: .quickstart)
+    config.privacy = .capturing
+    config.destination = .endpoint(URL(string: "http://localhost:4318")!)
+    try await start(config)
+  }
+
   static func _performStart(_ config: _ResolvedStartConfiguration) throws {
     // 0. Resolve service metadata
     let serviceName = config.openTelemetry.serviceName

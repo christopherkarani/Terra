@@ -102,7 +102,7 @@ extension Terra {
     }
 
     package let operation: Operation
-    package let model: ModelID?
+    package let model: String?
     package let name: String?
     package let provider: ProviderID?
     package let runtime: RuntimeID?
@@ -110,7 +110,7 @@ extension Terra {
 
     package init(
       operation: Operation,
-      model: ModelID? = nil,
+      model: String? = nil,
       name: String? = nil,
       provider: ProviderID? = nil,
       runtime: RuntimeID? = nil,
@@ -167,7 +167,7 @@ extension Terra {
   package enum TraceKeys {
     static let runtime = TraceKey<RuntimeID>("terra.runtime")
     static let provider = TraceKey<ProviderID>("gen_ai.provider.name")
-    static let responseModel = TraceKey<ModelID>("gen_ai.response.model")
+    static let responseModel = TraceKey<String>("gen_ai.response.model")
     static let inputTokens = TraceKey<Int>("gen_ai.usage.input_tokens")
     static let outputTokens = TraceKey<Int>("gen_ai.usage.output_tokens")
     static let temperature = TraceKey<Double>("gen_ai.request.temperature")
@@ -193,7 +193,7 @@ extension Terra {
     private let onAttribute: @Sendable (String, TraceScalar) -> Void
     private let onError: @Sendable (any Error) -> Void
     private let onTokens: @Sendable (Int?, Int?) -> Void
-    private let onResponseModel: @Sendable (ModelID) -> Void
+    private let onResponseModel: @Sendable (String) -> Void
     private let onChunk: @Sendable (Int) -> Void
     private let onOutputTokens: @Sendable (Int) -> Void
     private let onFirstToken: @Sendable () -> Void
@@ -203,7 +203,7 @@ extension Terra {
       onAttribute: @escaping @Sendable (String, TraceScalar) -> Void,
       onError: @escaping @Sendable (any Error) -> Void,
       onTokens: @escaping @Sendable (Int?, Int?) -> Void = { _, _ in },
-      onResponseModel: @escaping @Sendable (ModelID) -> Void = { _ in },
+      onResponseModel: @escaping @Sendable (String) -> Void = { _ in },
       onChunk: @escaping @Sendable (Int) -> Void = { _ in },
       onOutputTokens: @escaping @Sendable (Int) -> Void = { _ in },
       onFirstToken: @escaping @Sendable () -> Void = {}
@@ -269,9 +269,16 @@ extension Terra {
     /// - Parameter value: The model ID that generated the response.
     /// - Returns: `self` for chaining.
     @discardableResult
-    public func responseModel(_ value: ModelID) -> Self {
+    public func responseModel(_ value: String) -> Self {
       onResponseModel(value)
       return self
+    }
+
+    /// Records the model that generated the response using a compatibility wrapper.
+    @available(*, deprecated, message: "Use String model names directly.")
+    @discardableResult
+    public func responseModel(_ value: ModelID) -> Self {
+      responseModel(value.rawValue)
     }
 
     /// Records a streaming chunk of tokens.
@@ -529,7 +536,7 @@ extension Terra {
   ///   - maxTokens: Maximum output tokens. Recorded as a span attribute.
   /// - Returns: A new `Operation` ready for execution via `.run { handle in ... }`.
   public static func infer(
-    _ model: ModelID,
+    _ model: String,
     prompt: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil,
@@ -544,6 +551,19 @@ extension Terra {
       temperature: temperature,
       maxTokens: maxTokens
     )))
+  }
+
+  /// Creates a model-inference operation using a compatibility wrapper.
+  @available(*, deprecated, message: "Use String model names directly.")
+  public static func infer(
+    _ model: ModelID,
+    prompt: String? = nil,
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil,
+    temperature: Double? = nil,
+    maxTokens: Int? = nil
+  ) -> Operation {
+    infer(model.rawValue, prompt: prompt, provider: provider, runtime: runtime, temperature: temperature, maxTokens: maxTokens)
   }
 
   /// Creates a streaming inference operation for a model call with token-by-token streaming.
@@ -562,7 +582,7 @@ extension Terra {
   ///   - expectedTokens: Expected total output tokens (used for progress tracking). Optional.
   /// - Returns: A new `Operation` for streaming execution.
   public static func stream(
-    _ model: ModelID,
+    _ model: String,
     prompt: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil,
@@ -581,6 +601,28 @@ extension Terra {
     )))
   }
 
+  /// Creates a streaming inference operation using a compatibility wrapper.
+  @available(*, deprecated, message: "Use String model names directly.")
+  public static func stream(
+    _ model: ModelID,
+    prompt: String? = nil,
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil,
+    temperature: Double? = nil,
+    maxTokens: Int? = nil,
+    expectedTokens: Int? = nil
+  ) -> Operation {
+    stream(
+      model.rawValue,
+      prompt: prompt,
+      provider: provider,
+      runtime: runtime,
+      temperature: temperature,
+      maxTokens: maxTokens,
+      expectedTokens: expectedTokens
+    )
+  }
+
   /// Creates an embedding operation for generating vector representations of text.
   ///
   /// Use this for embedding calls where text is converted to numerical vectors.
@@ -593,7 +635,7 @@ extension Terra {
   ///   - runtime: The execution runtime. Inferred from instrumentation if `nil`.
   /// - Returns: A new `Operation` for embedding execution.
   public static func embed(
-    _ model: ModelID,
+    _ model: String,
     inputCount: Int? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
@@ -604,6 +646,17 @@ extension Terra {
       provider: provider,
       runtime: runtime
     )))
+  }
+
+  /// Creates an embedding operation using a compatibility wrapper.
+  @available(*, deprecated, message: "Use String model names directly.")
+  public static func embed(
+    _ model: ModelID,
+    inputCount: Int? = nil,
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil
+  ) -> Operation {
+    embed(model.rawValue, inputCount: inputCount, provider: provider, runtime: runtime)
   }
 
   /// Creates an agent operation representing an autonomous agentic loop.
@@ -629,25 +682,74 @@ extension Terra {
 
   /// Creates a tool-call operation representing a single tool invocation within an agentic workflow.
   ///
-  /// `ToolCallID` is generated automatically, but can be provided explicitly when
+  /// `callId` defaults to a UUID, but can be provided explicitly when
   /// the calling context already has a meaningful identifier. The span records
   /// the tool name, call ID, tool type, provider, and runtime.
   ///
   /// - Parameters:
   ///   - name: The name of the tool being invoked (e.g., `"web-search"`, `"calculator"`).
-  ///   - callID: A unique identifier for this tool call. Auto-generated as a UUID if `nil`.
+  ///   - callId: A unique identifier for this tool call. Auto-generated as a UUID if omitted.
   ///   - type: An optional type descriptor for the tool (e.g., `"function"`, `"retrieval"`).
   ///   - provider: The AI provider. Inferred from the runtime if `nil`.
   ///   - runtime: The execution runtime. Inferred from instrumentation if `nil`.
   /// - Returns: A new `Operation` for the tool call.
   public static func tool(
     _ name: String,
-    callID: ToolCallID = .init(),
     type: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
   ) -> Operation {
-    Operation(operation: .tool(.init(name: name, callID: callID, type: type, provider: provider, runtime: runtime)))
+    tool(name, callId: UUID().uuidString, type: type, provider: provider, runtime: runtime)
+  }
+
+  /// Creates a tool-call operation representing a single tool invocation with an explicit call ID.
+  ///
+  /// Use this overload when the calling context already has a stable identifier and
+  /// you want the trace to correlate with upstream agent/tooling records.
+  public static func tool(
+    _ name: String,
+    callId: String,
+    type: String? = nil,
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil
+  ) -> Operation {
+    Operation(operation: .tool(.init(name: name, callId: callId, type: type, provider: provider, runtime: runtime)))
+  }
+
+  /// Creates a tool-call operation using the legacy `callID:` label.
+  @available(*, deprecated, message: "Use callId: instead of callID:.")
+  public static func tool(
+    _ name: String,
+    callID: String,
+    type: String? = nil,
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil
+  ) -> Operation {
+    tool(name, callId: callID, type: type, provider: provider, runtime: runtime)
+  }
+
+  /// Creates a tool-call operation using a compatibility wrapper.
+  @available(*, deprecated, message: "Use String tool call identifiers directly.")
+  public static func tool(
+    _ name: String,
+    callId: ToolCallID,
+    type: String? = nil,
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil
+  ) -> Operation {
+    tool(name, callId: callId.rawValue, type: type, provider: provider, runtime: runtime)
+  }
+
+  /// Creates a tool-call operation using a compatibility wrapper and legacy label.
+  @available(*, deprecated, message: "Use callId: with a String identifier.")
+  public static func tool(
+    _ name: String,
+    callID: ToolCallID,
+    type: String? = nil,
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil
+  ) -> Operation {
+    tool(name, callId: callID.rawValue, type: type, provider: provider, runtime: runtime)
   }
 
   /// Creates a safety-evaluation operation representing a content safety check.
@@ -710,7 +812,7 @@ private extension Terra {
   }
 
   struct _Infer: Sendable {
-    var model: ModelID
+    var model: String
     var prompt: String?
     var provider: ProviderID?
     var runtime: RuntimeID?
@@ -719,7 +821,7 @@ private extension Terra {
   }
 
   struct _Stream: Sendable {
-    var model: ModelID
+    var model: String
     var prompt: String?
     var provider: ProviderID?
     var runtime: RuntimeID?
@@ -729,7 +831,7 @@ private extension Terra {
   }
 
   struct _Embed: Sendable {
-    var model: ModelID
+    var model: String
     var inputCount: Int?
     var provider: ProviderID?
     var runtime: RuntimeID?
@@ -744,7 +846,7 @@ private extension Terra {
 
   struct _Tool: Sendable {
     var name: String
-    var callID: ToolCallID
+    var callId: String
     var type: String?
     var provider: ProviderID?
     var runtime: RuntimeID?
@@ -793,7 +895,7 @@ private extension Terra {
   ) async rethrows -> R {
     switch operation {
     case .infer(let operation):
-      var call = inference(model: operation.model.rawValue, prompt: operation.prompt)
+      var call = inference(model: operation.model, prompt: operation.prompt)
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
@@ -806,13 +908,13 @@ private extension Terra {
           onAttribute: { _recordAttribute($0, $1, on: trace) },
           onError: { trace.recordError($0) },
           onTokens: { _ = trace.tokens(input: $0, output: $1) },
-          onResponseModel: { _ = trace.responseModel($0.rawValue) }
+          onResponseModel: { _ = trace.responseModel($0) }
         )
         return try await body(handle)
       }
 
     case .stream(let operation):
-      var call = stream(model: operation.model.rawValue, prompt: operation.prompt)
+      var call = stream(model: operation.model, prompt: operation.prompt)
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
@@ -833,7 +935,7 @@ private extension Terra {
       }
 
     case .embed(let operation):
-      var call = embedding(model: operation.model.rawValue, inputCount: operation.inputCount)
+      var call = embedding(model: operation.model, inputCount: operation.inputCount)
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
@@ -863,7 +965,7 @@ private extension Terra {
       }
 
     case .tool(let operation):
-      var call = tool(name: operation.name, callID: operation.callID.rawValue, type: operation.type)
+      var call = tool(name: operation.name, callId: operation.callId, type: operation.type)
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }

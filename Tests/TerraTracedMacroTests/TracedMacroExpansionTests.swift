@@ -11,14 +11,14 @@ private let testMacros: [String: any Macro.Type] = [
 func modelMacroNoMatchingParams() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(topic: String) async throws -> String {
       try await doGenerate(topic)
     }
     """,
     expandedSource: """
     func generate(topic: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("llama")).run { trace in
+      return try await Terra.infer("llama").run { trace in
         _ = trace
         try await doGenerate(topic)
       }
@@ -32,14 +32,14 @@ func modelMacroNoMatchingParams() {
 func modelMacroDetectsPrompt() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(prompt: String) async throws -> String {
       try await doGenerate(prompt)
     }
     """,
     expandedSource: """
     func generate(prompt: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("llama"), prompt: prompt).run { trace in
+      return try await Terra.infer("llama", prompt: prompt).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -53,14 +53,14 @@ func modelMacroDetectsPrompt() {
 func modelMacroDetectsInputAlias() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(input: String) async throws -> String {
       try await doGenerate(input)
     }
     """,
     expandedSource: """
     func generate(input: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("llama"), prompt: input).run { trace in
+      return try await Terra.infer("llama", prompt: input).run { trace in
         _ = trace
         try await doGenerate(input)
       }
@@ -74,14 +74,14 @@ func modelMacroDetectsInputAlias() {
 func modelMacroDetectsQueryAlias() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(query: String) async throws -> String {
       try await doGenerate(query)
     }
     """,
     expandedSource: """
     func generate(query: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("llama"), prompt: query).run { trace in
+      return try await Terra.infer("llama", prompt: query).run { trace in
         _ = trace
         try await doGenerate(query)
       }
@@ -95,14 +95,14 @@ func modelMacroDetectsQueryAlias() {
 func modelMacroDetectsTextAlias() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(text: String) async throws -> String {
       try await doGenerate(text)
     }
     """,
     expandedSource: """
     func generate(text: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("llama"), prompt: text).run { trace in
+      return try await Terra.infer("llama", prompt: text).run { trace in
         _ = trace
         try await doGenerate(text)
       }
@@ -116,14 +116,14 @@ func modelMacroDetectsTextAlias() {
 func modelMacroDetectsMessageAlias() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(message: String) async throws -> String {
       try await doGenerate(message)
     }
     """,
     expandedSource: """
     func generate(message: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("llama"), prompt: message).run { trace in
+      return try await Terra.infer("llama", prompt: message).run { trace in
         _ = trace
         try await doGenerate(message)
       }
@@ -137,14 +137,14 @@ func modelMacroDetectsMessageAlias() {
 func modelMacroDetectsMaxTokens() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(prompt: String, maxTokens: Int) async throws -> String {
       try await doGenerate(prompt, maxTokens: maxTokens)
     }
     """,
     expandedSource: """
     func generate(prompt: String, maxTokens: Int) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("llama"), prompt: prompt, maxTokens: maxTokens).run { trace in
+      return try await Terra.infer("llama", prompt: prompt, maxTokens: maxTokens).run { trace in
         _ = trace
         try await doGenerate(prompt, maxTokens: maxTokens)
       }
@@ -158,14 +158,14 @@ func modelMacroDetectsMaxTokens() {
 func modelMacroDetectsMaxOutputTokens() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(prompt: String, maxOutputTokens: Int) async throws -> String {
       try await doGenerate(prompt, maxTokens: maxOutputTokens)
     }
     """,
     expandedSource: """
     func generate(prompt: String, maxOutputTokens: Int) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("llama"), prompt: prompt, maxTokens: maxOutputTokens).run { trace in
+      return try await Terra.infer("llama", prompt: prompt, maxTokens: maxOutputTokens).run { trace in
         _ = trace
         try await doGenerate(prompt, maxTokens: maxOutputTokens)
       }
@@ -179,14 +179,14 @@ func modelMacroDetectsMaxOutputTokens() {
 func modelMacroDetectsTemperature() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(prompt: String, temperature: Double) async throws -> String {
       try await doGenerate(prompt)
     }
     """,
     expandedSource: """
     func generate(prompt: String, temperature: Double) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("llama"), prompt: prompt, temperature: temperature).run { trace in
+      return try await Terra.infer("llama", prompt: prompt, temperature: temperature).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -207,7 +207,7 @@ func modelMacroStreamingTrue() {
     """,
     expandedSource: """
     func stream(prompt: String) async throws -> String {
-      return try await Terra.stream(Terra.ModelID("gpt-4"), prompt: prompt).run { trace in
+      return try await Terra.stream("gpt-4", prompt: prompt).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -259,7 +259,7 @@ func agentMacroWithID() {
   )
 }
 
-@Test("Tool macro basic expansion uses ToolCallID default")
+@Test("Tool macro basic expansion uses default callId handling")
 func toolMacroBasic() {
   assertMacroExpansion(
     """
@@ -280,18 +280,18 @@ func toolMacroBasic() {
   )
 }
 
-@Test("Tool macro uses function callID parameter when present")
-func toolMacroUsesFunctionCallID() {
+@Test("Tool macro uses function callId parameter when present")
+func toolMacroUsesFunctionCallId() {
   assertMacroExpansion(
     """
     @Traced(tool: "search")
-    func search(query: String, callID: String) async throws -> [Result] {
+    func search(query: String, callId: String) async throws -> [Result] {
       try await doSearch(query)
     }
     """,
     expandedSource: """
-    func search(query: String, callID: String) async throws -> [Result] {
-      return try await Terra.tool("search", callID: Terra.ToolCallID(callID)).run { trace in
+    func search(query: String, callId: String) async throws -> [Result] {
+      return try await Terra.tool("search", callId: callId).run { trace in
         _ = trace
         try await doSearch(query)
       }
@@ -301,18 +301,39 @@ func toolMacroUsesFunctionCallID() {
   )
 }
 
-@Test("Tool macro passes ToolCallID parameter through")
-func toolMacroPassesTypedCallID() {
+@Test("Tool macro uses optional callId parameter when present")
+func toolMacroUsesOptionalCallId() {
   assertMacroExpansion(
     """
     @Traced(tool: "search")
-    func search(query: String, callID: Terra.ToolCallID) async throws -> [Result] {
+    func search(query: String, callId: String?) async throws -> [Result] {
       try await doSearch(query)
     }
     """,
     expandedSource: """
-    func search(query: String, callID: Terra.ToolCallID) async throws -> [Result] {
-      return try await Terra.tool("search", callID: callID).run { trace in
+    func search(query: String, callId: String?) async throws -> [Result] {
+      return try await (callId.map { Terra.tool("search", callId: $0) } ?? Terra.tool("search")).run { trace in
+        _ = trace
+        try await doSearch(query)
+      }
+    }
+    """,
+    macros: testMacros
+  )
+}
+
+@Test("Tool macro uses optional ToolCallID parameter when present")
+func toolMacroUsesOptionalLegacyToolCallId() {
+  assertMacroExpansion(
+    """
+    @Traced(tool: "search")
+    func search(query: String, callId: Terra.ToolCallID?) async throws -> [Result] {
+      try await doSearch(query)
+    }
+    """,
+    expandedSource: """
+    func search(query: String, callId: Terra.ToolCallID?) async throws -> [Result] {
+      return try await (callId.map { Terra.tool("search", callId: $0) } ?? Terra.tool("search")).run { trace in
         _ = trace
         try await doSearch(query)
       }
@@ -326,14 +347,14 @@ func toolMacroPassesTypedCallID() {
 func embeddingMacroBasic() {
   assertMacroExpansion(
     """
-    @Traced(embedding: Terra.ModelID("text-embedding-3-small"))
+    @Traced(embedding: "text-embedding-3-small")
     func embed(input: String) async throws -> [Float] {
       try await doEmbedding(input)
     }
     """,
     expandedSource: """
     func embed(input: String) async throws -> [Float] {
-      return try await Terra.embed(Terra.ModelID("text-embedding-3-small")).run { trace in
+      return try await Terra.embed("text-embedding-3-small").run { trace in
         _ = trace
         try await doEmbedding(input)
       }
@@ -347,14 +368,14 @@ func embeddingMacroBasic() {
 func embeddingMacroDetectsCount() {
   assertMacroExpansion(
     """
-    @Traced(embedding: Terra.ModelID("text-embedding-3-small"))
+    @Traced(embedding: "text-embedding-3-small")
     func embed(input: String, count: Int) async throws -> [Float] {
       try await doEmbedding(input)
     }
     """,
     expandedSource: """
     func embed(input: String, count: Int) async throws -> [Float] {
-      return try await Terra.embed(Terra.ModelID("text-embedding-3-small"), inputCount: count).run { trace in
+      return try await Terra.embed("text-embedding-3-small", inputCount: count).run { trace in
         _ = trace
         try await doEmbedding(input)
       }
@@ -410,14 +431,14 @@ func safetyMacroDetectsSubject() {
 func modelMacroUsesFirstPromptAlias() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(prompt: String, text: String) async throws -> String {
       try await doGenerate(prompt, text: text)
     }
     """,
     expandedSource: """
     func generate(prompt: String, text: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("llama"), prompt: prompt).run { trace in
+      return try await Terra.infer("llama", prompt: prompt).run { trace in
         _ = trace
         try await doGenerate(prompt, text: text)
       }
@@ -431,14 +452,14 @@ func modelMacroUsesFirstPromptAlias() {
 func explicitModelArgOverridesFunctionParam() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("gpt-4"))
+    @Traced(model: "gpt-4")
     func generate(model: String, prompt: String) async throws -> String {
       try await doGenerate(model, prompt: prompt)
     }
     """,
     expandedSource: """
     func generate(model: String, prompt: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: prompt).run { trace in
+      return try await Terra.infer("gpt-4", prompt: prompt).run { trace in
         _ = trace
         try await doGenerate(model, prompt: prompt)
       }
@@ -459,7 +480,7 @@ func explicitMetadataOverridesDetectedParams() {
     """,
     expandedSource: """
     func generate(prompt: String, provider: String, maxTokens: Int, temperature: Double) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: "fixed", provider: Terra.ProviderID("openai"), temperature: 0.2, maxTokens: 128).run { trace in
+      return try await Terra.infer("gpt-4", prompt: "fixed", provider: Terra.ProviderID("openai"), temperature: 0.2, maxTokens: 128).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -473,14 +494,14 @@ func explicitMetadataOverridesDetectedParams() {
 func modelMacroWrapsRuntimeStringParameter() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("gpt-4"))
+    @Traced(model: "gpt-4")
     func generate(prompt: String, runtime: String) async throws -> String {
       try await doGenerate(prompt)
     }
     """,
     expandedSource: """
     func generate(prompt: String, runtime: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: prompt, runtime: Terra.RuntimeID(runtime)).run { trace in
+      return try await Terra.infer("gpt-4", prompt: prompt, runtime: Terra.RuntimeID(runtime)).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -494,14 +515,14 @@ func modelMacroWrapsRuntimeStringParameter() {
 func modelMacroWrapsProviderStringParameter() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("gpt-4"))
+    @Traced(model: "gpt-4")
     func generate(prompt: String, provider: String) async throws -> String {
       try await doGenerate(prompt)
     }
     """,
     expandedSource: """
     func generate(prompt: String, provider: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: prompt, provider: Terra.ProviderID(provider)).run { trace in
+      return try await Terra.infer("gpt-4", prompt: prompt, provider: Terra.ProviderID(provider)).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -522,7 +543,7 @@ func explicitRuntimeOverridesDetectedParam() {
     """,
     expandedSource: """
     func generate(prompt: String, runtime: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: prompt, runtime: Terra.RuntimeID("mlx")).run { trace in
+      return try await Terra.infer("gpt-4", prompt: prompt, runtime: Terra.RuntimeID("mlx")).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -553,8 +574,8 @@ func toolMacroWrapsRuntimeStringParameter() {
   )
 }
 
-@Test("Model macro emits fix-it when model is passed as raw string")
-func modelMacroRawStringDiagnostic() {
+@Test("Model macro accepts raw string model without diagnostics")
+func modelMacroRawString() {
   assertMacroExpansion(
     """
     @Traced(model: "gpt-4")
@@ -564,21 +585,12 @@ func modelMacroRawStringDiagnostic() {
     """,
     expandedSource: """
     func generate(prompt: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: prompt).run { trace in
+      return try await Terra.infer("gpt-4", prompt: prompt).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
     }
     """,
-    diagnostics: [
-      DiagnosticSpec(
-        message: "@Traced model expects Terra.ModelID; wrap string literal with Terra.ModelID(...)",
-        line: 1,
-        column: 1,
-        severity: .warning,
-        fixIts: [FixItSpec(message: "wrap with Terra.ModelID(...)")]
-      )
-    ],
     macros: testMacros
   )
 }
@@ -587,14 +599,14 @@ func modelMacroRawStringDiagnostic() {
 func modelMacroRawProviderDiagnostic() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("gpt-4"), provider: "openai")
+    @Traced(model: "gpt-4", provider: "openai")
     func generate(prompt: String) async throws -> String {
       try await doGenerate(prompt)
     }
     """,
     expandedSource: """
     func generate(prompt: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: prompt, provider: Terra.ProviderID("openai")).run { trace in
+      return try await Terra.infer("gpt-4", prompt: prompt, provider: Terra.ProviderID("openai")).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -617,14 +629,14 @@ func modelMacroRawProviderDiagnostic() {
 func modelMacroRawRuntimeDiagnostic() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("gpt-4"), runtime: "mlx")
+    @Traced(model: "gpt-4", runtime: "mlx")
     func generate(prompt: String) async throws -> String {
       try await doGenerate(prompt)
     }
     """,
     expandedSource: """
     func generate(prompt: String) async throws -> String {
-      return try await Terra.infer(Terra.ModelID("gpt-4"), prompt: prompt, runtime: Terra.RuntimeID("mlx")).run { trace in
+      return try await Terra.infer("gpt-4", prompt: prompt, runtime: Terra.RuntimeID("mlx")).run { trace in
         _ = trace
         try await doGenerate(prompt)
       }
@@ -643,32 +655,23 @@ func modelMacroRawRuntimeDiagnostic() {
   )
 }
 
-@Test("Tool macro emits fix-it when callID is passed as raw string")
-func toolMacroRawCallIDDiagnostic() {
+@Test("Tool macro accepts raw string callId without diagnostics")
+func toolMacroRawCallId() {
   assertMacroExpansion(
     """
-    @Traced(tool: "search", callID: "call-1")
+    @Traced(tool: "search", callId: "call-1")
     func run(query: String) async throws -> String {
       try await doSearch(query)
     }
     """,
     expandedSource: """
     func run(query: String) async throws -> String {
-      return try await Terra.tool("search", callID: Terra.ToolCallID("call-1")).run { trace in
+      return try await Terra.tool("search", callId: "call-1").run { trace in
         _ = trace
         try await doSearch(query)
       }
     }
     """,
-    diagnostics: [
-      DiagnosticSpec(
-        message: "@Traced callID expects Terra.ToolCallID; wrap string literal with Terra.ToolCallID(...)",
-        line: 1,
-        column: 1,
-        severity: .warning,
-        fixIts: [FixItSpec(message: "wrap with Terra.ToolCallID(...)")]
-      )
-    ],
     macros: testMacros
   )
 }
@@ -677,7 +680,7 @@ func toolMacroRawCallIDDiagnostic() {
 func macroRequiresAsyncFunction() {
   assertMacroExpansion(
     """
-    @Traced(model: Terra.ModelID("llama"))
+    @Traced(model: "llama")
     func generate(prompt: String) throws -> String {
       try doGenerate(prompt)
     }

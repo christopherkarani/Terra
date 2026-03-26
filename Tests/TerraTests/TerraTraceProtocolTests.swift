@@ -29,7 +29,7 @@ struct TerraTraceProtocolTests {
       assertTrace(trace)
       return "ok"
     }
-    _ = await Terra.tool(name: "trace-tool", callID: "call-1").execute { trace in
+    _ = await Terra.tool(name: "trace-tool", callId: "call-1").execute { trace in
       assertTrace(trace)
       return "ok"
     }

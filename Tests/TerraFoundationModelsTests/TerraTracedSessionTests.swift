@@ -124,8 +124,8 @@ func tracedSessionInitializesWithDefaultIdentifier() {
   defer { Terra.unlockTestingIsolation() }
 
   let session = TerraTracedSession()
-  let defaultModelID = Terra.ModelID("apple/foundation-model")
-  #expect(session.modelIdentifier == defaultModelID)
+  let defaultModel = "apple/foundation-model"
+  #expect(session.modelIdentifier == defaultModel)
 }
 
 @available(macOS 26.0, iOS 26.0, *)
@@ -134,7 +134,7 @@ func tracedSessionInitializesWithCustomIdentifier() {
   Terra.lockTestingIsolation()
   defer { Terra.unlockTestingIsolation() }
 
-  let modelID = Terra.ModelID("apple/custom-model")
+  let modelID = "apple/custom-model"
   let session = TerraTracedSession(modelIdentifier: modelID)
   #expect(session.modelIdentifier == modelID)
 }

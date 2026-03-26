@@ -28,18 +28,33 @@ extension Terra {
   public final class TracedSession {
     public typealias GuardrailClassifier = @Sendable (any Error) -> String?
 
-    public let modelIdentifier: Terra.ModelID
+    public let modelIdentifier: String
 
     public init(
       model: SystemLanguageModel = .default,
       instructions: String? = nil,
-      modelIdentifier: Terra.ModelID = Terra.ModelID("apple/foundation-model"),
+      modelIdentifier: String = "apple/foundation-model",
       guardrailClassifier: GuardrailClassifier? = nil
     ) {
       _ = model
       _ = instructions
       _ = guardrailClassifier
       self.modelIdentifier = modelIdentifier
+    }
+
+    @available(*, deprecated, message: "Use String model identifiers directly.")
+    public convenience init(
+      model: SystemLanguageModel = .default,
+      instructions: String? = nil,
+      modelIdentifier: Terra.ModelID,
+      guardrailClassifier: GuardrailClassifier? = nil
+    ) {
+      self.init(
+        model: model,
+        instructions: instructions,
+        modelIdentifier: modelIdentifier.rawValue,
+        guardrailClassifier: guardrailClassifier
+      )
     }
 
     public func respond(

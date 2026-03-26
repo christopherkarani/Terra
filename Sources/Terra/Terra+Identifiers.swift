@@ -1,20 +1,45 @@
 import Foundation
 
 extension Terra {
-  /// A unique identifier for a GenAI model (e.g., 'gpt-4o-mini', 'claude-3-sonnet').
+  /// Identifies a model using a string-backed compatibility wrapper.
   ///
-  /// `ModelID` wraps a string value provided by the AI provider. Terra uses this
-  /// identifier to attribute telemetry to the specific model that handled an inference
-  /// request, making it easy to filter traces and metrics by model in dashboards.
-  ///
-  /// - Note: Model IDs are provider-specific strings and are not validated by Terra.
-  ///   An invalid or unknown model ID will not prevent tracing — it simply means
-  ///   the model name appears as-is in telemetry.
-  public struct ModelID: Codable, Hashable, Sendable {
+  /// New code should pass model names as plain `String`, but `ModelID` remains
+  /// available so existing integrations can migrate without immediate source edits.
+  @available(*, deprecated, message: "Use String model names directly.")
+  public struct ModelID: Codable, Hashable, Sendable, ExpressibleByStringLiteral {
     public let rawValue: String
 
     public init(_ rawValue: String) {
       self.rawValue = rawValue
+    }
+
+    public init(stringLiteral value: StringLiteralType) {
+      self.rawValue = value
+    }
+  }
+
+  /// Identifies a tool call using a string-backed compatibility wrapper.
+  ///
+  /// New code should pass tool call IDs as plain `String`, but `ToolCallID` remains
+  /// available for one compatibility cycle so existing call sites keep compiling.
+  @available(*, deprecated, message: "Use String tool call identifiers directly.")
+  public struct ToolCallID: Codable, Hashable, Sendable, ExpressibleByStringLiteral {
+    public let rawValue: String
+
+    /// Creates a compatibility call ID using the legacy auto-generated behavior.
+    ///
+    /// Keep this initializer during the deprecation window so older call sites and
+    /// default arguments continue compiling while migrating to raw strings.
+    public init() {
+      self.rawValue = UUID().uuidString
+    }
+
+    public init(_ rawValue: String) {
+      self.rawValue = rawValue
+    }
+
+    public init(stringLiteral value: StringLiteralType) {
+      self.rawValue = value
     }
   }
 
@@ -37,7 +62,7 @@ extension Terra {
   ///
   /// `RuntimeID` describes the execution environment of a model, distinguishing between
   /// cloud API calls and on-device inference runtimes. This is critical for attributing
-  /// telemetry correctly when the same `ModelID` may run on multiple backends.
+  /// telemetry correctly when the same model name may run on multiple backends.
   ///
   /// Common runtime identifiers:
   /// - `http_api` — Cloud API calls to a remote provider
@@ -51,37 +76,13 @@ extension Terra {
       self.rawValue = rawValue
     }
   }
-
-  /// A unique identifier for a tool call within an agentic workflow.
-  ///
-  /// `ToolCallID` is generated as a UUID when a tool is invoked by an agent,
-  /// and is attached to the resulting trace span. This lets you correlate
-  /// tool calls across the full agentic loop — from the model's decision to
-  /// invoke a tool through to the tool's execution and the model's response.
-  ///
-  /// Terra generates a UUID by default, but you can also provide a custom
-  /// identifier when the calling context already has a meaningful ID.
-  public struct ToolCallID: Codable, Hashable, Sendable {
-    public let rawValue: String
-
-    /// Creates a new `ToolCallID` with a randomly generated UUID.
-    public init() {
-      self.rawValue = UUID().uuidString
-    }
-
-    /// Creates a new `ToolCallID` with the given string value.
-    ///
-    /// Use this initializer when you already have a stable identifier from
-    /// the calling system (e.g., a request ID or conversation ID).
-    ///
-    /// - Parameter rawValue: A string identifier for this tool call.
-    public init(_ rawValue: String) {
-      self.rawValue = rawValue
-    }
-  }
 }
 
 extension Terra.ModelID: Terra.ScalarValue {
+  package var traceScalar: Terra.TraceScalar { .string(rawValue) }
+}
+
+extension Terra.ToolCallID: Terra.ScalarValue {
   package var traceScalar: Terra.TraceScalar { .string(rawValue) }
 }
 
@@ -90,9 +91,5 @@ extension Terra.ProviderID: Terra.ScalarValue {
 }
 
 extension Terra.RuntimeID: Terra.ScalarValue {
-  package var traceScalar: Terra.TraceScalar { .string(rawValue) }
-}
-
-extension Terra.ToolCallID: Terra.ScalarValue {
   package var traceScalar: Terra.TraceScalar { .string(rawValue) }
 }

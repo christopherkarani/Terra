@@ -48,6 +48,7 @@ public struct TracedMacro: BodyMacro {
       provider: params.first { matches($0, names: ["provider"]) }.map(providerExpression),
       runtime: params.first { matches($0, names: runtimeParamNames) }.map(runtimeExpression),
       toolCallID: params.first { matches($0, names: toolCallIDParamNames) }.map(toolCallIDExpression),
+      toolCallIDIsOptional: params.first { matches($0, names: toolCallIDParamNames) }.map { normalizedTypeName($0.type).isOptional } ?? false,
       embeddingInputCount: params.first { matches($0, names: embeddingCountParamNames) }.map(parameterName),
       safetySubject: params.first { matches($0, names: safetySubjectParamNames) }.map(parameterName)
     )
@@ -133,15 +134,7 @@ public struct TracedMacro: BodyMacro {
   ) throws -> String {
     switch operation {
     case .model:
-      let modelExpr = try requiredTypedArg(
-        named: "model",
-        wrapperType: "Terra.ModelID",
-        diagnosticMessage: "@Traced model expects Terra.ModelID; wrap string literal with Terra.ModelID(...)",
-        fixItMessage: "wrap with Terra.ModelID(...)",
-        in: arguments,
-        diagnosticNode: diagnosticNode,
-        context: context
-      )
+      let modelExpr = try requiredArg(named: "model", in: arguments)
       let streamingArg = argument(named: "streaming", in: arguments)
       let forceStreaming = streamingArg == "true"
       let inference = buildModelCall(
@@ -177,23 +170,18 @@ public struct TracedMacro: BodyMacro {
 
     case .tool:
       let toolExpr = try requiredArg(named: "tool", in: arguments)
-      let callIDExpr = resolved.toolCallID
       let typeExpr = argument(named: "type", in: arguments)
-      return buildCall(
-        "Terra.tool(\(toolExpr)",
-        labeledArguments: [("callID", callIDExpr), ("type", typeExpr), ("provider", resolved.provider), ("runtime", resolved.runtime)]
+      return buildToolCall(
+        toolExpr: toolExpr,
+        callIDExpr: resolved.toolCallID,
+        callIDIsOptional: resolved.toolCallIDIsOptional,
+        typeExpr: typeExpr,
+        providerExpr: resolved.provider,
+        runtimeExpr: resolved.runtime
       )
 
     case .embedding:
-      let embeddingExpr = try requiredTypedArg(
-        named: "embedding",
-        wrapperType: "Terra.ModelID",
-        diagnosticMessage: "@Traced embedding expects Terra.ModelID; wrap string literal with Terra.ModelID(...)",
-        fixItMessage: "wrap with Terra.ModelID(...)",
-        in: arguments,
-        diagnosticNode: diagnosticNode,
-        context: context
-      )
+      let embeddingExpr = try requiredArg(named: "embedding", in: arguments)
       return buildCall(
         "Terra.embed(\(embeddingExpr)",
         labeledArguments: [("inputCount", resolved.embeddingInputCount), ("provider", resolved.provider), ("runtime", resolved.runtime)]
@@ -241,6 +229,39 @@ public struct TracedMacro: BodyMacro {
     return "\(prefix), \(rendered.joined(separator: ", ")))"
   }
 
+  private static func buildToolCall(
+    toolExpr: String,
+    callIDExpr: String?,
+    callIDIsOptional: Bool,
+    typeExpr: String?,
+    providerExpr: String?,
+    runtimeExpr: String?
+  ) -> String {
+    if let callIDExpr {
+      if callIDIsOptional {
+        let explicitCall = buildCall(
+          "Terra.tool(\(toolExpr)",
+          labeledArguments: [("callId", "$0"), ("type", typeExpr), ("provider", providerExpr), ("runtime", runtimeExpr)]
+        )
+        let fallbackCall = buildCall(
+          "Terra.tool(\(toolExpr)",
+          labeledArguments: [("type", typeExpr), ("provider", providerExpr), ("runtime", runtimeExpr)]
+        )
+        return "(\(callIDExpr).map { \(explicitCall) } ?? \(fallbackCall))"
+      }
+
+      return buildCall(
+        "Terra.tool(\(toolExpr)",
+        labeledArguments: [("callId", callIDExpr), ("type", typeExpr), ("provider", providerExpr), ("runtime", runtimeExpr)]
+      )
+    }
+
+    return buildCall(
+      "Terra.tool(\(toolExpr)",
+      labeledArguments: [("type", typeExpr), ("provider", providerExpr), ("runtime", runtimeExpr)]
+    )
+  }
+
   private struct DetectedParameters {
     let modelPrompt: String?
     let maxOutputTokens: String?
@@ -248,6 +269,7 @@ public struct TracedMacro: BodyMacro {
     let provider: String?
     let runtime: String?
     let toolCallID: String?
+    let toolCallIDIsOptional: Bool
     let embeddingInputCount: String?
     let safetySubject: String?
   }
@@ -259,6 +281,7 @@ public struct TracedMacro: BodyMacro {
     let provider: String?
     let runtime: String?
     let toolCallID: String?
+    let toolCallIDIsOptional: Bool
     let embeddingInputCount: String?
     let safetySubject: String?
 
@@ -299,17 +322,11 @@ public struct TracedMacro: BodyMacro {
           context: context
         )
         ?? detected.runtime
-      toolCallID =
-        TracedMacro.typedArgument(
-          named: "callID",
-          wrapperType: "Terra.ToolCallID",
-          diagnosticMessage: "@Traced callID expects Terra.ToolCallID; wrap string literal with Terra.ToolCallID(...)",
-          fixItMessage: "wrap with Terra.ToolCallID(...)",
-          in: arguments,
-          diagnosticNode: diagnosticNode,
-          context: context
-        )
-        ?? detected.toolCallID
+      let explicitToolCallID =
+        TracedMacro.argument(named: "callId", in: arguments)
+        ?? TracedMacro.argument(named: "callID", in: arguments)
+      toolCallID = explicitToolCallID ?? detected.toolCallID
+      toolCallIDIsOptional = explicitToolCallID == nil ? detected.toolCallIDIsOptional : false
 
       embeddingInputCount =
         TracedMacro.argument(named: "inputCount", in: arguments)
@@ -360,6 +377,45 @@ public struct TracedMacro: BodyMacro {
     )
   }
 
+  private static func wrappedTypedIDExpression(
+    _ expression: ExprSyntax,
+    wrapperType: String,
+    diagnosticMessage: String,
+    fixItMessage: String,
+    diagnosticNode: AttributeSyntax,
+    context: some MacroExpansionContext
+  ) -> String {
+    let expressionText = expression.description.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard expression.is(StringLiteralExprSyntax.self) else {
+      return expressionText
+    }
+
+    let wrappedExpression = "\(wrapperType)(\(expressionText))"
+    let replacementExpr: ExprSyntax = "\(raw: wrappedExpression)"
+
+    context.diagnose(
+      Diagnostic(
+        node: Syntax(diagnosticNode),
+        message: TracedDiagnosticMessage(
+          message: diagnosticMessage,
+          diagnosticID: .init(domain: "TerraTracedMacro", id: "raw_string_\(wrapperType)"),
+          severity: .warning
+        ),
+        fixIts: [
+          FixIt(
+            message: TracedFixItMessage(
+              message: fixItMessage,
+              fixItID: .init(domain: "TerraTracedMacro", id: "wrap_\(wrapperType)")
+            ),
+            changes: [.replace(oldNode: Syntax(expression), newNode: Syntax(replacementExpr))]
+          )
+        ]
+      )
+    )
+
+    return wrappedExpression
+  }
+
   private static func providerExpression(_ param: FunctionParameterSyntax) -> String {
     let name = parameterName(param)
     let type = normalizedTypeName(param.type)
@@ -382,13 +438,13 @@ public struct TracedMacro: BodyMacro {
 
     switch type {
     case ("String", false):
-      return "Terra.ToolCallID(\(name))"
+      return name
     case ("String", true):
-      return "(\(name).map { Terra.ToolCallID($0) } ?? Terra.ToolCallID())"
+      return name
     case ("ToolCallID", false), ("Terra.ToolCallID", false):
       return name
     case ("ToolCallID", true), ("Terra.ToolCallID", true):
-      return "(\(name) ?? Terra.ToolCallID())"
+      return name
     default:
       return name
     }
@@ -441,81 +497,6 @@ public struct TracedMacro: BodyMacro {
     return value
   }
 
-  private static func requiredTypedArg(
-    named label: String,
-    wrapperType: String,
-    diagnosticMessage: String,
-    fixItMessage: String,
-    in arguments: LabeledExprListSyntax,
-    diagnosticNode: AttributeSyntax,
-    context: some MacroExpansionContext
-  ) throws -> String {
-    guard let value = typedArgument(
-      named: label,
-      wrapperType: wrapperType,
-      diagnosticMessage: diagnosticMessage,
-      fixItMessage: fixItMessage,
-      in: arguments,
-      diagnosticNode: diagnosticNode,
-      context: context
-    ),
-      !value.isEmpty
-    else {
-      throw MacroError.missingOperationArgument
-    }
-    return value
-  }
-
-  private static func wrappedTypedIDExpression(
-    _ expression: ExprSyntax,
-    wrapperType: String,
-    diagnosticMessage: String,
-    fixItMessage: String,
-    diagnosticNode: AttributeSyntax,
-    context: some MacroExpansionContext
-  ) -> String {
-    let expressionText = expression.description.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard expression.is(StringLiteralExprSyntax.self) else {
-      return expressionText
-    }
-
-    let wrappedExpression = "\(wrapperType)(\(expressionText))"
-    let replacementExpr: ExprSyntax = "\(raw: wrappedExpression)"
-
-    context.diagnose(
-      Diagnostic(
-        node: Syntax(diagnosticNode),
-        message: TracedDiagnosticMessage(
-          message: diagnosticMessage,
-          diagnosticID: .init(domain: "TerraTracedMacro", id: "raw_string_\(wrapperType)"),
-          severity: .warning
-        ),
-        fixIts: [
-          FixIt(
-            message: TracedFixItMessage(
-              message: fixItMessage,
-              fixItID: .init(domain: "TerraTracedMacro", id: "wrap_\(wrapperType)")
-            ),
-            changes: [.replace(oldNode: Syntax(expression), newNode: Syntax(replacementExpr))]
-          )
-        ]
-      )
-    )
-
-    return wrappedExpression
-  }
-
-  private struct TracedDiagnosticMessage: DiagnosticMessage {
-    let message: String
-    let diagnosticID: MessageID
-    let severity: DiagnosticSeverity
-  }
-
-  private struct TracedFixItMessage: FixItMessage {
-    let message: String
-    let fixItID: MessageID
-  }
-
   enum MacroError: Error, CustomStringConvertible {
     case missingOperationArgument
     case notAFunction
@@ -535,4 +516,15 @@ public struct TracedMacro: BodyMacro {
       }
     }
   }
+}
+
+private struct TracedDiagnosticMessage: DiagnosticMessage {
+  let message: String
+  let diagnosticID: MessageID
+  let severity: DiagnosticSeverity
+}
+
+private struct TracedFixItMessage: FixItMessage {
+  let message: String
+  let fixItID: MessageID
 }

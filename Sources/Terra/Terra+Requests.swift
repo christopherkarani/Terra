@@ -119,13 +119,18 @@ extension Terra {
 
   package struct ToolRequest: Sendable, Hashable {
     package var name: String
-    package var callID: String
+    package var callId: String
     package var type: String?
 
-    package init(name: String, callID: String, type: String? = nil) {
+    package init(name: String, callId: String, type: String? = nil) {
       self.name = name
-      self.callID = callID
+      self.callId = callId
       self.type = type
+    }
+
+    @available(*, deprecated, message: "Use callId: instead of callID:.")
+    package init(name: String, callID: String, type: String? = nil) {
+      self.init(name: name, callId: callID, type: type)
     }
   }
 

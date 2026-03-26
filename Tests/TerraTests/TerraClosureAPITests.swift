@@ -69,7 +69,7 @@ struct TerraClosureAPITests {
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = try await Terra.stream(model: "local/model") { "ok" }
-    _ = try await Terra.tool(name: "search", callID: "call-1") { "ok" }
+    _ = try await Terra.tool(name: "search", callId: "call-1") { "ok" }
     _ = try await Terra.embedding(model: "embed-model") { "ok" }
     _ = try await Terra.safetyCheck(name: "toxicity", subject: "hello") { "ok" }
 
