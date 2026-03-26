@@ -483,10 +483,11 @@ extension Terra {
     func runInference<R>(
       request: InferenceRequest,
       attributes: AttributeBag,
+      parent: Terra.SpanHandle? = nil,
       _ body: @Sendable (InferenceTrace) async throws -> R
     ) async rethrows -> R {
       Terra.agentContext?.recordModel(request.model)
-      return try await Terra.withInferenceSpan(request) { scope in
+      return try await Terra.withInferenceSpan(request, parent: parent) { scope in
         if !attributes.values.isEmpty {
           scope.setAttributes(attributes.openTelemetryAttributes)
         }
@@ -507,10 +508,11 @@ extension Terra {
     func runStreaming<R>(
       request: StreamingRequest,
       attributes: AttributeBag,
+      parent: Terra.SpanHandle? = nil,
       _ body: @Sendable (StreamingTrace) async throws -> R
     ) async rethrows -> R {
       Terra.agentContext?.recordModel(request.model)
-      return try await Terra.withStreamingInferenceSpan(request) { scope in
+      return try await Terra.withStreamingInferenceSpan(request, parent: parent) { scope in
         if !attributes.values.isEmpty {
           scope.setAttributes(attributes.openTelemetryAttributes)
         }
@@ -521,9 +523,10 @@ extension Terra {
     func runEmbedding<R>(
       request: EmbeddingRequest,
       attributes: AttributeBag,
+      parent: Terra.SpanHandle? = nil,
       _ body: @Sendable (EmbeddingTrace) async throws -> R
     ) async rethrows -> R {
-      return try await Terra.withEmbeddingSpan(request) { scope in
+      return try await Terra.withEmbeddingSpan(request, parent: parent) { scope in
         if !attributes.values.isEmpty {
           scope.setAttributes(attributes.openTelemetryAttributes)
         }
@@ -534,11 +537,12 @@ extension Terra {
     func runAgent<R>(
       request: AgentRequest,
       attributes: AttributeBag,
+      parent: Terra.SpanHandle? = nil,
       _ body: @Sendable (AgentTrace) async throws -> R
     ) async rethrows -> R {
       let context = Terra.AgentContext()
       return try await Terra.$agentContext.withValue(context) {
-        try await Terra.withAgentInvocationSpan(agent: request) { scope in
+        try await Terra.withAgentInvocationSpan(agent: request, parent: parent) { scope in
           if !attributes.values.isEmpty {
             scope.setAttributes(attributes.openTelemetryAttributes)
           }
@@ -558,10 +562,11 @@ extension Terra {
     func runTool<R>(
       request: ToolRequest,
       attributes: AttributeBag,
+      parent: Terra.SpanHandle? = nil,
       _ body: @Sendable (ToolTrace) async throws -> R
     ) async rethrows -> R {
       Terra.agentContext?.recordTool(request.name)
-      return try await Terra.withToolExecutionSpan(tool: request) { scope in
+      return try await Terra.withToolExecutionSpan(tool: request, parent: parent) { scope in
         if !attributes.values.isEmpty {
           scope.setAttributes(attributes.openTelemetryAttributes)
         }
@@ -572,9 +577,10 @@ extension Terra {
     func runSafetyCheck<R>(
       request: SafetyCheckRequest,
       attributes: AttributeBag,
+      parent: Terra.SpanHandle? = nil,
       _ body: @Sendable (SafetyCheckTrace) async throws -> R
     ) async rethrows -> R {
-      return try await Terra.withSafetyCheckSpan(request) { scope in
+      return try await Terra.withSafetyCheckSpan(request, parent: parent) { scope in
         if !attributes.values.isEmpty {
           scope.setAttributes(attributes.openTelemetryAttributes)
         }
@@ -587,6 +593,7 @@ extension Terra {
 private struct _CallMetadata: Sendable {
   var includeContent: Bool = false
   var attributes: Terra.AttributeBag = .init()
+  var parentSpan: Terra.SpanHandle?
 }
 
 extension Terra {
@@ -655,6 +662,12 @@ extension Terra {
       return copy
     }
 
+    package func under(_ parent: SpanHandle) -> Self {
+      var copy = self
+      copy.metadata.parentSpan = parent
+      return copy
+    }
+
     @discardableResult
     package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
@@ -672,7 +685,12 @@ extension Terra {
         return copy
       }()
       return try await runtime.withSession { session in
-        try await session.runInference(request: request, attributes: metadata.attributes, body)
+        try await session.runInference(
+          request: request,
+          attributes: metadata.attributes,
+          parent: metadata.parentSpan,
+          body
+        )
       }
     }
 
@@ -745,6 +763,12 @@ extension Terra {
       return copy
     }
 
+    package func under(_ parent: SpanHandle) -> Self {
+      var copy = self
+      copy.metadata.parentSpan = parent
+      return copy
+    }
+
     @discardableResult
     package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
@@ -762,7 +786,12 @@ extension Terra {
         return copy
       }()
       return try await runtime.withSession { session in
-        try await session.runStreaming(request: request, attributes: metadata.attributes, body)
+        try await session.runStreaming(
+          request: request,
+          attributes: metadata.attributes,
+          parent: metadata.parentSpan,
+          body
+        )
       }
     }
 
@@ -817,6 +846,12 @@ extension Terra {
       return copy
     }
 
+    package func under(_ parent: SpanHandle) -> Self {
+      var copy = self
+      copy.metadata.parentSpan = parent
+      return copy
+    }
+
     @discardableResult
     package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
@@ -827,7 +862,12 @@ extension Terra {
     @discardableResult
     package func execute<R>(_ body: @Sendable (EmbeddingTrace) async throws -> R) async rethrows -> R {
       try await runtime.withSession { session in
-        try await session.runEmbedding(request: request, attributes: metadata.attributes, body)
+        try await session.runEmbedding(
+          request: request,
+          attributes: metadata.attributes,
+          parent: metadata.parentSpan,
+          body
+        )
       }
     }
 
@@ -882,6 +922,12 @@ extension Terra {
       return copy
     }
 
+    package func under(_ parent: SpanHandle) -> Self {
+      var copy = self
+      copy.metadata.parentSpan = parent
+      return copy
+    }
+
     @discardableResult
     package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
@@ -892,7 +938,12 @@ extension Terra {
     @discardableResult
     package func execute<R>(_ body: @Sendable (AgentTrace) async throws -> R) async rethrows -> R {
       try await runtime.withSession { session in
-        try await session.runAgent(request: request, attributes: metadata.attributes, body)
+        try await session.runAgent(
+          request: request,
+          attributes: metadata.attributes,
+          parent: metadata.parentSpan,
+          body
+        )
       }
     }
 
@@ -947,6 +998,12 @@ extension Terra {
       return copy
     }
 
+    package func under(_ parent: SpanHandle) -> Self {
+      var copy = self
+      copy.metadata.parentSpan = parent
+      return copy
+    }
+
     @discardableResult
     package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
@@ -957,7 +1014,12 @@ extension Terra {
     @discardableResult
     package func execute<R>(_ body: @Sendable (ToolTrace) async throws -> R) async rethrows -> R {
       try await runtime.withSession { session in
-        try await session.runTool(request: request, attributes: metadata.attributes, body)
+        try await session.runTool(
+          request: request,
+          attributes: metadata.attributes,
+          parent: metadata.parentSpan,
+          body
+        )
       }
     }
 
@@ -1012,6 +1074,12 @@ extension Terra {
       return copy
     }
 
+    package func under(_ parent: SpanHandle) -> Self {
+      var copy = self
+      copy.metadata.parentSpan = parent
+      return copy
+    }
+
     @discardableResult
     package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
@@ -1029,7 +1097,12 @@ extension Terra {
         return copy
       }()
       return try await runtime.withSession { session in
-        try await session.runSafetyCheck(request: request, attributes: metadata.attributes, body)
+        try await session.runSafetyCheck(
+          request: request,
+          attributes: metadata.attributes,
+          parent: metadata.parentSpan,
+          body
+        )
       }
     }
 

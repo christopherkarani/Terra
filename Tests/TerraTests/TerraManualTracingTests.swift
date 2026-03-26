@@ -94,4 +94,52 @@ struct TerraManualTracingTests {
     #expect(guidance.codeExample.contains("Terra.tool"))
     #expect(guidance.commonMistakes.contains(where: { $0.contains("closure") }))
   }
+
+  @Test("Agentic API keeps child inference and tool spans under one root")
+  func agenticAPIKeepsChildSpansUnderOneRoot() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    let value = try await Terra.agentic(name: "planner-loop", id: "issue-42") { agent in
+      let current = try #require(Terra.currentSpan())
+      #expect(current.spanId == agent.spanId)
+
+      let draft = try await agent.infer("child-model", prompt: "plan") { "draft" }
+      let docs = try await agent.tool("search", callId: "call-1") { "docs" }
+      return draft + docs
+    }
+
+    #expect(value == "draftdocs")
+
+    let spans = support.finishedSpans()
+    let root = try #require(spans.first(where: { $0.name == "planner-loop" }))
+    let inference = try #require(spans.first(where: { $0.name == Terra.SpanNames.inference }))
+    let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
+
+    #expect(inference.parentSpanId?.hexString == root.spanId.hexString)
+    #expect(tool.parentSpanId?.hexString == root.spanId.hexString)
+    #expect(inference.traceId.hexString == root.traceId.hexString)
+    #expect(tool.traceId.hexString == root.traceId.hexString)
+  }
+
+  @Test("SpanHandle detached helper preserves parent trace context")
+  func spanHandleDetachedHelperPreservesParentTraceContext() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    let span = Terra.startSpan(name: "manual-root", id: "issue-11")
+    let task = span.detached { _ in
+      try await Terra.tool("search", callId: "call-detached").run { "ok" }
+    }
+
+    _ = try await task.value
+    span.end()
+
+    let spans = support.finishedSpans()
+    let root = try #require(spans.first(where: { $0.name == "manual-root" }))
+    let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
+
+    #expect(tool.parentSpanId?.hexString == root.spanId.hexString)
+    #expect(tool.traceId.hexString == root.traceId.hexString)
+  }
 }

@@ -59,4 +59,25 @@ struct TerraAgentContextTests {
     #expect(agentSpan.attributes["terra.agent.tool_call_count"]?.description == "0")
     #expect(agentSpan.attributes["terra.agent.tools_used"]?.description == "")
   }
+
+  @Test("AgentHandle detached helper preserves agent context")
+  func detachedHelperPreservesContext() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    _ = try await Terra.agentic(name: "planner") { agent in
+      let task = agent.detached {
+        _ = try await $0.tool("detached-helper", callId: "call-1") { "ok" }
+      }
+      _ = try await task.value
+      return "done"
+    }
+
+    let spans = support.finishedSpans()
+    let root = try #require(spans.first(where: { $0.name == "planner" }))
+    let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
+
+    #expect(tool.parentSpanId?.hexString == root.spanId.hexString)
+    #expect(tool.traceId.hexString == root.traceId.hexString)
+  }
 }

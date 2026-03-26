@@ -117,6 +117,17 @@ extension Terra {
   public static func capabilities() -> [Capability] {
     [
       Capability(
+        name: "agentic_workflows",
+        description: "Trace a multi-step agent loop with one root span, child tool/model operations, and explicit detached-task propagation helpers.",
+        example: """
+        let result = try await Terra.agentic(name: "planner", id: "issue-42") { agent in
+          agent.checkpoint("plan")
+          return try await agent.tool("search", callId: "call-1") { "ok" }
+        }
+        """,
+        entryPoint: "Terra.agentic(name:id:_:)"
+      ),
+      Capability(
         name: "task_tracing",
         description: "Trace a unit of async work with one obvious entry point and automatic lifecycle management.",
         example: """
@@ -210,14 +221,16 @@ extension Terra {
       Guide(
         title: "Choosing infer vs stream vs agent",
         problem: "It is unclear which Terra factory matches a request/response call, a token stream, or a full agent loop.",
-        solution: "Use infer for one-shot responses, stream for token-by-token output, and agent for a traced planner/executor loop.",
+        solution: "Use infer for one-shot responses, stream for token-by-token output, and agentic for a traced planner/executor loop with tools or multiple iterations.",
         codeExample: """
         let summary = try await Terra.infer("local-coreml-model", prompt: "Summarize").run { "done" }
         let streamed = try await Terra.stream("local-mlx-model", prompt: "Explain").run { trace in
           trace.firstToken()
           return "done"
         }
-        let turn = try await Terra.agent("planner", id: "turn-1").run { "done" }
+        let turn = try await Terra.agentic(name: "planner", id: "turn-1") { agent in
+          try await agent.tool("search", callId: "call-1") { "done" }
+        }
         """
       ),
       Guide(
@@ -328,17 +341,21 @@ extension Terra {
         complexity: .intermediate
       ),
       Example(
-        title: "Agentic Loop With Iterations",
+        title: "Agentic Loop With Tool Calls",
         scenario: "I want to trace a planner/executor loop with multiple iterations.",
         code: """
         import Terra
 
-        let outcome = try await Terra.trace(name: "planner-loop", id: "issue-42") { span in
+        let outcome = try await Terra.agentic(name: "planner-loop", id: "issue-42") { agent in
           for iteration in 1...3 {
-            span.attribute("loop.iteration", iteration)
-            _ = try await Terra.agent("planner", id: "iteration-\\(iteration)").run { trace in
+            agent.checkpoint("iteration.\\(iteration)")
+            _ = try await agent.infer("local-mlx-model", prompt: "plan iteration \\(iteration)") { trace in
               trace.event("plan.iteration")
               return "plan-\\(iteration)"
+            }
+            _ = try await agent.tool("search", callId: "call-\\(iteration)") { trace in
+              trace.event("tool.iteration")
+              return "results-\\(iteration)"
             }
           }
           return "done"
@@ -460,22 +477,20 @@ extension Terra {
 
     if normalized.contains("agentic workflow") || normalized.contains("agent loop") {
       return Guidance(
-        why: "Agentic workflows usually include planning, tool calls, and follow-up work that outlive a single model callback. Terra.trace gives one obvious span owner, while infer/stream/agent describe the workload shape inside that task.",
-        apiToUse: "Use Terra.trace(name:id:_:), then choose Terra.infer for one-shot model calls, Terra.stream for token streaming, and Terra.agent for a traced planner/executor turn.",
+        why: "Agentic workflows usually include planning, tool calls, and follow-up work that outlive a single model callback. Terra.agentic gives one root span owner and keeps child operations explicit through helper methods.",
+        apiToUse: "Use Terra.agentic(name:id:_:), then call agent.infer, agent.stream, agent.tool, and agent.detached when work crosses a detached-task boundary.",
         codeExample: """
-        let result = try await Terra.trace(name: "agent-turn", id: "turn-42") { span in
-          span.event("planning")
-          let draft = try await Terra.infer("local-mlx-model", prompt: "Plan").run { "draft" }
-          span.event("tooling")
-          let tool = try await Terra.tool("search", callId: "call-42").run { "results" }
-          span.event("complete")
+        let result = try await Terra.agentic(name: "agent-turn", id: "turn-42") { agent in
+          agent.checkpoint("planning")
+          let draft = try await agent.infer("local-mlx-model", prompt: "Plan") { "draft" }
+          let tool = try await agent.tool("search", callId: "call-42") { "results" }
           return draft + tool
         }
         """,
         commonMistakes: [
-          "Using Terra.stream(...).run when later tool work needs the same parent span.",
+          "Using Terra.stream(...).run when later tool work needs the same long-lived parent span.",
           "Creating a tool span without a stable callId.",
-          "Trying to infer the right API from source files instead of Terra.guides().",
+          "Using raw Task.detached instead of agent.detached when parent trace linkage matters.",
         ]
       )
     }

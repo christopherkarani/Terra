@@ -79,6 +79,12 @@ extension Terra {
       /// lifecycle-failed, for example when code tries to mutate an ended span handle.
       public static let guidance = Self("guidance")
 
+      /// Terra detected that the caller chose a closure-scoped API for a multi-step agentic workflow.
+      public static let wrong_api_for_agentic = Self("wrong_api_for_agentic")
+
+      /// Terra detected that trace context was dropped across an async boundary and can point to the supported fix.
+      public static let context_not_propagated = Self("context_not_propagated")
+
       /// Terra detected configuration that is syntactically valid but incomplete for the requested workflow.
       ///
       /// Use this for actionable setup problems where the SDK can point callers to the
@@ -192,6 +198,10 @@ extension Terra.TerraError.Code {
       return "Check TerraError.context and configuration deltas, then retry Terra.reconfigure(...)."
     case Terra.TerraError.Code.guidance.rawValue:
       return "Follow the guidance message and prefer Terra.trace(...) or Terra.startSpan(...) for explicit lifecycle workflows."
+    case Terra.TerraError.Code.wrong_api_for_agentic.rawValue:
+      return "Use Terra.agentic(...) or explicitly bind child work with .under(parentSpan) when the workflow spans multiple steps."
+    case Terra.TerraError.Code.context_not_propagated.rawValue:
+      return "Use SpanHandle.detached(...) or AgentHandle.detached(...) instead of raw Task.detached when parent trace linkage matters."
     case Terra.TerraError.Code.misconfiguration.rawValue:
       return "Apply the suggested Terra configuration fix, then rerun Terra.diagnose() to verify the setup."
     case Terra.TerraError.Code.invalid_operation.rawValue:
@@ -239,6 +249,60 @@ extension Terra.TerraError {
       \(example)
       """,
       context: merged
+    )
+  }
+
+  /// Creates a guidance error for choosing a closure-scoped API where an agentic root span is required.
+  public static func wrongAPIForAgentic(
+    usedAPI: String,
+    suggestedAPI: String,
+    why: String,
+    example: String
+  ) -> Self {
+    let message = """
+    \(usedAPI) is the wrong Terra entry point for this agentic workflow.
+
+    Why this pattern does not work:
+    \(why)
+
+    Use this API instead:
+    \(suggestedAPI)
+
+    Example:
+    \(example)
+    """
+
+    return Self(
+      code: .wrong_api_for_agentic,
+      message: message,
+      context: [
+        "used_api": usedAPI,
+        "correct_api": suggestedAPI,
+        "why": why,
+        "example": example,
+        "recovery_suggestion": "Use \(suggestedAPI).",
+      ]
+    )
+  }
+
+  /// Creates a guidance error for trace context that was dropped across an async boundary.
+  public static func contextNotPropagated(reason: String, fix: String) -> Self {
+    Self(
+      code: .context_not_propagated,
+      message: """
+      Terra could not keep the active trace context attached to this work.
+
+      Reason:
+      \(reason)
+
+      Fix:
+      \(fix)
+      """,
+      context: [
+        "reason": reason,
+        "fix": fix,
+        "recovery_suggestion": fix,
+      ]
     )
   }
 

@@ -19,6 +19,7 @@ public enum Terra {
   static func withInferenceSpan<R>(
     _ request: InferenceRequest,
     stream: Bool? = nil,
+    parent: SpanHandle? = nil,
     _ body: @Sendable (Scope<InferenceSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
@@ -62,6 +63,7 @@ public enum Terra {
       kind: .internal,
       attributes: attributes,
       allowErrorMessageCapture: privacy.shouldCapture(includeContent: request.includeContent),
+      parent: parent,
       body
     )
   }
@@ -69,6 +71,7 @@ public enum Terra {
   @discardableResult
   static func withStreamingInferenceSpan<R>(
     _ request: StreamingRequest,
+    parent: SpanHandle? = nil,
     _ body: @Sendable (StreamingInferenceScope) async throws -> R
   ) async rethrows -> R {
     let streamingRequest = InferenceRequest(
@@ -80,7 +83,7 @@ public enum Terra {
     )
 
     let startedAt = ContinuousClock.now
-    return try await withInferenceSpan(streamingRequest, stream: true) { scope in
+    return try await withInferenceSpan(streamingRequest, stream: true, parent: parent) { scope in
       let streamingScope = StreamingInferenceScope(scope: scope, startedAt: startedAt)
       if let expectedOutputTokens = request.expectedOutputTokens, expectedOutputTokens > 0 {
         streamingScope.setAttributes([Keys.Terra.streamOutputTokens: .int(expectedOutputTokens)])
@@ -93,6 +96,7 @@ public enum Terra {
   @discardableResult
   static func withAgentInvocationSpan<R>(
     agent: AgentRequest,
+    parent: SpanHandle? = nil,
     _ body: @Sendable (Scope<AgentInvocationSpan>) async throws -> R
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
@@ -108,6 +112,7 @@ public enum Terra {
       kind: .internal,
       attributes: attributes,
       allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(includeContent: false),
+      parent: parent,
       body
     )
   }
@@ -115,6 +120,7 @@ public enum Terra {
   @discardableResult
   static func withToolExecutionSpan<R>(
     tool: ToolRequest,
+    parent: SpanHandle? = nil,
     _ body: @Sendable (Scope<ToolExecutionSpan>) async throws -> R
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
@@ -131,6 +137,7 @@ public enum Terra {
       kind: .internal,
       attributes: attributes,
       allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(includeContent: false),
+      parent: parent,
       body
     )
   }
@@ -138,6 +145,7 @@ public enum Terra {
   @discardableResult
   static func withEmbeddingSpan<R>(
     _ request: EmbeddingRequest,
+    parent: SpanHandle? = nil,
     _ body: @Sendable (Scope<EmbeddingSpan>) async throws -> R
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
@@ -153,6 +161,7 @@ public enum Terra {
       kind: .internal,
       attributes: attributes,
       allowErrorMessageCapture: Runtime.shared.privacy.shouldCapture(includeContent: false),
+      parent: parent,
       body
     )
   }
@@ -160,6 +169,7 @@ public enum Terra {
   @discardableResult
   static func withSafetyCheckSpan<R>(
     _ check: SafetyCheckRequest,
+    parent: SpanHandle? = nil,
     _ body: @Sendable (Scope<SafetyCheckSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
@@ -186,6 +196,7 @@ public enum Terra {
       kind: .internal,
       attributes: attributes,
       allowErrorMessageCapture: privacy.shouldCapture(includeContent: check.includeContent),
+      parent: parent,
       body
     )
   }
@@ -197,6 +208,7 @@ public enum Terra {
     kind: SpanKind,
     attributes: [String: AttributeValue],
     allowErrorMessageCapture: Bool,
+    parent explicitParent: SpanHandle? = nil,
     _ body: @Sendable (Scope<Kind>) async throws -> R
   ) async rethrows -> R {
     let tracer = tracer()
@@ -209,7 +221,7 @@ public enum Terra {
     }
     spanBuilder.setAttribute(key: Keys.Terra.thermalState, value: .string(Runtime.thermalStateLabel()))
 
-    let parentSpan = Terra.currentSpan()?.otelSpan ?? OpenTelemetry.instance.contextProvider.activeSpan
+    let parentSpan = explicitParent?.otelSpan ?? Terra.currentSpan()?.otelSpan ?? OpenTelemetry.instance.contextProvider.activeSpan
     if let parentSpan {
       spanBuilder.setParent(parentSpan)
     }

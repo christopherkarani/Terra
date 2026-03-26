@@ -139,4 +139,28 @@ struct TerraComposableAPITests {
     #expect(span.attributes["builder.attr.base"] == nil)
     #expect(span.events.isEmpty)
   }
+
+  @Test("Operation under(parent) overrides the ambient Terra parent span")
+  func operationUnderOverridesAmbientParent() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    try await Terra.trace(name: "outer") { outer in
+      let manual = Terra.startSpan(name: "manual")
+      defer { manual.end() }
+
+      _ = try await Terra
+        .tool("search", callId: "call-1")
+        .under(outer)
+        .run { "ok" }
+    }
+
+    let spans = support.finishedSpans()
+    let outer = try #require(spans.first(where: { $0.name == "outer" }))
+    let manual = try #require(spans.first(where: { $0.name == "manual" }))
+    let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
+
+    #expect(tool.parentSpanId?.hexString == outer.spanId.hexString)
+    #expect(tool.parentSpanId?.hexString != manual.spanId.hexString)
+  }
 }

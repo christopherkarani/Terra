@@ -42,8 +42,8 @@ struct TerraIdentifierTests {
   func agenticWorkflowGuidanceIsActionable() {
     let guidance = Terra.ask("agentic workflow")
 
-    #expect(guidance.apiToUse.contains("Terra.trace"))
-    #expect(guidance.codeExample.contains("Terra.tool"))
+    #expect(guidance.apiToUse.contains("Terra.agentic"))
+    #expect(guidance.codeExample.contains("agent.tool"))
     #expect(!guidance.commonMistakes.isEmpty)
   }
 }

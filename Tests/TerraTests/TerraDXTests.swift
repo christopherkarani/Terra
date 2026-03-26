@@ -11,7 +11,7 @@ struct TerraDXTests {
     #expect(examples.count >= 8)
     #expect(examples.contains { $0.title == "Basic Inference Tracing" })
     #expect(examples.contains { $0.title == "Streaming With Tool Calls" })
-    #expect(examples.contains { $0.title == "Agentic Loop With Iterations" })
+    #expect(examples.contains { $0.title == "Agentic Loop With Tool Calls" })
     #expect(examples.contains { $0.title == "Nested Spans" })
     #expect(examples.contains { $0.title == "Error Handling And Reporting" })
     #expect(examples.allSatisfy { !$0.code.isEmpty })
@@ -142,9 +142,17 @@ struct TerraDXTests {
       example: "let builder = Terra.trace(name: \"request\")"
     )
 
+    let agentic = Terra.TerraError.wrongAPIForAgentic(
+      usedAPI: "Terra.stream(...).run",
+      suggestedAPI: "Terra.agentic(name:id:_:)",
+      why: "The workflow needs one parent span across multiple tool calls.",
+      example: "try await Terra.agentic(name: \"planner\") { _ in }"
+    )
+
     #expect(guidance.recoverySuggestion.contains("Terra.trace"))
     #expect(guidance.message.contains("Example:"))
     #expect(invalid.recoverySuggestion.contains("Terra.trace(name:)"))
+    #expect(agentic.recoverySuggestion.contains("Terra.agentic"))
   }
 }
 

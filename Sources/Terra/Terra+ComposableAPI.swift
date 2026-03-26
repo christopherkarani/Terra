@@ -357,6 +357,7 @@ extension Terra {
     private var capturePolicy: CapturePolicy = .default
     private var attributes: [_TraceAttribute] = []
     private var metadataEntries: [Metadata] = []
+    private var parentSpan: SpanHandle?
 
     fileprivate init(operation: _Operation) {
       self.operation = operation
@@ -373,6 +374,16 @@ extension Terra {
     public func capture(_ policy: CapturePolicy) -> Self {
       var copy = self
       copy.capturePolicy = policy
+      return copy
+    }
+
+    /// Binds the operation to an explicit Terra parent span.
+    ///
+    /// Use this when child work must stay attached to a long-lived manual or agentic
+    /// span even if the call executes outside the parent closure's immediate task context.
+    public func under(_ parent: SpanHandle) -> Self {
+      var copy = self
+      copy.parentSpan = parent
       return copy
     }
 
@@ -405,7 +416,12 @@ extension Terra {
     public func run<R: Sendable>(_ body: @escaping @Sendable (TraceHandle) async throws -> R) async rethrows -> R {
       let attributes = _mergedAttributes()
       let events = _metadataEvents()
-      return try await _run(operation: operation, capturePolicy: capturePolicy, attributes: attributes) { handle in
+      return try await _run(
+        operation: operation,
+        capturePolicy: capturePolicy,
+        attributes: attributes,
+        parent: parentSpan
+      ) { handle in
         for event in events {
           _ = handle.event(event)
         }
@@ -891,11 +907,13 @@ private extension Terra {
     operation: _Operation,
     capturePolicy: CapturePolicy,
     attributes: [_TraceAttribute],
+    parent: SpanHandle? = nil,
     _ body: @escaping @Sendable (TraceHandle) async throws -> R
   ) async rethrows -> R {
     switch operation {
     case .infer(let operation):
       var call = inference(model: operation.model, prompt: operation.prompt)
+      if let parent { call = call.under(parent) }
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
@@ -915,6 +933,7 @@ private extension Terra {
 
     case .stream(let operation):
       var call = stream(model: operation.model, prompt: operation.prompt)
+      if let parent { call = call.under(parent) }
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
@@ -936,6 +955,7 @@ private extension Terra {
 
     case .embed(let operation):
       var call = embedding(model: operation.model, inputCount: operation.inputCount)
+      if let parent { call = call.under(parent) }
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
@@ -951,6 +971,7 @@ private extension Terra {
 
     case .agent(let operation):
       var call = agent(name: operation.name, id: operation.id)
+      if let parent { call = call.under(parent) }
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
@@ -966,6 +987,7 @@ private extension Terra {
 
     case .tool(let operation):
       var call = tool(name: operation.name, callId: operation.callId, type: operation.type)
+      if let parent { call = call.under(parent) }
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }
@@ -981,6 +1003,7 @@ private extension Terra {
 
     case .safety(let operation):
       var call = safetyCheck(name: operation.name, subject: operation.subject)
+      if let parent { call = call.under(parent) }
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }
       if let runtime = operation.runtime { call = call.runtime(runtime.rawValue) }

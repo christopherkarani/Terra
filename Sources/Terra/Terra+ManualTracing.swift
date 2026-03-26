@@ -86,6 +86,27 @@ extension Terra {
     public func end() {
       storage.end()
     }
+
+    /// Runs detached work while keeping this span active in the new task.
+    ///
+    /// Use this instead of raw `Task.detached` when child work must remain linked
+    /// to the current Terra trace even after crossing a detached-task boundary.
+    public func detached<R: Sendable>(
+      priority: TaskPriority? = nil,
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
+    ) -> Task<R, Error> {
+      Task.detached(priority: priority) {
+        guard !isEnded else {
+          throw Terra.TerraError.contextNotPropagated(
+            reason: "Detached work was launched from an ended Terra span.",
+            fix: "Launch detached work before ending the span, or create a new Terra.agentic/trace root for the detached task."
+          )
+        }
+        return try await Terra._withActiveSpan(self) {
+          try await body(self)
+        }
+      }
+    }
   }
 
   fileprivate enum _SpanMutationValue {
@@ -551,6 +572,193 @@ extension Terra {
     defer { span.end() }
     return try await _withActiveSpan(span) {
       try await body(span)
+    }
+  }
+
+  /// Traces a multi-step agentic workflow under one obvious root span.
+  ///
+  /// Prefer `agentic` when a coding agent will iterate, call tools, or launch
+  /// follow-up work that should stay correlated to one long-lived parent span.
+  public static func agentic<R: Sendable>(
+    name: String,
+    id: String? = nil,
+    _ body: @escaping @Sendable (AgentHandle) async throws -> R
+  ) async throws -> R {
+    let span = startSpan(name: name, id: id)
+    defer { span.end() }
+    return try await _withActiveSpan(span) {
+      try await body(AgentHandle(span: span))
+    }
+  }
+
+  /// A sendable helper for agent loops that need explicit checkpoints and child operations.
+  public struct AgentHandle: Sendable {
+    private let span: SpanHandle
+
+    fileprivate init(span: SpanHandle) {
+      self.span = span
+    }
+
+    public var traceId: String { span.traceId }
+    public var spanId: String { span.spanId }
+    public var parentSpan: SpanHandle { span }
+
+    /// Records a named checkpoint event under the root agentic span.
+    @discardableResult
+    public func checkpoint(_ name: String) -> Self {
+      span.event("checkpoint.\(name)")
+      return self
+    }
+
+    /// Records a named event on the agent root span.
+    @discardableResult
+    public func event(_ name: String) -> Self {
+      span.event(name)
+      return self
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await infer(
+        model,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens
+      ) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async rethrows -> R {
+      try await Terra
+        .infer(
+          model,
+          prompt: prompt,
+          provider: provider,
+          runtime: runtime,
+          temperature: temperature,
+          maxTokens: maxTokens
+        )
+        .under(span)
+        .run(body)
+    }
+
+    @discardableResult
+    public func stream<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      expectedTokens: Int? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await stream(
+        model,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        expectedTokens: expectedTokens
+      ) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func stream<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      expectedTokens: Int? = nil,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async rethrows -> R {
+      try await Terra
+        .stream(
+          model,
+          prompt: prompt,
+          provider: provider,
+          runtime: runtime,
+          temperature: temperature,
+          maxTokens: maxTokens,
+          expectedTokens: expectedTokens
+        )
+        .under(span)
+        .run(body)
+    }
+
+    @discardableResult
+    public func tool<R: Sendable>(
+      _ name: String,
+      callId: String? = nil,
+      type: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await tool(
+        name,
+        callId: callId,
+        type: type,
+        provider: provider,
+        runtime: runtime
+      ) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func tool<R: Sendable>(
+      _ name: String,
+      callId: String? = nil,
+      type: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async rethrows -> R {
+      let operation = if let callId {
+        Terra.tool(name, callId: callId, type: type, provider: provider, runtime: runtime)
+      } else {
+        Terra.tool(name, type: type, provider: provider, runtime: runtime)
+      }
+
+      return try await operation
+        .under(span)
+        .run(body)
+    }
+
+    /// Runs detached work while keeping the agent root span active.
+    public func detached<R: Sendable>(
+      priority: TaskPriority? = nil,
+      _ body: @escaping @Sendable (AgentHandle) async throws -> R
+    ) -> Task<R, Error> {
+      span.detached(priority: priority) { _ in
+        try await body(self)
+      }
     }
   }
 
