@@ -193,19 +193,19 @@ extension Terra.TerraError.Code {
     case Terra.TerraError.Code.invalid_lifecycle_state.rawValue:
       return "Call lifecycle APIs only from valid states (for example: start before reconfigure/shutdown)."
     case Terra.TerraError.Code.start_failed.rawValue:
-      return "Check TerraError.context and exporter/runtime configuration, then retry Terra.start()."
+      return "Check TerraError.context and exporter/runtime configuration, then retry Terra.start(). Hint: print(Terra.help()) and rerun Terra.diagnose()."
     case Terra.TerraError.Code.reconfigure_failed.rawValue:
-      return "Check TerraError.context and configuration deltas, then retry Terra.reconfigure(...)."
+      return "Check TerraError.context and configuration deltas, then retry Terra.reconfigure(...). Hint: print(Terra.help()) and rerun Terra.diagnose()."
     case Terra.TerraError.Code.guidance.rawValue:
-      return "Follow the guidance message and prefer Terra.trace(...) or Terra.startSpan(...) for explicit lifecycle workflows."
+      return #"Follow the guidance message, print(Terra.help()), and use Terra.ask("tracing workflow") or Terra.examples() for the closest runnable fix."#
     case Terra.TerraError.Code.wrong_api_for_agentic.rawValue:
-      return "Use Terra.agentic(...) or explicitly bind child work with .under(parentSpan) when the workflow spans multiple steps."
+      return #"Use Terra.loop(...) for mutable transcripts or Terra.agentic(...) for multi-step workflows, then check Terra.ask("agent loop") for the copy-paste pattern."#
     case Terra.TerraError.Code.context_not_propagated.rawValue:
-      return "Use SpanHandle.detached(...) or AgentHandle.detached(...) instead of raw Task.detached when parent trace linkage matters."
+      return "Use SpanHandle.detached(...), AgentHandle.detached(...), or AgentLoopScope.detached(...) instead of raw Task.detached when parent trace linkage matters. Hint: print(Terra.help())."
     case Terra.TerraError.Code.misconfiguration.rawValue:
-      return "Apply the suggested Terra configuration fix, then rerun Terra.diagnose() to verify the setup."
+      return "Apply the suggested Terra configuration fix, then rerun Terra.diagnose() to verify the setup. Hint: print(Terra.help()) and use Terra.ask(\"quickstart and diagnose setup\")."
     case Terra.TerraError.Code.invalid_operation.rawValue:
-      return "Adjust the Terra API sequence to the suggested pattern and retry the operation."
+      return "Adjust the Terra API sequence to the suggested pattern and retry the operation. Hint: print(Terra.help()) and inspect Terra.examples() for the canonical flow."
     default:
       return "Inspect TerraError.context and TerraError.underlying, then retry with corrected configuration/state."
     }
@@ -233,7 +233,7 @@ extension Terra.TerraError {
     merged["why"] = why
     merged["correct_api"] = correctAPI
     merged["example"] = example
-    merged["recovery_suggestion"] = "Use \(correctAPI)."
+    merged["recovery_suggestion"] = #"Use \#(correctAPI). Hint: print(Terra.help()), use Terra.ask("tracing workflow"), and inspect Terra.examples() for the nearest runnable pattern."#
     return Self(
       code: .guidance,
       message: """
@@ -280,7 +280,7 @@ extension Terra.TerraError {
         "correct_api": suggestedAPI,
         "why": why,
         "example": example,
-        "recovery_suggestion": "Use \(suggestedAPI).",
+        "recovery_suggestion": #"Use \#(suggestedAPI). Hint: print(Terra.help()) and use Terra.ask("agent loop") for the canonical pattern."#,
       ]
     )
   }
@@ -301,7 +301,7 @@ extension Terra.TerraError {
       context: [
         "reason": reason,
         "fix": fix,
-        "recovery_suggestion": fix,
+        "recovery_suggestion": "\(fix) Hint: print(Terra.help()) and inspect Terra.examples() for detached-work patterns.",
       ]
     )
   }
@@ -334,7 +334,7 @@ extension Terra.TerraError {
       merged["example"] = example
     }
     if let correctAPI {
-      merged["recovery_suggestion"] = "Use \(correctAPI)."
+      merged["recovery_suggestion"] = "Use \(correctAPI). Hint: print(Terra.help()) and inspect Terra.examples() for the canonical sequence."
     }
     return Self(code: .invalid_operation, message: reason, context: merged)
   }

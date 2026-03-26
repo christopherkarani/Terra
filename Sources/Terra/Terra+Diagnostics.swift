@@ -66,7 +66,7 @@ extension Terra {
             code: "MISSING_ENDPOINT",
             severity: .error,
             explanation: "Terra has an installed OpenTelemetry configuration but no traces endpoint was resolved.",
-            fix: "Set a valid OTLP traces endpoint or call Terra.quickStart() for local development."
+            fix: "Set a valid OTLP traces endpoint or call Terra.quickStart() for local development. Hint: print(Terra.help())."
           )
         )
       }
@@ -76,7 +76,7 @@ extension Terra {
           code: "MISSING_ENDPOINT",
           severity: hasProvider ? .warning : .error,
           explanation: "No OTLP endpoint is configured for Terra's managed exporter path.",
-          fix: "Call Terra.quickStart() for localhost development, or start Terra with a configuration that resolves an OTLP endpoint."
+          fix: "Call Terra.quickStart() for localhost development, or start Terra with a configuration that resolves an OTLP endpoint. Hint: print(Terra.help())."
         )
       )
       suggestions.append("If you are using an injected test tracer, this warning can be ignored for unit tests.")
@@ -89,7 +89,7 @@ extension Terra {
           code: "MISSING_PRIVACY_POLICY",
           severity: .warning,
           explanation: "Terra is still using the default internal privacy policy.",
-          fix: "Call Terra.start(...) or install Terra with an explicit privacy policy before validating production behavior."
+          fix: "Call Terra.start(...) or install Terra with an explicit privacy policy before validating production behavior. Hint: use Terra.ask(\"privacy include content\")."
         )
       )
     }
@@ -100,7 +100,7 @@ extension Terra {
           code: "NO_PROVIDER",
           severity: .error,
           explanation: "Terra does not currently have a tracer, meter, or logger provider installed.",
-          fix: "Call Terra.quickStart(), Terra.start(...), or Terra.install(...) with providers before tracing work."
+          fix: "Call Terra.quickStart(), Terra.start(...), or Terra.install(...) with providers before tracing work. Hint: print(Terra.help()) and rerun Terra.diagnose()."
         )
       )
     }
@@ -111,7 +111,7 @@ extension Terra {
           code: "NO_SWIFT_TASK_CONTEXT",
           severity: .info,
           explanation: "diagnose() is running outside a Swift task, so it cannot verify task-local span propagation.",
-          fix: "Run Terra.diagnose() inside an async workflow or inside Terra.trace(...) when validating propagation."
+          fix: "Run Terra.diagnose() inside an async workflow or inside Terra.trace(...) when validating propagation. Hint: inspect Terra.examples() for the nearest runnable setup."
         )
       )
     }
@@ -123,6 +123,10 @@ extension Terra {
     if _hasSwiftTaskContext(), currentSpan() != nil {
       suggestions.append("An active Terra span is visible in the current async context.")
     }
+
+    suggestions.append("Hint: print(Terra.help()) for the canonical entry-point map.")
+    suggestions.append(#"Hint: use Terra.ask("agent loop") or Terra.ask("quickstart and diagnose setup") for targeted guidance."#)
+    suggestions.append("Hint: inspect Terra.examples() for runnable patterns and Terra.guides() for copy-paste explanations.")
 
     if issues.isEmpty {
       suggestions.append("Terra is healthy for local tracing. Use Terra.examples() for the closest runnable pattern.")

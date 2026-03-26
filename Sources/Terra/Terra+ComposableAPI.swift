@@ -176,11 +176,13 @@ extension Terra {
     static let maxOutputTokens = TraceKey<Int>("gen_ai.request.max_tokens")
   }
 
-  /// A handle for adding events, attributes, and tokens to the current span.
+  /// A compatibility wrapper for adding events, attributes, and tokens to the current span.
   ///
-  /// `TraceHandle` is passed into the body of a composable operation (e.g., `Terra.infer(...)`)
-  /// and provides methods to add rich context to the active trace span. All methods return
-  /// `self` for fluent chaining.
+  /// `TraceHandle` is passed into the body of a composable operation (e.g., `Terra.infer(...)`).
+  /// When Terra owns the active span, the handle delegates to the underlying `SpanHandle`
+  /// so closure-based tracing and composable operations share the same annotation model.
+  /// Streaming-only helpers such as `chunk`, `outputTokens`, and `firstToken` remain on this
+  /// wrapper because they require operation-specific state.
   ///
   /// ```swift
   /// try await Terra.infer("gpt-4o-mini", prompt: "Hello") { handle in
@@ -191,6 +193,7 @@ extension Terra {
   /// }
   /// ```
   public struct TraceHandle: Sendable {
+    private let spanHandle: SpanHandle?
     private let onEvent: @Sendable (String) -> Void
     private let onAttribute: @Sendable (String, TraceScalar) -> Void
     private let onError: @Sendable (any Error) -> Void
@@ -201,6 +204,7 @@ extension Terra {
     private let onFirstToken: @Sendable () -> Void
 
     package init(
+      span: SpanHandle? = nil,
       onEvent: @escaping @Sendable (String) -> Void,
       onAttribute: @escaping @Sendable (String, TraceScalar) -> Void,
       onError: @escaping @Sendable (any Error) -> Void,
@@ -210,6 +214,7 @@ extension Terra {
       onOutputTokens: @escaping @Sendable (Int) -> Void = { _ in },
       onFirstToken: @escaping @Sendable () -> Void = {}
     ) {
+      self.spanHandle = span
       self.onEvent = onEvent
       self.onAttribute = onAttribute
       self.onError = onError
@@ -219,6 +224,9 @@ extension Terra {
       self.onOutputTokens = onOutputTokens
       self.onFirstToken = onFirstToken
     }
+
+    /// The underlying Terra span when this handle is backed by Terra-owned tracing.
+    public var span: SpanHandle? { spanHandle }
 
     /// Records a named event on the current span.
     ///
@@ -230,7 +238,11 @@ extension Terra {
     /// - Returns: `self` for chaining.
     @discardableResult
     public func event(_ name: String) -> Self {
-      onEvent(name)
+      if let spanHandle {
+        _ = spanHandle.event(name)
+      } else {
+        onEvent(name)
+      }
       return self
     }
 
@@ -242,7 +254,11 @@ extension Terra {
     /// `.responseModel(_:)` for structured numeric and identifier attributes.
     @discardableResult
     public func tag<T: CustomStringConvertible & Sendable>(_ key: StaticString, _ value: T) -> Self {
-      onAttribute(key.description, .string(value.description))
+      if let spanHandle {
+        _ = spanHandle.attribute(key.description, value.description)
+      } else {
+        onAttribute(key.description, .string(value.description))
+      }
       return self
     }
 
@@ -258,7 +274,11 @@ extension Terra {
     /// - Returns: `self` for chaining.
     @discardableResult
     public func tokens(input: Int? = nil, output: Int? = nil) -> Self {
-      onTokens(input, output)
+      if let spanHandle {
+        _ = spanHandle.tokens(input: input, output: output)
+      } else {
+        onTokens(input, output)
+      }
       return self
     }
 
@@ -272,7 +292,11 @@ extension Terra {
     /// - Returns: `self` for chaining.
     @discardableResult
     public func responseModel(_ value: String) -> Self {
-      onResponseModel(value)
+      if let spanHandle {
+        _ = spanHandle.responseModel(value)
+      } else {
+        onResponseModel(value)
+      }
       return self
     }
 
@@ -950,6 +974,7 @@ private extension Terra {
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
       return try await call.execute { trace in
         let handle = TraceHandle(
+          span: Terra.currentSpan(),
           onEvent: { _ = trace.event($0) },
           onAttribute: { _recordAttribute($0, $1, on: trace) },
           onError: { trace.recordError($0) },
@@ -971,6 +996,7 @@ private extension Terra {
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
       return try await call.execute { trace in
         let handle = TraceHandle(
+          span: Terra.currentSpan(),
           onEvent: { _ = trace.event($0) },
           onAttribute: { _recordAttribute($0, $1, on: trace) },
           onError: { trace.recordError($0) },
@@ -990,6 +1016,7 @@ private extension Terra {
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
       return try await call.execute { trace in
         let handle = TraceHandle(
+          span: Terra.currentSpan(),
           onEvent: { _ = trace.event($0) },
           onAttribute: { _recordAttribute($0, $1, on: trace) },
           onError: { trace.recordError($0) }
@@ -1006,6 +1033,7 @@ private extension Terra {
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
       return try await call.execute { trace in
         let handle = TraceHandle(
+          span: Terra.currentSpan(),
           onEvent: { _ = trace.event($0) },
           onAttribute: { _recordAttribute($0, $1, on: trace) },
           onError: { trace.recordError($0) }
@@ -1022,6 +1050,7 @@ private extension Terra {
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
       return try await call.execute { trace in
         let handle = TraceHandle(
+          span: Terra.currentSpan(),
           onEvent: { _ = trace.event($0) },
           onAttribute: { _recordAttribute($0, $1, on: trace) },
           onError: { trace.recordError($0) }
@@ -1038,6 +1067,7 @@ private extension Terra {
       if !attributes.isEmpty { call = call.attributes { _merge(attributes, into: &$0) } }
       return try await call.execute { trace in
         let handle = TraceHandle(
+          span: Terra.currentSpan(),
           onEvent: { _ = trace.event($0) },
           onAttribute: { _recordAttribute($0, $1, on: trace) },
           onError: { trace.recordError($0) }

@@ -32,10 +32,12 @@ struct TerraIdentifierTests {
   func capabilitiesExposeStringFirstTracingSurface() {
     let capabilities = Terra.capabilities()
 
-    #expect(capabilities.count >= 5)
-    #expect(capabilities.contains { $0.entryPoint == "Terra.trace(name:id:_:)" })
+    #expect(capabilities.count >= 10)
+    #expect(capabilities.contains { $0.entryPoint == "Terra.trace(name:id:_:)" && $0.preference == .primary })
+    #expect(capabilities.contains { $0.entryPoint == "Terra.loop(name:id:messages:_:)" && $0.preference == .primary })
     #expect(capabilities.contains { $0.entryPoint == "Terra.startSpan(name:id:attributes:)" })
     #expect(capabilities.contains { $0.entryPoint == "Terra.currentSpan()" })
+    #expect(capabilities.contains { $0.entryPoint == "Terra.trace(name:)" && $0.preference == .compatibility })
   }
 
   @Test("Agentic workflow guidance is actionable")

@@ -81,6 +81,32 @@ extension Terra {
       return self
     }
 
+    /// Records input and output token counts on the span.
+    @discardableResult
+    public func tokens(input: Int? = nil, output: Int? = nil) -> Self {
+      if let input {
+        storage.attribute(Keys.GenAI.usageInputTokens, .int(input))
+      }
+      if let output {
+        storage.attribute(Keys.GenAI.usageOutputTokens, .int(output))
+      }
+      return self
+    }
+
+    /// Records the model identifier that produced the response.
+    @discardableResult
+    public func responseModel(_ value: String) -> Self {
+      storage.attribute(Keys.GenAI.responseModel, .string(value))
+      return self
+    }
+
+    /// Records the model identifier that produced the response using a compatibility wrapper.
+    @available(*, deprecated, message: "Use String model names directly.")
+    @discardableResult
+    public func responseModel(_ value: ModelID) -> Self {
+      responseModel(value.rawValue)
+    }
+
     /// Records an error on the span and marks it failed.
     public func recordError(_ error: any Error) {
       storage.recordError(error)
@@ -251,6 +277,34 @@ extension Terra {
   }
 
   private static let hookRegistry = _HookRegistry()
+
+  fileprivate actor _LoopMessageBuffer {
+    private var messages: [ChatMessage]
+
+    init(messages: [ChatMessage]) {
+      self.messages = messages
+    }
+
+    func snapshot() -> [ChatMessage] {
+      messages
+    }
+
+    func replace(with newMessages: [ChatMessage]) {
+      messages = newMessages
+    }
+
+    func append(_ message: ChatMessage) {
+      messages.append(message)
+    }
+
+    func append(contentsOf newMessages: [ChatMessage]) {
+      messages.append(contentsOf: newMessages)
+    }
+
+    func clear() {
+      messages.removeAll()
+    }
+  }
 
   fileprivate final class _SpanHandleStorage: @unchecked Sendable {
     let name: String
@@ -638,6 +692,41 @@ extension Terra {
     id: String? = nil,
     _ body: @escaping @Sendable (AgentHandle) async throws -> R
   ) async throws -> R {
+    try await _runAgenticRoot(name: name, id: id) { span, context in
+      try await body(AgentHandle(span: span, context: context))
+    }
+  }
+
+  /// Traces an agent loop that mutates a chat transcript while remaining compatible with `@Sendable` closures.
+  ///
+  /// `loop(messages:)` keeps the caller-facing `inout` transcript at the API boundary and
+  /// exposes a buffered, sendable mutation surface inside the traced body. When the root
+  /// loop returns or throws, the latest buffered transcript snapshot is written back to the caller.
+  public static func loop<R: Sendable>(
+    name: String,
+    id: String? = nil,
+    messages: inout [ChatMessage],
+    _ body: @escaping @Sendable (AgentLoopScope) async throws -> R
+  ) async throws -> R {
+    let buffer = _LoopMessageBuffer(messages: messages)
+
+    do {
+      let result = try await _runAgenticRoot(name: name, id: id) { span, context in
+        try await body(AgentLoopScope(agent: AgentHandle(span: span, context: context), messages: buffer))
+      }
+      messages = await buffer.snapshot()
+      return result
+    } catch {
+      messages = await buffer.snapshot()
+      throw error
+    }
+  }
+
+  private static func _runAgenticRoot<R: Sendable>(
+    name: String,
+    id: String? = nil,
+    _ body: @escaping @Sendable (SpanHandle, AgentContext) async throws -> R
+  ) async throws -> R {
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.invokeAgent.rawValue),
       Keys.GenAI.agentName: .string(name),
@@ -658,7 +747,7 @@ extension Terra {
           span.attribute("terra.agent.tool_call_count", snapshot.toolCallCount)
           span.end()
         }
-        return try await body(AgentHandle(span: span, context: context))
+        return try await body(span, context)
       }
     }
   }
@@ -890,6 +979,235 @@ extension Terra {
     }
   }
 
+  /// A sendable helper for agent loops that need checkpointed child operations and buffered transcript mutation.
+  public struct AgentLoopScope: Sendable {
+    private let agent: AgentHandle
+    private let messages: _LoopMessageBuffer
+
+    fileprivate init(agent: AgentHandle, messages: _LoopMessageBuffer) {
+      self.agent = agent
+      self.messages = messages
+    }
+
+    public var traceId: String { agent.traceId }
+    public var spanId: String { agent.spanId }
+    public var parentSpan: SpanHandle { agent.parentSpan }
+
+    @discardableResult
+    public func checkpoint(_ name: String) -> Self {
+      _ = agent.checkpoint(name)
+      return self
+    }
+
+    @discardableResult
+    public func event(_ name: String) -> Self {
+      _ = agent.event(name)
+      return self
+    }
+
+    public func snapshotMessages() async -> [ChatMessage] {
+      await messages.snapshot()
+    }
+
+    public func replaceMessages(_ newMessages: [ChatMessage]) async {
+      await messages.replace(with: newMessages)
+    }
+
+    public func appendMessage(_ message: ChatMessage) async {
+      await messages.append(message)
+    }
+
+    public func appendMessages(_ newMessages: [ChatMessage]) async {
+      await messages.append(contentsOf: newMessages)
+    }
+
+    public func clearMessages() async {
+      await messages.clear()
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await agent.infer(
+        model,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        body
+      )
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async rethrows -> R {
+      try await agent.infer(
+        model,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        body
+      )
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      messages transcript: [ChatMessage],
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await agent.infer(
+        model,
+        messages: transcript,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        body
+      )
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      messages transcript: [ChatMessage],
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async rethrows -> R {
+      try await agent.infer(
+        model,
+        messages: transcript,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        body
+      )
+    }
+
+    @discardableResult
+    public func stream<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      expectedTokens: Int? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await agent.stream(
+        model,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        expectedTokens: expectedTokens,
+        body
+      )
+    }
+
+    @discardableResult
+    public func stream<R: Sendable>(
+      _ model: String,
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      expectedTokens: Int? = nil,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async rethrows -> R {
+      try await agent.stream(
+        model,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        expectedTokens: expectedTokens,
+        body
+      )
+    }
+
+    @discardableResult
+    public func tool<R: Sendable>(
+      _ name: String,
+      callId: String? = nil,
+      type: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await agent.tool(
+        name,
+        callId: callId,
+        type: type,
+        provider: provider,
+        runtime: runtime,
+        body
+      )
+    }
+
+    @discardableResult
+    public func tool<R: Sendable>(
+      _ name: String,
+      callId: String? = nil,
+      type: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async rethrows -> R {
+      try await agent.tool(
+        name,
+        callId: callId,
+        type: type,
+        provider: provider,
+        runtime: runtime,
+        body
+      )
+    }
+
+    /// Detached work only writes back transcript mutations that finish before the root loop returns.
+    public func detached<R: Sendable>(
+      priority: TaskPriority? = nil,
+      _ body: @escaping @Sendable (AgentLoopScope) async throws -> R
+    ) -> Task<R, Error> {
+      agent.detached(priority: priority) { handle in
+        try await body(AgentLoopScope(agent: handle, messages: messages))
+      }
+    }
+  }
+
   /// Returns all Terra spans that are currently active in the process.
   ///
   /// Use this to inspect long-running workflows and background work without
@@ -969,6 +1287,7 @@ extension Terra {
   ///
   /// Use this when you want to build a multi-step trace progressively while
   /// still keeping `Terra.trace(name:id:_:)` as the canonical mental model.
+  @available(*, deprecated, message: "Prefer Terra.trace(name:id:_:) for one-shot traced work or Terra.startSpan(name:id:attributes:) for explicit lifecycle.")
   public struct TraceBuilder: Sendable {
     private final class State: @unchecked Sendable {
       private let lock = NSLock()
@@ -1059,6 +1378,7 @@ extension Terra {
   ///
   /// This is additive convenience over the canonical closure-based `trace`
   /// entry point. Prefer it when step-by-step composition reads more clearly.
+  @available(*, deprecated, message: "Prefer Terra.trace(name:id:_:) for one-shot traced work or Terra.startSpan(name:id:attributes:) for explicit lifecycle.")
   public static func trace(name: String) -> TraceBuilder {
     TraceBuilder(root: startSpan(name: name))
   }

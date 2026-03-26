@@ -6,12 +6,13 @@ Core runtime concepts for Terra telemetry.
 
 TerraCore provides the foundational types and protocols that power Terra's observability layer. This article covers the privacy model, lifecycle state machine, telemetry engine protocol, and configuration options.
 
-## Agentic and Manual Tracing
+## Trace Ownership
 
-Terra exposes three explicit ownership patterns for spans:
+Terra exposes four explicit ownership patterns for root spans:
 
-- ``Terra/agentic(name:id:_:)`` for multi-step agent loops with child inference and tool work.
-- ``Terra/trace(name:id:_:)-swift.method`` for one async task that owns a root span for the duration of the closure.
+- ``Terra/trace(name:id:_:)-swift.method`` for the common case: one async task owns one root span for the duration of the closure.
+- ``Terra/loop(name:id:messages:_:)`` for agent loops that must mutate a caller-owned transcript while staying Swift 6 `@Sendable`.
+- ``Terra/agentic(name:id:_:)`` for multi-step agent workflows with checkpoints, child inference, tool work, and detached helpers.
 - ``Terra/startSpan(name:id:attributes:)`` when lifecycle must outlive the current closure and be ended manually.
 
 When a child operation must attach to a specific parent span outside ambient task-local context, bind it with ``Terra/Operation/under(_:)``.
@@ -47,6 +48,22 @@ let result = try await Terra.agentic(name: "planner", id: "issue-42") { agent in
   ) {
     "plan"
   }
+}
+```
+
+For mutable caller-owned transcripts, use the loop API instead of capturing `inout` state inside `Terra.agentic`:
+
+```swift
+import Terra
+
+var messages: [Terra.ChatMessage] = [
+  .init(role: "user", content: "Plan this refactor.")
+]
+
+let result = try await Terra.loop(name: "planner.loop", id: "issue-42", messages: &messages) { loop in
+  loop.checkpoint("planning")
+  await loop.appendMessage(.init(role: "assistant", content: "Draft plan"))
+  return "plan"
 }
 ```
 
@@ -171,7 +188,7 @@ package protocol TelemetryEngine: Sendable {
 
 ### Public SDK Alternative
 
-External SDK consumers should keep using the public operation factories and install a test tracer provider for deterministic verification:
+External SDK consumers should prefer the public trace-first surface and install a test tracer provider for deterministic verification:
 
 ```swift
 import Terra
@@ -183,12 +200,10 @@ Terra.install(.init(
   registerProvidersAsGlobal: false
 ))
 
-let result = try await Terra
-  .tool("search", callId: "call-1")
-  .run { trace in
-    trace.event("tool.invoked")
-    return "stubbed result"
-  }
+let result = try await Terra.trace(name: "tool.call", id: "call-1") { span in
+  span.event("tool.invoked")
+  return "stubbed result"
+}
 ```
 
 See <doc:TelemetryEngine-Injection> for package-only seam details.

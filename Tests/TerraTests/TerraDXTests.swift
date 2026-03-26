@@ -7,16 +7,20 @@ struct TerraDXTests {
   @Test("Built-in examples cover the canonical workflows")
   func examplesCoverCanonicalWorkflows() {
     let examples = Terra.examples()
+    let guides = Terra.guides()
 
-    #expect(examples.count >= 8)
-    #expect(examples.contains { $0.title == "Basic Inference Tracing" })
-    #expect(examples.contains { $0.title == "Streaming With Tool Calls" })
-    #expect(examples.contains { $0.title == "Agentic Loop With Tool Calls" })
-    #expect(examples.contains { $0.title == "Nested Spans" })
-    #expect(examples.contains { $0.title == "Error Handling And Reporting" })
+    #expect(examples.count >= 50)
+    #expect(guides.count >= 20)
+    #expect(examples.contains { $0.title == "Trace Basic Async Work" })
+    #expect(examples.contains { $0.title == "Loop Basic Transcript Update" })
+    #expect(examples.contains { $0.title == "Playground Run Trace Scenario" })
+    #expect(examples.contains { $0.title == "TraceBuilder Compatibility" })
     #expect(examples.allSatisfy { !$0.code.isEmpty })
     #expect(examples.contains { $0.code.contains("Terra.diagnose()") })
+    #expect(examples.contains { $0.code.contains("Terra.playground()") })
     #expect(examples.contains { $0.code.contains("instrumented()") })
+    #expect(guides.contains { $0.title.contains("Mutable Transcript") })
+    #expect(guides.contains { $0.title.contains("Moving Off TraceBuilder") })
   }
 
   @Test("Diagnose reports local setup issues with actionable fixes")
@@ -28,8 +32,22 @@ struct TerraDXTests {
 
     #expect(report.issues.contains { $0.code == "MISSING_ENDPOINT" })
     #expect(report.issues.contains { $0.code == "MISSING_PRIVACY_POLICY" })
-    #expect(report.suggestions.contains { $0.contains("Terra.examples()") || $0.contains("Terra.trace") })
+    #expect(report.suggestions.contains { $0.contains("Terra.help()") })
+    #expect(report.suggestions.contains { $0.contains("Terra.ask") })
+    #expect(report.suggestions.contains { $0.contains("Terra.examples()") })
     #expect(report.isHealthy)
+  }
+
+  @Test("Help output exposes the canonical trace-first progression")
+  func helpOutputExposesTraceFirstProgression() {
+    let help = Terra.help()
+
+    #expect(help.contains("Terra.trace(name:id:_:)"))
+    #expect(help.contains("Terra.loop(name:id:messages:_: )") == false)
+    #expect(help.contains("Terra.loop(name:id:messages:_:)" ))
+    #expect(help.contains("Terra.agentic(name:id:_:)"))
+    #expect(help.contains("Terra.trace(name:)"))
+    #expect(help.contains("Compatibility APIs"))
   }
 
   @Test("Active spans can be visualized as ASCII and JSON")
@@ -149,10 +167,11 @@ struct TerraDXTests {
       example: "try await Terra.agentic(name: \"planner\") { _ in }"
     )
 
-    #expect(guidance.recoverySuggestion.contains("Terra.trace"))
+    #expect(guidance.recoverySuggestion.contains("Terra.help()"))
+    #expect(guidance.recoverySuggestion.contains("Terra.examples()"))
     #expect(guidance.message.contains("Example:"))
-    #expect(invalid.recoverySuggestion.contains("Terra.trace(name:)"))
-    #expect(agentic.recoverySuggestion.contains("Terra.agentic"))
+    #expect(invalid.recoverySuggestion.contains("Terra.help()"))
+    #expect(agentic.recoverySuggestion.contains("Terra.ask(\"agent loop\")"))
   }
 }
 

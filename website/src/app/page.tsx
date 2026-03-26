@@ -1,5 +1,6 @@
 "use client";
 
+import Image from 'next/image';
 import React from 'react';
 import { CodeBlock } from '@/components/CodeBlock';
 import { FeatureCard } from '@/components/FeatureCard';
@@ -20,7 +21,7 @@ export default function LandingPage() {
           <a href="#documentation" className="hover:text-cyan-400 transition-colors">Documentation</a>
           <a href="https://christopherkarani.github.io/Terra/docc/documentation/terra/" className="hover:text-cyan-400 transition-colors">DocC API</a>
           <a href="https://github.com/christopherkarani/Terra" className="hover:text-cyan-400 transition-colors">GitHub</a>
-          <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Integrations.md" className="hover:text-cyan-400 transition-colors">Integrations</a>
+          <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/integrations.md" className="hover:text-cyan-400 transition-colors">Integrations</a>
         </div>
         <div>
           <a href="https://github.com/christopherkarani/Terra" className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-xs font-bold hover:bg-white/10 transition-all uppercase tracking-widest mono">Star on GitHub</a>
@@ -31,17 +32,24 @@ export default function LandingPage() {
       <section className="relative pt-24 pb-32 px-6 overflow-hidden">
         <div className="max-w-6xl mx-auto flex flex-col items-center text-center">
           <div className="mb-8 p-1 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-lg">
-             <img src="terra-banner.svg" alt="Terra Banner" className="w-full max-w-2xl rounded-xl" />
+             <Image
+               src="/terra-banner.svg"
+               alt="Terra Banner"
+               width={1536}
+               height={1024}
+               className="w-full max-w-2xl rounded-xl"
+               priority
+             />
           </div>
           <h1 className="text-5xl md:text-7xl font-black tracking-tight mb-6 bg-gradient-to-b from-white to-gray-400 bg-clip-text text-transparent">
             Stop flying blind with local AI.
           </h1>
           <p className="text-xl text-gray-500 max-w-2xl mb-10 leading-relaxed">
             Terra is a privacy-first observability layer for on-device GenAI. 
-            Built on OpenTelemetry, giving you production-grade tracing for inference, embeddings, and agents.
+            Built on OpenTelemetry, giving you production-grade tracing for single calls, mutable chat loops, and multi-step agents.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 mb-16">
-            <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Front_Facing_API.md#0-90-second-quickstart--copy-ready-recipes" className="px-8 py-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all glow-indigo shadow-lg shadow-indigo-500/20">
+            <a href="https://christopherkarani.github.io/Terra/docc/documentation/terra/quickstart-90s/" className="px-8 py-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all glow-indigo shadow-lg shadow-indigo-500/20">
               Get Started
             </a>
             <div className="flex items-center gap-3 px-6 py-4 rounded-xl bg-white/5 border border-white/10 mono text-sm group cursor-pointer hover:bg-white/10 transition-all">
@@ -79,20 +87,20 @@ export default function LandingPage() {
           <div className="space-y-6">
             <h2 className="text-4xl font-black">Instrumentation in seconds.</h2>
             <p className="text-gray-500 leading-relaxed">
-              Start with one-line setup, then compose typed infer/stream/embed/agent/tool/safety calls as your app grows.
+              Start with one-line setup, inspect the API map with `Terra.help()`, then use `Terra.trace(...)` for most work, `Terra.loop(...)` for mutable transcripts, and `Terra.agentic(...)` for planner-style workflows.
             </p>
             <ul className="space-y-4">
               <li className="flex gap-3 text-sm text-gray-400">
                 <span className="text-emerald-500 font-black">✓</span> 
-                <strong>Step 1:</strong> One call with <code>try await Terra.start(.init(preset: .quickstart))</code>.
+                <strong>Step 1:</strong> One call with <code>try await Terra.quickStart()</code>.
               </li>
               <li className="flex gap-3 text-sm text-gray-400">
                 <span className="text-emerald-500 font-black">✓</span> 
-                <strong>Step 2:</strong> Canonical composable API: <code>infer/stream/embed/agent/tool/safety + run</code>.
+                <strong>Step 2:</strong> Discover the primary APIs with <code>Terra.help()</code> and <code>Terra.diagnose()</code>.
               </li>
               <li className="flex gap-3 text-sm text-gray-400">
                 <span className="text-emerald-500 font-black">✓</span> 
-                <strong>Step 3:</strong> Add macros and advanced seams only when you need them.
+                <strong>Step 3:</strong> Reach for <code>infer/stream/embed/tool/safety + run</code> only when a scoped helper is the better fit.
               </li>
             </ul>
           </div>
@@ -104,8 +112,11 @@ export default function LandingPage() {
 	@main
 	class AppDelegate: UIResponder, UIApplicationDelegate {
 	    func application(...) {
-	        // One line for global auto-instrumentation
-	        Task { try? await Terra.start() }
+	        // One line for local setup and discovery
+	        Task {
+	            try? await Terra.quickStart()
+	            print(Terra.help())
+	        }
 	        
 	        return true
 	    }
@@ -115,17 +126,13 @@ export default function LandingPage() {
               title="Recipe.swift"
               code={`import Terra
 
-let answer = try await Terra
-    .infer(
-        Terra.ModelID("gpt-4o-mini"),
-        prompt: "Summarize yesterday's changes",
-        provider: Terra.ProviderID("openai"),
-        runtime: Terra.RuntimeID("http_api")
-    )
-    .run { trace in
-        trace.tokens(input: 42, output: 18)
-        return "stubbed-response"
-    }`}
+let answer = try await Terra.trace(name: "release.summary", id: "demo-1") { span in
+    span.event("infer.request")
+    span.attribute("app.surface", "settings")
+    span.tokens(input: 42, output: 18)
+    span.responseModel("gpt-4o-mini")
+    return "stubbed-response"
+}`}
             />
           </div>
         </div>
@@ -163,9 +170,9 @@ let answer = try await Terra
         <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white font-black text-lg mx-auto mb-8">T</div>
         <p className="text-gray-600 text-sm mb-4">© 2026 Christopher Karani. Apache-2.0 License.</p>
         <div className="flex justify-center gap-8 text-xs font-bold text-gray-500 uppercase tracking-widest mono">
-          <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Front_Facing_API.md" className="hover:text-white transition-colors">Docs</a>
+          <a href="https://christopherkarani.github.io/Terra/docc/documentation/terra/" className="hover:text-white transition-colors">Docs</a>
           <a href="https://github.com/christopherkarani/Terra" className="hover:text-white transition-colors">GitHub</a>
-          <a href="https://github.com/christopherkarani/Terra/blob/main/Docs/Front_Facing_API.md#privacy" className="hover:text-white transition-colors">Privacy</a>
+          <a href="https://christopherkarani.github.io/Terra/docc/documentation/terra/configuration-reference/" className="hover:text-white transition-colors">Privacy</a>
         </div>
       </footer>
     </div>

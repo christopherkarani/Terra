@@ -9,3 +9,4 @@
 - `TraceHandle` is the public place for per-call annotations; `Operation` itself only exposes `capture(_:)` and `run(_:)`.
 - When docs mention both canonical and compatibility APIs, label the compatibility path explicitly so agents do not treat it as the preferred API.
 - If a documentation example must keep a compatibility wrapper for compileability, make the wrapper type explicit in the variable declaration rather than mixing wrapper-only APIs with plain `String` bindings.
+- When bridging a compatibility handle onto a Terra-owned span, do not bypass operation-scoped callbacks for behavior that carries privacy or policy decisions. `TraceHandle.recordError` must keep using the injected callback so composable operations preserve `captureMessage` gating.

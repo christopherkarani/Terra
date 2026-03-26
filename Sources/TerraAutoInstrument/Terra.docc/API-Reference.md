@@ -2,8 +2,14 @@
 
 Complete reference for Terra's public API surface.
 
+> **Primary path:** New integrations should start with ``Terra/quickStart()``, ``Terra/help()``, ``Terra/diagnose()``, then instrument root work with ``Terra/trace(name:id:_:)-swift.method``, ``Terra/loop(name:id:messages:_:)``, or ``Terra/agentic(name:id:_:)``.
+> The operation factories remain available as secondary convenience APIs.
+
 > **Compatibility note:** `ModelID` and `ToolCallID` are deprecated wrappers kept for older call sites.
 > New code should pass model names and tool call IDs as raw `String` values.
+
+> **Compatibility note:** `TraceBuilder` and ``Terra/TraceHandle`` remain available for older call sites.
+> New root tracing code should prefer ``Terra/SpanHandle`` via ``Terra/trace(name:id:_:)-swift.method`` or ``Terra/loop(name:id:messages:_:)``.
 
 ## Typed IDs
 
@@ -391,9 +397,18 @@ try await Terra
 
 ---
 
-## TraceHandle Methods
+## TraceHandle Compatibility Methods
 
-The ``TraceHandle`` is passed to your ``Operation/run(_:)-swift.method`` closure for annotating spans.
+The ``TraceHandle`` is passed to your ``Terra/Operation/run(_:)-swift.method`` closure for compatibility with the fluent operation APIs.
+Prefer ``Terra/SpanHandle`` for new root tracing code. When Terra owns the underlying operation span, `trace.span` exposes that span handle.
+
+### span
+
+```swift
+public var span: SpanHandle? { get }
+```
+
+Returns the active Terra span when the operation is backed by Terra-owned tracing.
 
 ### event(_:)
 
@@ -659,19 +674,22 @@ Terra also exposes a discoverability layer and explicit span lifecycle APIs for 
 
 ### Discovery Helpers
 
+- ``Terra/help()``
 - ``Terra/capabilities()``
 - ``Terra/guides()``
 - ``Terra/examples()``
 - ``Terra/ask(_:)``
 - ``Terra/diagnose()``
+- ``Terra/playground()``
 
 ### Manual Tracing
 
+- ``Terra/trace(name:id:_:)-swift.method``
+- ``Terra/loop(name:id:messages:_:)``
 - ``Terra/agentic(name:id:_:)``
 - ``Terra/currentSpan()``
 - ``Terra/isTracing()``
 - ``Terra/startSpan(name:id:attributes:)``
-- ``Terra/trace(name:id:_:)-swift.method``
 - ``Terra/Operation/under(_:)``
 - ``Terra/SpanHandle/detached(priority:_:)``
 - ``Terra/AgentHandle/detached(priority:_:)``
@@ -693,7 +711,7 @@ Terra also exposes a discoverability layer and explicit span lifecycle APIs for 
 
 These entry points are the right choice when you need explicit lifecycle ownership, a local-dev default, or machine-readable guidance for agents.
 
-Use ``Terra/agentic(name:id:_:)`` as the default choice for multi-step workflows that alternate between inference and tools. Use ``Terra/Operation/under(_:)`` when a child call must bind to a specific parent span explicitly, and use the detached helpers instead of raw `Task.detached` when the parent trace must remain linked.
+Use ``Terra/trace(name:id:_:)-swift.method`` for the common case. Use ``Terra/loop(name:id:messages:_:)`` when a workflow owns a mutable transcript. Use ``Terra/agentic(name:id:_:)`` when the root span coordinates multiple inference and tool steps. Use ``Terra/Operation/under(_:)`` when a child call must bind to a specific parent span explicitly, and use the detached helpers instead of raw `Task.detached` when the parent trace must remain linked.
 
 If detached work is launched after the original parent span ended, Terra records `detached.parent.ended` on the first replacement span instead of failing the task.
 

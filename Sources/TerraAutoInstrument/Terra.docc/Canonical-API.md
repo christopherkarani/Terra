@@ -1,36 +1,37 @@
 # Canonical API
 
-Use the composable call API as the canonical path for single operations, and use Terra's manual tracing surface when one agentic workflow must own multiple child operations.
+Terra's public story is trace-first.
 
-## Operation Factories
+Use ``Terra/trace(name:id:_:)-swift.method`` for most single-root tasks. Use ``Terra/loop(name:id:messages:_:)`` when a workflow needs one root span plus in-place transcript updates. Use ``Terra/agentic(name:id:_:)`` for multi-step planners and tool orchestration. Use ``Terra/startSpan(name:id:attributes:)`` only when span lifecycle must outlive the current closure and be ended manually.
+
+The operation factories remain available, but they are secondary convenience APIs rather than the main entry point.
+
+## Start Here
+
+- ``Terra/quickStart()``
+- ``Terra/help()``
+- ``Terra/diagnose()``
+
+## Primary Root APIs
+
+- ``Terra/trace(name:id:_:)-swift.method``
+- ``Terra/loop(name:id:messages:_:)``
+- ``Terra/agentic(name:id:_:)``
+- ``Terra/startSpan(name:id:attributes:)``
+
+## Secondary Operation Helpers
 
 - ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``
-- ``Terra/infer(_:messages:prompt:provider:runtime:temperature:maxTokens:)``
 - ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``
 - ``Terra/embed(_:inputCount:provider:runtime:)``
 - ``Terra/agent(_:id:provider:runtime:)``
 - ``Terra/tool(_:callId:type:provider:runtime:)``
 - ``Terra/safety(_:subject:provider:runtime:)``
-
-## Shared Operation Pipeline
-
-All factories return ``Terra/Operation``.
-
-Common composition methods:
-
 - ``Terra/Operation/capture(_:)``
 - ``Terra/Operation/under(_:)``
-- ``Terra/Operation/run(_:)-6bghi``
 - ``Terra/Operation/run(_:)-swift.method``
 
-## Lifecycle Entry Points
-
-- ``Terra/start(_:)``
-- ``Terra/shutdown()``
-- ``Terra/reconfigure(_:)``
-- ``Terra/agentic(name:id:_:)``
-- ``Terra/trace(name:id:_:)-swift.method``
-- ``Terra/startSpan(name:id:attributes:)``
+`Operation.run { trace in ... }` still passes ``Terra/TraceHandle`` for compatibility. When Terra owns the underlying span, `trace.span` exposes the active ``Terra/SpanHandle``.
 
 ## Quick Example
 
@@ -38,22 +39,39 @@ Common composition methods:
 import Terra
 
 try await Terra.quickStart()
-let answer = try await Terra
-  .infer(
-    "gpt-4o-mini",
-    prompt: "Summarize this changelog in one sentence.",
-    provider: Terra.ProviderID("openai"),
-    runtime: Terra.RuntimeID("http_api")
-  )
-  .run {
-    "Release summary"
-  }
+
+let answer = try await Terra.trace(name: "release.summary", id: "changelog-1") { span in
+  span.event("summary.started")
+  span.attribute("app.surface", "settings")
+  span.tokens(input: 42, output: 18)
+  span.responseModel("gpt-4o-mini")
+  return "Release summary"
+}
+
 await Terra.shutdown()
+```
+
+## Mutable Transcript Loop
+
+Use ``Terra/loop(name:id:messages:_:)`` when the caller owns an `inout` transcript and the body must remain `@Sendable`.
+
+```swift
+import Terra
+
+var messages: [Terra.ChatMessage] = [
+  .init(role: "user", content: "Plan the fix.")
+]
+
+let plan = try await Terra.loop(name: "planner.loop", id: "issue-42", messages: &messages) { loop in
+  loop.checkpoint("planning")
+  await loop.appendMessage(.init(role: "assistant", content: "Draft plan"))
+  return "Plan ready"
+}
 ```
 
 ## Agentic Root Example
 
-Use `Terra.agentic` when a planner loop, tool chain, or detached helper must stay under one long-lived root span.
+Use ``Terra/agentic(name:id:_:)`` when a planner loop, tool chain, or detached helper must stay under one long-lived root span.
 
 ```swift
 import Terra
@@ -80,11 +98,25 @@ let answer = try await Terra.agentic(name: "planner", id: "issue-42") { agent in
 }
 ```
 
-HTTP AI spans created under this workflow inherit the active agent span automatically when HTTP auto-instrumentation is enabled.
+## Manual Lifecycle Example
 
-## Reusable Examples
+Use ``Terra/startSpan(name:id:attributes:)`` when the parent span must outlive the current closure and child work should attach explicitly.
 
-These recipes are directly reusable from `Examples/Terra Sample/RecipeSnippets.swift`.
+```swift
+import Terra
+
+let parent = Terra.startSpan(name: "background-sync")
+defer { parent.end() }
+
+let results = try await Terra
+  .tool("search", callId: "tool-call-2")
+  .under(parent)
+  .run { "result for query" }
+```
+
+## Operation Helper Example
+
+The fluent helper APIs still work well for isolated inference, streaming, embedding, tool, and safety spans.
 
 ```swift
 import Terra
@@ -104,26 +136,12 @@ let results = try await Terra
   }
 ```
 
-When child work must bind to a chosen parent span explicitly, attach it with ``Terra/Operation/under(_:)``:
-
-```swift
-import Terra
-
-let parent = Terra.startSpan(name: "background-sync")
-defer { parent.end() }
-
-let results = try await Terra
-  .tool("search", callId: "tool-call-2")
-  .under(parent)
-  .run { "result for query" }
-```
-
 If detached work starts after an explicit parent span already ended, Terra still runs the detached task and records a `detached.parent.ended` event on the first replacement span.
 
 ## Next Guides
 
-- Typed IDs: <doc:Typed-IDs>
-- Metadata builder patterns: <doc:Metadata-Builder>
+- Quickstart: <doc:Quickstart-90s>
+- Runtime concepts: <doc:TerraCore>
+- Metadata patterns: <doc:Metadata-Builder>
 - Stable lifecycle errors: <doc:TerraError-Model>
-- Protocol seams and deterministic engines: <doc:TelemetryEngine-Injection>
-- Discovery helpers and manual spans: <doc:API-Reference>
+- Full symbol reference: <doc:API-Reference>

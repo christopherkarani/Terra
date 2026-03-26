@@ -163,4 +163,36 @@ struct TerraComposableAPITests {
     #expect(tool.parentSpanId?.hexString == outer.spanId.hexString)
     #expect(tool.parentSpanId?.hexString != manual.spanId.hexString)
   }
+
+  @Test("Composable trace.recordError respects privacy gating")
+  func composableTraceRecordErrorRespectsPrivacy() async throws {
+    let support = TerraTestSupport()
+    Terra.install(
+      .init(
+        privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256),
+        tracerProvider: support.tracerProvider,
+        registerProvidersAsGlobal: false
+      )
+    )
+
+    enum ExpectedError: Error, CustomStringConvertible {
+      case failed
+
+      var description: String {
+        "composable-secret-error"
+      }
+    }
+
+    _ = await Terra
+      .infer("privacy-model", prompt: "hello")
+      .run { trace in
+        trace.recordError(ExpectedError.failed)
+        return "ok"
+      }
+
+    let span = try #require(support.finishedSpans().first(where: { $0.name == Terra.SpanNames.inference }))
+    let exception = try #require(span.events.first(where: { $0.name == "exception" }))
+    #expect(exception.attributes["exception.type"]?.description == String(reflecting: ExpectedError.self))
+    #expect(exception.attributes["exception.message"] == nil)
+  }
 }

@@ -1,30 +1,28 @@
 # Metadata Builder
 
-Use ``Terra/TraceHandle`` methods inside ``Terra/Operation/run(_:)-swift.method`` or the `agent.infer` / `agent.tool` helpers from ``Terra/agentic(name:id:_:)`` to attach events and attributes to spans.
+Use ``Terra/SpanHandle`` as the primary annotation surface inside ``Terra/trace(name:id:_:)-swift.method``, ``Terra/loop(name:id:messages:_:)``, and ``Terra/agentic(name:id:_:)``. ``Terra/TraceHandle`` remains the compatibility annotation surface inside ``Terra/Operation/run(_:)-swift.method``.
 
-## Trace Annotations Inside run
+## Root Span Annotations
 
 ```swift
 import Terra
 
 let includeDebug = true
 
-_ = try await Terra
-  .tool("search", callId: "call-1", type: "web_search")
-  .run { trace in
-    trace.event("tool.invoked")
-    trace.tag("tool.name", "search")
+_ = try await Terra.trace(name: "tool.call", id: "call-1") { span in
+  span.event("tool.invoked")
+  span.attribute("tool.name", "search")
 
-    if includeDebug {
-      trace.tag("tool.debug", "true")
-    }
-    return ["result"]
+  if includeDebug {
+    span.attribute("tool.debug", "true")
   }
+  return ["result"]
+}
 ```
 
 ## Streaming with Incremental Updates
 
-Inside ``Terra/Operation/run(_:)-swift.method``, annotate streaming progress directly on the trace:
+Inside ``Terra/Operation/run(_:)-swift.method``, annotate streaming progress directly on the compatibility trace handle:
 
 ```swift
 import Terra
