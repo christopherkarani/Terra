@@ -227,7 +227,7 @@ func contentCapture() async throws {
 
 - Attach counts and latencies as numeric attributes
 - Use bounded string labels for model/device/runtime identifiers
-- Capture content only with explicit `.capture(.includeContent)` and only in development
+- Capture content-derived telemetry only with explicit `.capture(.includeContent)` and only in development
 - Use ``Terra/PrivacyPolicy`` to control default behavior
 
 ### Don't

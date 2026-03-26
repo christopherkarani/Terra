@@ -28,6 +28,8 @@ public struct ANEHardwareMetrics: Sendable, TelemetryAttributeConvertible {
   /// Produces:
   /// - `terra.ane.hardware_execution_time_ns` (int): ANE execution time in nanoseconds.
   /// - `terra.ane.host_overhead_us` (double): Host CPU overhead in microseconds.
+  /// - `terra.hw.ane.hw_execution_time_ns` (int): Canonical ANE execution time in nanoseconds.
+  /// - `terra.hw.ane.host_overhead_ms` (double): Canonical host CPU overhead in milliseconds.
   /// - `terra.ane.segment_count` (int): Number of ANE program segments executed.
   /// - `terra.ane.fully_ane` (bool): Whether the entire operation ran on the ANE.
   /// - `terra.ane.available` (bool): Whether ANE hardware is available on this device.
@@ -35,6 +37,8 @@ public struct ANEHardwareMetrics: Sendable, TelemetryAttributeConvertible {
     [
       "terra.ane.hardware_execution_time_ns": .int(Int(hardwareExecutionTimeNs)),
       "terra.ane.host_overhead_us": .double(hostOverheadUs),
+      "terra.hw.ane.hw_execution_time_ns": .int(Int(hardwareExecutionTimeNs)),
+      "terra.hw.ane.host_overhead_ms": .double(hostOverheadUs / 1000),
       "terra.ane.segment_count": .int(Int(segmentCount)),
       "terra.ane.fully_ane": .bool(fullyANE),
       "terra.ane.available": .bool(available),

@@ -149,7 +149,7 @@ struct TerraComposableAPITests {
       let manual = Terra.startSpan(name: "manual")
       defer { manual.end() }
 
-      _ = try await Terra
+      _ = await Terra
         .tool("search", callId: "call-1")
         .under(outer)
         .run { "ok" }

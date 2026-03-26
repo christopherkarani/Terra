@@ -4,6 +4,8 @@ import Foundation
 import Testing
 @testable import TerraTraceKit
 
+@Suite("Renderer timestamp", .serialized)
+struct RendererTimestampTopLevelTests {
 @Test
 func streamRendererTimestampUsesUTCWithFractionalSeconds() throws {
   let spans = try decodeFixtureSpans()
@@ -69,6 +71,7 @@ func treeRendererUsesDurationFormat() async throws {
   #expect(tokens.count >= 3)
   let durationToken = tokens.dropFirst(2).first
   #expect(durationToken?.hasSuffix("ms") == true)
+}
 }
 
 private func decodeFixtureSpans() throws -> [SpanRecord] {

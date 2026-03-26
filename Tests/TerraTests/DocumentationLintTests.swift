@@ -1,6 +1,8 @@
 import Foundation
 import Testing
 
+@Suite("Documentation lint", .serialized)
+struct DocumentationLintTests {
 @Test("Public docs stay on canonical APIs")
 func publicDocsStayOnCanonicalAPIs() throws {
   let repoRoot = URL(fileURLWithPath: #filePath)
@@ -42,4 +44,5 @@ func publicDocsStayOnCanonicalAPIs() throws {
       )
     }
   }
+}
 }

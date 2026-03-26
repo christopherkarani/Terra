@@ -6,6 +6,9 @@ import OpenTelemetryApi
 
 // MARK: - Test Helpers
 
+@Suite("TraceKit top-level", .serialized)
+struct TraceKitTopLevelTests {
+
 private func makeSpan(
   name: String,
   traceId: TraceId = TraceId(),
@@ -278,4 +281,5 @@ func loaderReportsOversizedFileFailures() throws {
       Issue.record("Expected fileTooLarge failure, got \(failure.error)")
     }
   }
+}
 }

@@ -3,7 +3,7 @@ import Testing
 import OpenTelemetryApi
 @testable import TerraPowerProfiler
 
-@Suite("PowerSummary")
+@Suite("PowerSummary", .serialized)
 struct PowerSummaryTests {
 
   @Test("averages multiple samples")

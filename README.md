@@ -14,7 +14,7 @@
 
 ---
 
-Terra instruments model inference, streaming, agents, tool calls, embeddings, safety checks, Core ML calls, and HTTP AI requests. By default it keeps content capture off and exports to the local dashboard.
+Terra instruments model inference, streaming, agents, tool calls, embeddings, safety checks, Core ML calls, and HTTP AI requests. By default it keeps content capture off and exports to the local dashboard. HTTP AI spans created inside an active Terra workflow now attach under the current Terra span instead of forming a separate trace tree.
 
 ```swift
 import Terra
@@ -65,6 +65,20 @@ let answer = try await Terra
 
 For new code, prefer raw `String` model identifiers and `callId:` labels. `Terra.ModelID` and `Terra.ToolCallID` remain available as compatibility wrappers, while `Terra.ProviderID` and `Terra.RuntimeID` stay structured for attribution.
 
+For chat-style requests, you can pass structured messages directly:
+
+```swift
+let answer = try await Terra
+    .infer(
+        "gpt-4o-mini",
+        messages: [
+            .init(role: "system", content: "You are a precise coding assistant."),
+            .init(role: "user", content: prompt)
+        ]
+    )
+    .run { try await llm.generate(prompt) }
+```
+
 ## Agentic Workflows
 
 Use `Terra.agentic` when one workflow spans multiple inference and tool steps or needs to cross detached-task boundaries while keeping one root trace.
@@ -95,6 +109,8 @@ let result = try await Terra.agentic(name: "issue-triage", id: issue.id) { agent
 }
 ```
 
+If detached work starts after the parent span already ended, Terra no longer throws. The detached task still runs, and the first replacement span records a `detached.parent.ended` event so the lost linkage is visible in telemetry.
+
 When work must attach to an explicit parent span outside `Terra.agentic`, bind it directly:
 
 ```swift
@@ -106,6 +122,10 @@ let result = try await Terra
     .under(root)
     .run { "ok" }
 ```
+
+## HTTP Auto-Instrumentation
+
+`HTTPAIInstrumentation` now enriches AI API requests with request model, prompt-message count, first prompt role, and streaming chunk events. When the request runs inside `Terra.agentic`, `Terra.trace`, or an explicit `Terra.startSpan()` scope, the generated HTTP span inherits that active Terra parent automatically.
 
 For function-level instrumentation, use `@Traced` from `TerraTracedMacro`.
 

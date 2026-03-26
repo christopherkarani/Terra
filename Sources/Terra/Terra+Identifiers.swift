@@ -78,10 +78,12 @@ extension Terra {
   }
 }
 
+@available(*, deprecated, message: "Use String model names directly.")
 extension Terra.ModelID: Terra.ScalarValue {
   package var traceScalar: Terra.TraceScalar { .string(rawValue) }
 }
 
+@available(*, deprecated, message: "Use String tool call identifiers directly.")
 extension Terra.ToolCallID: Terra.ScalarValue {
   package var traceScalar: Terra.TraceScalar { .string(rawValue) }
 }

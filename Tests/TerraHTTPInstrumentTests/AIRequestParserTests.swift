@@ -4,6 +4,9 @@ import Foundation
 
 // MARK: - AIRequestParser Tests
 
+@Suite("AIRequestParser", .serialized)
+struct AIRequestParserTests {
+
 @Test("OpenAI request format parses model, max_tokens, temperature, stream")
 func openAIRequestParsing() throws {
   let body = #"{"model": "gpt-4", "max_tokens": 100, "temperature": 0.7, "stream": true}"#
@@ -78,6 +81,27 @@ func integerTemperatureIsCoerced() throws {
   let result = try #require(AIRequestParser.parse(body: data))
 
   #expect(result.temperature == 1.0)
+}
+
+@Test("OpenAI messages parse prompt semantics")
+func openAIMessagesParsePromptSemantics() throws {
+  let body = #"""
+  {
+    "model": "gpt-4o",
+    "messages": [
+      {"role": "system", "content": "You are helpful."},
+      {"role": "user", "content": [{"type": "text", "text": "Plan this trip."}]}
+    ]
+  }
+  """#
+  let data = try #require(body.data(using: .utf8))
+  let result = try #require(AIRequestParser.parse(body: data))
+
+  #expect(result.messages.count == 2)
+  #expect(result.messages[0].role == "system")
+  #expect(result.messages[0].content == "You are helpful.")
+  #expect(result.messages[1].role == "user")
+  #expect(result.messages[1].content == "Plan this trip.")
 }
 
 @Test("Request body larger than 10 MiB is rejected")
@@ -164,4 +188,5 @@ func anthropicTokensOverrideOpenAI() throws {
   // Anthropic keys take precedence over OpenAI keys per parser logic
   #expect(result.inputTokens == 15)
   #expect(result.outputTokens == 25)
+}
 }

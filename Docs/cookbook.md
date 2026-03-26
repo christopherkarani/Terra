@@ -28,6 +28,22 @@ let answer = try await Terra
     .run { try await llm.generate(prompt) }
 ```
 
+Structured chat messages:
+
+```swift
+let answer = try await Terra
+    .infer(
+        "gpt-4o-mini",
+        messages: [
+            .init(role: "system", content: "You are a concise travel planner."),
+            .init(role: "user", content: prompt)
+        ],
+        provider: Terra.ProviderID("openai"),
+        runtime: Terra.RuntimeID("http_api")
+    )
+    .run { try await llm.generate(prompt) }
+```
+
 With metadata:
 
 ```swift
@@ -59,6 +75,8 @@ let output = try await Terra
     }
 ```
 
+If the underlying model call is an HTTP streaming request instrumented by `HTTPAIInstrumentation`, Terra also records `stream.chunk` events plus TTFT and chunk-count metrics automatically.
+
 ## Agent Workflow
 
 Nest agents, tools, and inference naturally:
@@ -70,10 +88,33 @@ let plan = try await Terra.agentic(name: "trip-planner", id: "agent-42") { agent
         { "search results" }
 
     return try await agent
-        .infer("gpt-4o-mini", prompt: docs)
+        .infer(
+            "gpt-4o-mini",
+            messages: [
+                .init(role: "system", content: "You write concise itineraries."),
+                .init(role: "user", content: docs)
+            ]
+        )
         { "itinerary" }
 }
 ```
+
+HTTP requests created inside this block automatically inherit the active agent span as their parent when `HTTPAIInstrumentation` is enabled.
+
+### Detached Work After Parent End
+
+```swift
+let root = Terra.startSpan(name: "sync-job")
+root.end()
+
+let task = root.detached { _ in
+    try await Terra.tool("cleanup", callId: "cleanup-1").run { "done" }
+}
+
+_ = try await task.value
+```
+
+If detached work starts after the parent ended, Terra keeps the task running and records a `detached.parent.ended` event on the first replacement span instead of throwing.
 
 ## Agentic Workflow Instrumentation
 
@@ -342,15 +383,15 @@ try await Terra.start(config)
 
 ```swift
 var config = Terra.Configuration()
-config.privacy = .capturing  // Capture content with hashing
+config.privacy = .capturing  // Capture hashed content telemetry
 config.features = [.coreML, .http, .sessions, .signposts, .logs]
 config.persistence = .instant(
     FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("TerraDebug")
 )
 try await Terra.start(config)
-// Full telemetry with content for debugging
-// Content is HMAC'd for privacy but available for analysis
+// Full telemetry for debugging
+// Content-derived telemetry is HMAC'd for privacy
 ```
 
 ### HIPAA-Compliant Configuration
@@ -370,7 +411,7 @@ try await Terra.start(config)
 // Per-request privacy override using capture policy
 try await Terra
     .infer("gpt-4o-mini", prompt: prompt)
-    .capture(.includeContent)  // Override default privacy for this call
+    .capture(.includeContent)  // Opt this call into capture; privacy policy still governs storage
     .run { trace in
         trace.tag("tenant_id", tenantID)
         trace.tokens(input: 120, output: 60)

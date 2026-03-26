@@ -47,7 +47,9 @@ struct AIRequestParser {
 
         let stream = json["stream"] as? Bool
 
-        guard model != nil || maxTokens != nil || temperature != nil || stream != nil else {
+        let messages = parseMessages(from: json["messages"])
+
+        guard model != nil || maxTokens != nil || temperature != nil || stream != nil || !messages.isEmpty else {
             return nil
         }
 
@@ -55,8 +57,38 @@ struct AIRequestParser {
             model: model,
             maxTokens: maxTokens,
             temperature: temperature,
-            stream: stream
+            stream: stream,
+            messages: messages
         )
+    }
+
+    private static func parseMessages(from value: Any?) -> [ParsedMessage] {
+        guard let rawMessages = value as? [[String: Any]] else { return [] }
+        return rawMessages.compactMap { message in
+            guard let role = message["role"] as? String else { return nil }
+            guard let content = extractContent(from: message["content"]), !content.isEmpty else { return nil }
+            return ParsedMessage(role: role, content: content)
+        }
+    }
+
+    private static func extractContent(from value: Any?) -> String? {
+        if let content = value as? String {
+            return content
+        }
+        guard let parts = value as? [[String: Any]] else { return nil }
+
+        let text = parts.compactMap { part -> String? in
+            if let type = part["type"] as? String, type == "text", let value = part["text"] as? String {
+                return value
+            }
+            if let type = part["type"] as? String, type == "input_text", let value = part["text"] as? String {
+                return value
+            }
+            return nil
+        }
+        .joined(separator: "\n")
+
+        return text.isEmpty ? nil : text
     }
 }
 
@@ -65,4 +97,10 @@ struct ParsedRequest: Sendable {
     let maxTokens: Int?
     let temperature: Double?
     let stream: Bool?
+    let messages: [ParsedMessage]
+}
+
+struct ParsedMessage: Sendable, Equatable {
+    let role: String
+    let content: String
 }

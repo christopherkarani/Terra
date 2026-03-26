@@ -28,6 +28,8 @@ package struct TerraCoreMLComputePlanSummary: Codable, Hashable, Sendable, Telem
   package let captureDurationMS: Double
   package let operationEstimates: [TerraCoreMLComputePlanOperationEstimate]
   package let errorType: String?
+  package let probeStatus: String
+  package let probeSource: String
 
   package var telemetryAttributes: [String: AttributeValue] {
     var attributes: [String: AttributeValue] = [
@@ -37,6 +39,8 @@ package struct TerraCoreMLComputePlanSummary: Codable, Hashable, Sendable, Telem
       TerraCoreML.Keys.computePlanSupportedDevices: .string(supportedDevices.joined(separator: ",")),
       TerraCoreML.Keys.computePlanNodeCount: .int(nodeCount),
       TerraCoreML.Keys.computePlanCaptureDurationMs: .double(captureDurationMS),
+      Terra.Keys.Terra.canonicalANEProbeStatus: .string(probeStatus),
+      Terra.Keys.Terra.canonicalANEProbeSource: .string(probeSource),
     ]
     attributes.merge(
       Terra.ExecutionRouteEvidence(
@@ -78,7 +82,9 @@ package enum MLComputePlanDiagnostics {
         nodeCount: 0,
         captureDurationMS: elapsedMilliseconds(since: startedAt),
         operationEstimates: [],
-        errorType: nil
+        errorType: nil,
+        probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.unsupportedOS.rawValue,
+        probeSource: "mlcomputeplan"
       )
     }
 
@@ -93,7 +99,9 @@ package enum MLComputePlanDiagnostics {
         nodeCount: summary.nodeCount,
         captureDurationMS: elapsedMilliseconds(since: startedAt),
         operationEstimates: summary.operationEstimates,
-        errorType: summary.errorType
+        errorType: summary.errorType,
+        probeStatus: summary.probeStatus,
+        probeSource: summary.probeSource
       )
     } catch {
       return .init(
@@ -104,7 +112,9 @@ package enum MLComputePlanDiagnostics {
         nodeCount: 0,
         captureDurationMS: elapsedMilliseconds(since: startedAt),
         operationEstimates: [],
-        errorType: String(reflecting: type(of: error))
+        errorType: String(reflecting: type(of: error)),
+        probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.loadFailed.rawValue,
+        probeSource: "mlcomputeplan"
       )
     }
   }
@@ -136,7 +146,9 @@ package enum MLComputePlanDiagnostics {
         nodeCount: 0,
         captureDurationMS: 0,
         operationEstimates: [],
-        errorType: nil
+        errorType: nil,
+        probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.unsupportedStructure.rawValue,
+        probeSource: "mlcomputeplan"
       )
     @unknown default:
       return .init(
@@ -147,7 +159,9 @@ package enum MLComputePlanDiagnostics {
         nodeCount: 0,
         captureDurationMS: 0,
         operationEstimates: [],
-        errorType: nil
+        errorType: nil,
+        probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.unsupportedStructure.rawValue,
+        probeSource: "mlcomputeplan"
       )
     }
   }
@@ -198,7 +212,9 @@ package enum MLComputePlanDiagnostics {
       nodeCount: estimates.count,
       captureDurationMS: 0,
       operationEstimates: estimates,
-      errorType: nil
+      errorType: nil,
+      probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.captured.rawValue,
+      probeSource: "mlcomputeplan"
     )
   }
 

@@ -34,7 +34,7 @@ package enum TerraLlama {
   package static func traced<R>(
     model: String,
     prompt: String? = nil,
-    _ body: @Sendable (Terra.StreamingTrace) async throws -> R
+    _ body: @escaping @Sendable (Terra.StreamingTrace) async throws -> R
   ) async rethrows -> R {
     let request = Terra.StreamingRequest(model: model, prompt: prompt)
     return try await Terra

@@ -695,6 +695,8 @@ These entry points are the right choice when you need explicit lifecycle ownersh
 
 Use ``Terra/agentic(name:id:_:)`` as the default choice for multi-step workflows that alternate between inference and tools. Use ``Terra/Operation/under(_:)`` when a child call must bind to a specific parent span explicitly, and use the detached helpers instead of raw `Task.detached` when the parent trace must remain linked.
 
+If detached work is launched after the original parent span ended, Terra records `detached.parent.ended` on the first replacement span instead of failing the task.
+
 ---
 
 ## Attribute Keys
@@ -707,6 +709,9 @@ OpenTelemetry-standard GenAI attribute keys.
 |-----|------|-------------|
 | `operationName` | `String` | Operation type: "inference", "embeddings", etc. |
 | `requestModel` | `String` | Requested model identifier |
+| `promptMessageCount` | `Int` | Number of prompt messages attached to the request |
+| `promptRole0` | `String` | Role of the first prompt message |
+| `promptContent` | `String` | First prompt message content when privacy policy allows capture |
 | `requestMaxTokens` | `Int` | Maximum tokens requested |
 | `requestTemperature` | `Double` | Sampling temperature |
 | `requestStream` | `Bool` | Whether streaming was requested |

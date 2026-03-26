@@ -3,7 +3,7 @@ import Testing
 import OpenTelemetryApi
 @testable import TerraSystemProfiler
 
-@Suite("TelemetryAttributeConvertible")
+@Suite("TelemetryAttributeConvertible", .serialized)
 struct TelemetryAttributeConvertibleTests {
 
   @Test("MemorySnapshot conforms to TelemetryAttributeConvertible")
@@ -26,5 +26,23 @@ struct TelemetryAttributeConvertibleTests {
     let provider: any TelemetryAttributeConvertible = snapshot
     let attrs = provider.telemetryAttributes
     #expect(attrs["process.memory.resident_bytes"] == AttributeValue.int(52_428_800))
+  }
+
+  @Test("memory delta attributes include canonical Terra aliases")
+  func memoryDeltaAliases() {
+    let start = TerraSystemProfiler.MemorySnapshot(
+      residentBytes: 100 * 1_048_576,
+      timestamp: Date()
+    )
+    let end = TerraSystemProfiler.MemorySnapshot(
+      residentBytes: 160 * 1_048_576,
+      timestamp: Date()
+    )
+
+    let attrs = TerraSystemProfiler.memoryDeltaAttributes(start: start, end: end)
+    #expect(attrs["process.memory.resident_delta_mb"] == AttributeValue.double(60.0))
+    #expect(attrs["process.memory.peak_mb"] == AttributeValue.double(160.0))
+    #expect(attrs["terra.process.memory_peak_mb"] == AttributeValue.double(160.0))
+    #expect(attrs["terra.hw.rss_mb"] == AttributeValue.double(160.0))
   }
 }

@@ -15,6 +15,17 @@ import TerraSystemProfiler
 /// Spans created by swizzling include `terra.auto_instrumented = true` and will be skipped if
 /// a Terra span is already active (dedup guard).
 public enum CoreMLInstrumentation {
+  private final class AssociatedModelState: NSObject {
+    let sourceURL: URL
+    let computePlanSummary: TerraCoreMLComputePlanSummary
+
+    init(sourceURL: URL, computePlanSummary: TerraCoreMLComputePlanSummary) {
+      self.sourceURL = sourceURL
+      self.computePlanSummary = computePlanSummary
+    }
+  }
+
+  private static var associatedModelStateKey: UInt8 = 0
 
   /// Configuration for the auto-instrumentation.
   public struct Configuration: Sendable {
@@ -70,11 +81,89 @@ public enum CoreMLInstrumentation {
     lock.unlock()
 
     guard shouldSwizzle else { return }
+    swizzleModelLoad()
+    swizzleModelLoadWithConfiguration()
+    swizzleAsyncModelLoad()
     swizzlePrediction()
     swizzlePredictionWithOptions()
   }
 
   // MARK: - Swizzling
+
+  private static func swizzleModelLoad() {
+    let selector = NSSelectorFromString("modelWithContentsOfURL:error:")
+    guard
+      let cls = NSClassFromString("MLModel"),
+      let original = class_getClassMethod(cls, selector)
+    else { return }
+
+    typealias Impl = @convention(c) (AnyClass, Selector, NSURL, NSErrorPointer) -> MLModel?
+
+    let originalIMP = method_getImplementation(original)
+    let originalFn = unsafeBitCast(originalIMP, to: Impl.self)
+
+    let block: @convention(block) (AnyClass, NSURL, NSErrorPointer) -> MLModel? = {
+      cls, url, errorPtr in
+      let model = originalFn(cls, selector, url, errorPtr)
+      if let model {
+        associateModel(model, sourceURL: url as URL, configuration: model.configuration)
+      }
+      return model
+    }
+
+    method_setImplementation(original, imp_implementationWithBlock(block))
+  }
+
+  private static func swizzleModelLoadWithConfiguration() {
+    let selector = NSSelectorFromString("modelWithContentsOfURL:configuration:error:")
+    guard
+      let cls = NSClassFromString("MLModel"),
+      let original = class_getClassMethod(cls, selector)
+    else { return }
+
+    typealias Impl = @convention(c) (AnyClass, Selector, NSURL, MLModelConfiguration, NSErrorPointer) -> MLModel?
+
+    let originalIMP = method_getImplementation(original)
+    let originalFn = unsafeBitCast(originalIMP, to: Impl.self)
+
+    let block: @convention(block) (AnyClass, NSURL, MLModelConfiguration, NSErrorPointer) -> MLModel? = {
+      cls, url, configuration, errorPtr in
+      let model = originalFn(cls, selector, url, configuration, errorPtr)
+      if let model {
+        associateModel(model, sourceURL: url as URL, configuration: configuration)
+      }
+      return model
+    }
+
+    method_setImplementation(original, imp_implementationWithBlock(block))
+  }
+
+  private static func swizzleAsyncModelLoad() {
+    let selector = NSSelectorFromString("loadContentsOfURL:configuration:completionHandler:")
+    guard
+      let cls = NSClassFromString("MLModel"),
+      let original = class_getClassMethod(cls, selector)
+    else { return }
+
+    typealias Completion = @convention(block) (MLModel?, NSError?) -> Void
+    typealias Impl = @convention(c) (AnyClass, Selector, NSURL, MLModelConfiguration, @escaping Completion) -> Void
+
+    let originalIMP = method_getImplementation(original)
+    let originalFn = unsafeBitCast(originalIMP, to: Impl.self)
+
+    let block: @convention(block) (AnyClass, NSURL, MLModelConfiguration, @escaping Completion) -> Void = {
+      cls, url, configuration, completion in
+      let wrappedCompletion: Completion = { model, error in
+        if let model {
+          associateModel(model, sourceURL: url as URL, configuration: configuration)
+        }
+        completion(model, error)
+      }
+      originalFn(cls, selector, url, configuration, wrappedCompletion)
+    }
+
+    method_setImplementation(original, imp_implementationWithBlock(block))
+  }
 
   private static func swizzlePrediction() {
     // ObjC selector: -[MLModel predictionFromFeatures:error:]
@@ -122,6 +211,7 @@ public enum CoreMLInstrumentation {
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
         span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
       }
+      CoreMLInstrumentation.attachAssociatedDiagnostics(to: span, model: model)
       let endMemory = TerraSystemProfiler.isInstalled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
@@ -182,6 +272,7 @@ public enum CoreMLInstrumentation {
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
         span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
       }
+      CoreMLInstrumentation.attachAssociatedDiagnostics(to: span, model: model)
       let endMemory = TerraSystemProfiler.isInstalled
         ? TerraSystemProfiler.captureMemorySnapshot()
         : nil
@@ -263,6 +354,65 @@ public enum CoreMLInstrumentation {
     @unknown default:
       return false
     }
+  }
+
+  private static func associateModel(
+    _ model: MLModel,
+    sourceURL: URL,
+    configuration: MLModelConfiguration
+  ) {
+    let summary = captureSummarySynchronously(contentsOf: sourceURL, configuration: configuration)
+    let state = AssociatedModelState(sourceURL: sourceURL, computePlanSummary: summary)
+    objc_setAssociatedObject(
+      model,
+      &associatedModelStateKey,
+      state,
+      .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+    )
+  }
+
+  private static func attachAssociatedDiagnostics(to span: any Span, model: MLModel) {
+    guard
+      let state = objc_getAssociatedObject(model, &associatedModelStateKey) as? AssociatedModelState
+    else {
+      return
+    }
+
+    let summary = state.computePlanSummary
+    span.setAttributes(summary.telemetryAttributes)
+    span.setAttributes(ComputePlanAnalysis.analyze(summary).telemetryAttributes)
+  }
+
+  private static func captureSummarySynchronously(
+    contentsOf url: URL,
+    configuration: MLModelConfiguration
+  ) -> TerraCoreMLComputePlanSummary {
+    let semaphore = DispatchSemaphore(value: 0)
+    var summary: TerraCoreMLComputePlanSummary?
+
+    Task.detached(priority: .utility) {
+      let captured = await MLComputePlanDiagnostics.captureSummary(
+        contentsOf: url,
+        configuration: configuration
+      )
+      summary = captured
+      semaphore.signal()
+    }
+
+    semaphore.wait()
+    return summary
+      ?? TerraCoreMLComputePlanSummary(
+        captureStatus: .loadFailed,
+        modelStructure: "unsupported",
+        estimatedPrimaryDevice: "unknown",
+        supportedDevices: [],
+        nodeCount: 0,
+        captureDurationMS: 0,
+        operationEstimates: [],
+        errorType: "terra.coreml.compute_plan.capture_timeout",
+        probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.loadFailed.rawValue,
+        probeSource: "mlcomputeplan"
+      )
   }
 }
 #endif

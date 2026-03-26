@@ -149,4 +149,53 @@ struct TerraManualTracingTests {
     #expect(tool.parentSpanId?.hexString == root.spanId.hexString)
     #expect(tool.traceId.hexString == root.traceId.hexString)
   }
+
+  @Test("SpanHandle detached helper continues when parent span already ended")
+  func spanHandleDetachedHelperContinuesWhenParentEnded() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    let span = Terra.startSpan(name: "manual-root", id: "issue-12")
+    span.end()
+
+    let task = span.detached { _ in
+      try await Terra.tool("search", callId: "call-ended-parent").run { "ok" }
+    }
+
+    let value = try await task.value
+    #expect(value == "ok")
+
+    let spans = support.finishedSpans()
+    let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
+
+    #expect(tool.parentSpanId == nil)
+    #expect(tool.events.contains(where: { $0.name == "detached.parent.ended" }))
+  }
+
+  @Test("AgentHandle infer messages overload records structured prompt attributes")
+  func agentHandleInferMessagesOverloadRecordsStructuredPromptAttributes() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    let result = try await Terra.agentic(name: "planner-loop", id: "issue-43") { agent in
+      try await agent.infer(
+        "child-model",
+        messages: [
+          .init(role: "system", content: "You are a planner."),
+          .init(role: "user", content: "Draft a route.")
+        ]
+      ) { "draft" }
+    }
+
+    #expect(result == "draft")
+
+    let spans = support.finishedSpans()
+    let root = try #require(spans.first(where: { $0.name == "planner-loop" }))
+    let inference = try #require(spans.first(where: { $0.name == Terra.SpanNames.inference }))
+
+    #expect(inference.parentSpanId?.hexString == root.spanId.hexString)
+    #expect(inference.traceId.hexString == root.traceId.hexString)
+    #expect(inference.attributes[Terra.Keys.GenAI.promptMessageCount]?.description == "2")
+    #expect(inference.attributes[Terra.Keys.GenAI.promptRole0]?.description == "system")
+  }
 }

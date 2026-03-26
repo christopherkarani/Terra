@@ -2,6 +2,8 @@ import Testing
 import TerraCore
 import TerraTracedMacro
 
+@Suite("TracedMacro import smoke", .serialized)
+struct TracedMacroImportSmokeTests {
 private struct MinimalImportSmokeType {
   @Traced(model: "smoke-model")
   func generate(prompt: String) async throws -> String {
@@ -66,4 +68,5 @@ func toolMacroExpansionCompiles() async throws {
 
   let optionalLegacyValue = try await ToolMacroSmokeType().runWithOptionalLegacyCallId(input: "hello", callId: nil)
   #expect(optionalLegacyValue == "hello")
+}
 }

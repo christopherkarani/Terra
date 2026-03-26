@@ -7,6 +7,8 @@ private let testMacros: [String: any Macro.Type] = [
   "Traced": TracedMacro.self,
 ]
 
+@Suite("TracedMacro expansion", .serialized)
+struct TracedMacroExpansionTopLevelTests {
 @Test("Model macro with no matching params expands with model only")
 func modelMacroNoMatchingParams() {
   assertMacroExpansion(
@@ -26,6 +28,7 @@ func modelMacroNoMatchingParams() {
     """,
     macros: testMacros
   )
+}
 }
 
 @Test("Model macro auto-detects prompt parameter")

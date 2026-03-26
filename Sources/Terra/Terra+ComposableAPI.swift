@@ -1,11 +1,13 @@
 import Foundation
 
 extension Terra {
-  /// Controls whether raw content (prompts, responses) is captured in traces.
+  /// Controls whether content-derived telemetry may be emitted for a specific call.
   ///
-  /// By default, Terra redacts content from traces to protect sensitive data and
-  /// reduce storage costs. Set `.includeContent` to capture raw prompts and
-  /// responses when you need full fidelity for debugging or compliance.
+  /// By default, Terra excludes prompt and response content from traces to
+  /// protect sensitive data and reduce storage costs. Set `.includeContent` to
+  /// opt a specific call into content capture, while the active privacy policy
+  /// still determines whether Terra stores length-only, hashed, or no content
+  /// signal at all.
   ///
   /// - Note: Content capture is also controlled by `Terra.PrivacyPolicy`. Even with
   ///   `.includeContent`, privacy settings may redact or anonymize content before it
@@ -14,11 +16,11 @@ extension Terra {
     /// The default capture policy — content is handled according to the active privacy policy.
     case `default`
 
-    /// Captures raw content (prompts, responses) in traces regardless of privacy policy.
+    /// Opts a single call into content capture.
     ///
-    /// Use this when you need full content capture for a specific operation and
-    /// understand the privacy implications. Commonly used for debugging or when
-    /// operating under a regime where user consent has been obtained.
+    /// Use this when you want Terra to emit content-derived telemetry for a
+    /// specific operation. The active privacy policy still governs whether the
+    /// resulting span stores length-only, hashed, or no content signal.
     case includeContent
   }
 
@@ -569,6 +571,26 @@ extension Terra {
     )))
   }
 
+  public static func infer(
+    _ model: String,
+    messages: [ChatMessage],
+    prompt: String? = nil,
+    provider: ProviderID? = nil,
+    runtime: RuntimeID? = nil,
+    temperature: Double? = nil,
+    maxTokens: Int? = nil
+  ) -> Operation {
+    Operation(operation: .infer(.init(
+      model: model,
+      prompt: prompt,
+      messages: messages,
+      provider: provider,
+      runtime: runtime,
+      temperature: temperature,
+      maxTokens: maxTokens
+    )))
+  }
+
   /// Creates a model-inference operation using a compatibility wrapper.
   @available(*, deprecated, message: "Use String model names directly.")
   public static func infer(
@@ -830,6 +852,7 @@ private extension Terra {
   struct _Infer: Sendable {
     var model: String
     var prompt: String?
+    var messages: [ChatMessage]?
     var provider: ProviderID?
     var runtime: RuntimeID?
     var temperature: Double?
@@ -912,7 +935,12 @@ private extension Terra {
   ) async rethrows -> R {
     switch operation {
     case .infer(let operation):
-      var call = inference(model: operation.model, prompt: operation.prompt)
+      let request = InferenceRequest(
+        model: operation.model,
+        prompt: operation.prompt,
+        messages: operation.messages
+      )
+      var call = inference(request)
       if let parent { call = call.under(parent) }
       if capturePolicy == .includeContent { call = call.includeContent() }
       if let provider = operation.provider { call = call.provider(provider.rawValue) }

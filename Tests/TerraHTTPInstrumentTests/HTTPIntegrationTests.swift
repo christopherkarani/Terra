@@ -24,12 +24,7 @@ final class HTTPIntegrationTests: XCTestCase {
       secondAcquire.fulfill()
     }
 
-    let result = XCTWaiter.wait(for: [secondAcquire], timeout: 1.0)
-    if result != .completed {
-      // Cleanup for implementations that still keep thread-affine lock ownership.
-      Terra.unlockTestingIsolation()
-    }
-    XCTAssertEqual(result, .completed)
+    await fulfillment(of: [secondAcquire], timeout: 1.0)
   }
 
   func testHTTPInstrumentationCapturesRequestAndResponseGenAIAttributes() async throws {

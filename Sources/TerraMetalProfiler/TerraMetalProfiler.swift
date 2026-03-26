@@ -54,6 +54,7 @@ public enum TerraMetalProfiler {
     var attributes: [String: AttributeValue] = [:]
     if let gpuUtilization {
       attributes["metal.gpu_utilization"] = .double(gpuUtilization)
+      attributes["terra.hw.gpu_occupancy_pct"] = .double(gpuUtilization)
     }
     if let memoryInFlightMB {
       attributes["metal.memory_in_flight_mb"] = .double(memoryInFlightMB)

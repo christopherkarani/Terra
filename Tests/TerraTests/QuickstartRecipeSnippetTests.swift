@@ -1,6 +1,8 @@
 import Foundation
 import Testing
 
+@Suite("Quickstart snippets", .serialized)
+struct QuickstartRecipeSnippetTests {
 @Test("Quickstart snippets exist and use canonical composable APIs")
 func quickstartSnippetsExistAndUseCanonicalAPIs() throws {
   let repoRoot = URL(fileURLWithPath: #filePath)
@@ -21,4 +23,5 @@ func quickstartSnippetsExistAndUseCanonicalAPIs() throws {
   #expect(source.contains(".agent("))
   #expect(!source.contains("Terra.ModelID("))
   #expect(!source.contains("Terra.ToolCallID("))
+}
 }

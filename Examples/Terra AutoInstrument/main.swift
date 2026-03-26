@@ -25,6 +25,7 @@ struct TerraAutoInstrumentExample {
 // ──────────────────────────────────────────────
 
     // One line. Every CoreML prediction and HTTP AI API call is now traced.
+    // HTTP AI requests created inside Terra-managed spans attach to that active parent.
     try await Terra.start()
 
     // Configure with presets:
@@ -73,6 +74,17 @@ struct TerraAutoInstrumentExample {
 // let session = Terra.TracedSession()
 // let response = try await session.respond(to: "What is Swift?")
 // // ^ Automatically creates a gen_ai.inference span
+
+// Structured prompt example:
+// let plan = try await Terra.agentic(name: "planner", id: "example-1") { agent in
+//   try await agent.infer(
+//     "gpt-4o-mini",
+//     messages: [
+//       .init(role: "system", content: "You are a precise coding assistant."),
+//       .init(role: "user", content: "Summarize the latest build output.")
+//     ]
+//   ) { "done" }
+// }
 
 print("Terra auto-instrumentation is active.")
 print("CoreML predictions and HTTP AI API calls will produce OpenTelemetry spans.")

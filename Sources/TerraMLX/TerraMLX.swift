@@ -23,7 +23,7 @@ public enum TerraMLX {
     device: String? = nil,
     memoryFootprintMB: Double? = nil,
     modelLoadDurationMS: Double? = nil,
-    _ body: @Sendable () async throws -> R
+    _ body: @escaping @Sendable () async throws -> R
   ) async throws -> R {
     let request = Terra.InferenceRequest(
       model: model,
@@ -60,7 +60,7 @@ public enum TerraMLX {
     device: String? = nil,
     memoryFootprintMB: Double? = nil,
     modelLoadDurationMS: Double? = nil,
-    _ body: @Sendable () async throws -> R
+    _ body: @escaping @Sendable () async throws -> R
   ) async throws -> R {
     try await traced(
       model: model.rawValue,

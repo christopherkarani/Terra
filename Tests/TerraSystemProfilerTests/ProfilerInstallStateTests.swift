@@ -1,7 +1,7 @@
 import Testing
 @testable import TerraSystemProfiler
 
-@Suite("ProfilerInstallState")
+@Suite("ProfilerInstallState", .serialized)
 struct ProfilerInstallStateTests {
 
   private enum TestMarker {}

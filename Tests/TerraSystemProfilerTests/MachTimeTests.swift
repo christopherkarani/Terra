@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import TerraSystemProfiler
 
-@Suite("MachTime")
+@Suite("MachTime", .serialized)
 struct MachTimeTests {
 
   @Test("now returns non-zero timestamp")

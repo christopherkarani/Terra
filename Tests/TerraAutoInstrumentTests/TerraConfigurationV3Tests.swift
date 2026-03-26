@@ -3,7 +3,7 @@ import Testing
 @testable import Terra
 @testable import TerraCore
 
-@Suite struct TerraConfigurationV3Tests {
+@Suite(.serialized) struct TerraConfigurationV3Tests {
 
   @Test func quickstartDefaults() {
     let config = Terra.Configuration(preset: .quickstart)

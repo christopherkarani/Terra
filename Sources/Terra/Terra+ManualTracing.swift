@@ -2,8 +2,12 @@ import Foundation
 import OpenTelemetryApi
 
 extension Terra {
-  private enum _SpanContext {
+  private enum _SpanContext: @unchecked Sendable {
     @TaskLocal static var current: SpanHandle?
+  }
+
+  private enum _DetachedParentEndedContext {
+    @TaskLocal static var current = false
   }
 
   /// A sendable handle to an active Terra span.
@@ -34,6 +38,10 @@ extension Terra {
     public var isEnded: Bool { storage.isEnded }
 
     package var otelSpan: any Span { storage.span }
+
+    package func attributeValue(for key: String) -> AttributeValue? {
+      storage.attributeValue(for: key)
+    }
 
     /// Records a named event on the span.
     ///
@@ -97,10 +105,10 @@ extension Terra {
     ) -> Task<R, Error> {
       Task.detached(priority: priority) {
         guard !isEnded else {
-          throw Terra.TerraError.contextNotPropagated(
-            reason: "Detached work was launched from an ended Terra span.",
-            fix: "Launch detached work before ending the span, or create a new Terra.agentic/trace root for the detached task."
-          )
+          NSLog("Detached work launched from an ended Terra span; continuing without parent linkage.")
+          return try await Terra._withDetachedParentEndedMarker {
+            try await body(self)
+          }
         }
         return try await Terra._withActiveSpan(self) {
           try await body(self)
@@ -260,12 +268,14 @@ extension Terra {
     private let guidance: String
     private let lock = NSLock()
     private var ended = false
+    private var attributes: [String: AttributeValue]
 
     init(
       name: String,
       id: String?,
       span: any Span,
       parentSpan: (any Span)?,
+      initialAttributes: [String: AttributeValue],
       ownsLifecycle: Bool,
       registryKey: String?,
       ownerTaskKey: Int?,
@@ -283,6 +293,7 @@ extension Terra {
       self.registryKey = registryKey
       self.ownerTaskKey = ownerTaskKey
       self.guidance = guidance
+      self.attributes = initialAttributes
     }
 
     var isEnded: Bool {
@@ -299,16 +310,21 @@ extension Terra {
 
     func attribute(_ key: String, _ value: _SpanMutationValue) {
       guard validateMutation() else { return }
+      let telemetryValue: AttributeValue
       switch value {
       case .string(let value):
-        span.setAttribute(key: key, value: value)
+        telemetryValue = .string(value)
       case .int(let value):
-        span.setAttribute(key: key, value: value)
+        telemetryValue = .int(value)
       case .double(let value):
-        span.setAttribute(key: key, value: value)
+        telemetryValue = .double(value)
       case .bool(let value):
-        span.setAttribute(key: key, value: value)
+        telemetryValue = .bool(value)
       }
+      lock.lock()
+      attributes[key] = telemetryValue
+      lock.unlock()
+      span.setAttribute(key: key, value: telemetryValue)
     }
 
     func recordError(_ error: any Error) {
@@ -316,6 +332,13 @@ extension Terra {
       span.status = .error(description: String(describing: error))
       span.recordException(error)
       Terra._emitErrorHook(error, span: SpanHandle(storage: self))
+    }
+
+    func attributeValue(for key: String) -> AttributeValue? {
+      lock.lock()
+      let value = attributes[key]
+      lock.unlock()
+      return value
     }
 
     func end() {
@@ -372,6 +395,7 @@ extension Terra {
     id: String? = nil,
     span: any Span,
     parentSpan: (any Span)?,
+    initialAttributes: [String: AttributeValue] = [:],
     ownsLifecycle: Bool
   ) -> SpanHandle {
     let registryKey = span.context.spanId.hexString
@@ -381,6 +405,7 @@ extension Terra {
       id: id,
       span: span,
       parentSpan: parentSpan,
+      initialAttributes: initialAttributes,
       ownsLifecycle: ownsLifecycle,
       registryKey: registryKey,
       ownerTaskKey: ownerTaskKey,
@@ -432,6 +457,27 @@ extension Terra {
       try await OpenTelemetry.instance.contextProvider.withActiveSpan(span.otelSpan) {
         try await body()
       }
+    }
+  }
+
+  package static func _withDetachedParentEndedMarker<R: Sendable>(
+    _ body: @escaping @Sendable () async throws -> R
+  ) async rethrows -> R {
+    try await _DetachedParentEndedContext.$current.withValue(true) {
+      try await body()
+    }
+  }
+
+  package static var _hasDetachedParentEndedMarker: Bool {
+    _DetachedParentEndedContext.current
+  }
+
+  package static func _consumeDetachedParentEndedMarker<R: Sendable>(
+    _ body: @escaping @Sendable (Bool) async throws -> R
+  ) async rethrows -> R {
+    let isSet = _DetachedParentEndedContext.current
+    return try await _DetachedParentEndedContext.$current.withValue(false) {
+      try await body(isSet)
     }
   }
 
@@ -494,6 +540,7 @@ extension Terra {
       id: nil,
       span: active,
       parentSpan: nil,
+      initialAttributes: [:],
       ownsLifecycle: false,
       registryKey: nil,
       ownerTaskKey: nil,
@@ -531,7 +578,10 @@ extension Terra {
     id: String? = nil,
     attributes: [String: AttributeValue] = [:]
   ) -> SpanHandle {
-    let parentSpan = _SpanContext.current?.otelSpan ?? _currentTaskSpan()?.otelSpan ?? OpenTelemetry.instance.contextProvider.activeSpan
+    let parentSpan =
+      _SpanContext.current.flatMap { $0.isEnded ? nil : $0.otelSpan }
+      ?? _currentTaskSpan().flatMap { $0.isEnded ? nil : $0.otelSpan }
+      ?? OpenTelemetry.instance.contextProvider.activeSpan
     let spanBuilder = tracer().spanBuilder(spanName: name).setSpanKind(spanKind: .internal)
     if let parentSpan {
       spanBuilder.setParent(parentSpan)
@@ -543,11 +593,15 @@ extension Terra {
       spanBuilder.setAttribute(key: "terra.trace.id", value: .string(id))
     }
     let span = spanBuilder.startSpan()
+    if _DetachedParentEndedContext.current {
+      span.addEvent(name: "detached.parent.ended")
+    }
     return _registerActiveSpan(
       name: name,
       id: id,
       span: span,
       parentSpan: parentSpan,
+      initialAttributes: attributes,
       ownsLifecycle: true
     )
   }
@@ -672,6 +726,55 @@ extension Terra {
       try await Terra
         .infer(
           model,
+          prompt: prompt,
+          provider: provider,
+          runtime: runtime,
+          temperature: temperature,
+          maxTokens: maxTokens
+        )
+        .under(span)
+        .run(body)
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      messages: [ChatMessage],
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable () async throws -> R
+    ) async rethrows -> R {
+      try await infer(
+        model,
+        messages: messages,
+        prompt: prompt,
+        provider: provider,
+        runtime: runtime,
+        temperature: temperature,
+        maxTokens: maxTokens
+      ) { _ in
+        try await body()
+      }
+    }
+
+    @discardableResult
+    public func infer<R: Sendable>(
+      _ model: String,
+      messages: [ChatMessage],
+      prompt: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil,
+      temperature: Double? = nil,
+      maxTokens: Int? = nil,
+      _ body: @escaping @Sendable (TraceHandle) async throws -> R
+    ) async rethrows -> R {
+      try await Terra
+        .infer(
+          model,
+          messages: messages,
           prompt: prompt,
           provider: provider,
           runtime: runtime,

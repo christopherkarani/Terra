@@ -211,14 +211,14 @@ public final class TerraTracedSession {
       applyGenerationAttributes(from: backend.generationOptionsAttributes(), to: &attributes)
     }
 
-    return try await call.execute { trace in
-      let before = backend.transcriptEntries()
+    return try await call.execute { [self] trace in
+      let before = self.backend.transcriptEntries()
       do {
-        let response = try await backend.respond(to: prompt)
-        let diff = Self.inspectTranscriptDiff(before: before, after: backend.transcriptEntries())
-        applyToolDiff(diff, captureContent: promptCapture == .includeContent, to: trace)
+        let response = try await self.backend.respond(to: prompt)
+        let diff = Self.inspectTranscriptDiff(before: before, after: self.backend.transcriptEntries())
+        self.applyToolDiff(diff, captureContent: promptCapture == .includeContent, to: trace)
         if let violation = diff.guardrailViolationType {
-          await emitGuardrailSpan(
+          await self.emitGuardrailSpan(
             violationType: violation,
             prompt: prompt,
             promptCapture: promptCapture
@@ -227,7 +227,7 @@ public final class TerraTracedSession {
         return response
       } catch {
         if Self.isGuardrailError(error) {
-          await emitGuardrailSpan(
+          await self.emitGuardrailSpan(
             violationType: String(reflecting: Swift.type(of: error)),
             prompt: prompt,
             promptCapture: promptCapture
@@ -250,14 +250,14 @@ public final class TerraTracedSession {
       applyGenerationAttributes(from: backend.generationOptionsAttributes(), to: &attributes)
     }
 
-    return try await call.execute { trace in
-      let before = backend.transcriptEntries()
+    return try await call.execute { [self] trace in
+      let before = self.backend.transcriptEntries()
       do {
-        let response = try await backend.respond(to: prompt, generating: type)
-        let diff = Self.inspectTranscriptDiff(before: before, after: backend.transcriptEntries())
-        applyToolDiff(diff, captureContent: promptCapture == .includeContent, to: trace)
+        let response = try await self.backend.respond(to: prompt, generating: type)
+        let diff = Self.inspectTranscriptDiff(before: before, after: self.backend.transcriptEntries())
+        self.applyToolDiff(diff, captureContent: promptCapture == .includeContent, to: trace)
         if let violation = diff.guardrailViolationType {
-          await emitGuardrailSpan(
+          await self.emitGuardrailSpan(
             violationType: violation,
             prompt: prompt,
             promptCapture: promptCapture
@@ -266,7 +266,7 @@ public final class TerraTracedSession {
         return response
       } catch {
         if Self.isGuardrailError(error) {
-          await emitGuardrailSpan(
+          await self.emitGuardrailSpan(
             violationType: String(reflecting: Swift.type(of: error)),
             prompt: prompt,
             promptCapture: promptCapture
@@ -293,8 +293,8 @@ public final class TerraTracedSession {
             .provider("apple/foundation-model")
             .runtime("foundation_models")
             .attribute(.init(Terra.Keys.Terra.autoInstrumented), true)
-            .execute { streamScope in
-              let stream = backend.streamResponse(to: prompt)
+            .execute { [self] streamScope in
+              let stream = self.backend.streamResponse(to: prompt)
               for try await chunk in stream {
                 try Task.checkCancellation()
                 streamScope.chunk(tokens: 0)

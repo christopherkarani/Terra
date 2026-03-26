@@ -4,7 +4,7 @@ import Testing
 import OpenTelemetryApi
 @testable import TerraCoreML
 
-@Suite("EspressoLogParser")
+@Suite("EspressoLogParser", .serialized)
 struct EspressoLogParserTests {
 
   @Test("parses well-formed CostModelFeature lines")

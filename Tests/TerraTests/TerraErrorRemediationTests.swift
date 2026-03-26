@@ -1,7 +1,7 @@
 import Testing
 @testable import TerraCore
 
-@Suite("TerraError remediation")
+@Suite("TerraError remediation", .serialized)
 struct TerraErrorRemediationTests {
   @Test("Known lifecycle TerraError codes provide deterministic remediation hints")
   func knownLifecycleErrorHints() {

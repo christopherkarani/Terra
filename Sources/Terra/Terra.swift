@@ -13,6 +13,10 @@ public enum Terra {
     Runtime.shared.install(installation)
   }
 
+  package static func shouldCaptureAutoInstrumentedPromptContent() -> Bool {
+    Runtime.shared.privacy.shouldCapture(includeContent: false)
+  }
+
   // MARK: - Public API (Phase 2)
 
   @discardableResult
@@ -20,7 +24,7 @@ public enum Terra {
     _ request: InferenceRequest,
     stream: Bool? = nil,
     parent: SpanHandle? = nil,
-    _ body: @Sendable (Scope<InferenceSpan>) async throws -> R
+    _ body: @escaping @Sendable (Scope<InferenceSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
     let startInstant = ContinuousClock.now
@@ -40,7 +44,14 @@ public enum Terra {
       attributes[Keys.GenAI.requestStream] = .bool(stream)
     }
 
-    if let prompt = request.prompt, privacy.shouldCapture(includeContent: request.includeContent) {
+    if let messageCount = request.promptMessageCount {
+      attributes[Keys.GenAI.promptMessageCount] = .int(messageCount)
+    }
+    if let role0 = request.promptRole0 {
+      attributes[Keys.GenAI.promptRole0] = .string(role0)
+    }
+
+    if let prompt = request.compatibilityPrompt, privacy.shouldCapture(includeContent: request.includeContent) {
       attributes.merge(
         redactedStringAttributes(
           original: prompt,
@@ -72,7 +83,7 @@ public enum Terra {
   static func withStreamingInferenceSpan<R>(
     _ request: StreamingRequest,
     parent: SpanHandle? = nil,
-    _ body: @Sendable (StreamingInferenceScope) async throws -> R
+    _ body: @escaping @Sendable (StreamingInferenceScope) async throws -> R
   ) async rethrows -> R {
     let streamingRequest = InferenceRequest(
       model: request.model,
@@ -97,7 +108,7 @@ public enum Terra {
   static func withAgentInvocationSpan<R>(
     agent: AgentRequest,
     parent: SpanHandle? = nil,
-    _ body: @Sendable (Scope<AgentInvocationSpan>) async throws -> R
+    _ body: @escaping @Sendable (Scope<AgentInvocationSpan>) async throws -> R
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.invokeAgent.rawValue),
@@ -121,7 +132,7 @@ public enum Terra {
   static func withToolExecutionSpan<R>(
     tool: ToolRequest,
     parent: SpanHandle? = nil,
-    _ body: @Sendable (Scope<ToolExecutionSpan>) async throws -> R
+    _ body: @escaping @Sendable (Scope<ToolExecutionSpan>) async throws -> R
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.executeTool.rawValue),
@@ -146,7 +157,7 @@ public enum Terra {
   static func withEmbeddingSpan<R>(
     _ request: EmbeddingRequest,
     parent: SpanHandle? = nil,
-    _ body: @Sendable (Scope<EmbeddingSpan>) async throws -> R
+    _ body: @escaping @Sendable (Scope<EmbeddingSpan>) async throws -> R
   ) async rethrows -> R {
     var attributes: [String: AttributeValue] = [
       Keys.GenAI.operationName: .string(OperationName.embeddings.rawValue),
@@ -170,7 +181,7 @@ public enum Terra {
   static func withSafetyCheckSpan<R>(
     _ check: SafetyCheckRequest,
     parent: SpanHandle? = nil,
-    _ body: @Sendable (Scope<SafetyCheckSpan>) async throws -> R
+    _ body: @escaping @Sendable (Scope<SafetyCheckSpan>) async throws -> R
   ) async rethrows -> R {
     let privacy = Runtime.shared.privacy
 
@@ -209,7 +220,7 @@ public enum Terra {
     attributes: [String: AttributeValue],
     allowErrorMessageCapture: Bool,
     parent explicitParent: SpanHandle? = nil,
-    _ body: @Sendable (Scope<Kind>) async throws -> R
+    _ body: @escaping @Sendable (Scope<Kind>) async throws -> R
   ) async rethrows -> R {
     let tracer = tracer()
 
@@ -221,7 +232,10 @@ public enum Terra {
     }
     spanBuilder.setAttribute(key: Keys.Terra.thermalState, value: .string(Runtime.thermalStateLabel()))
 
-    let parentSpan = explicitParent?.otelSpan ?? Terra.currentSpan()?.otelSpan ?? OpenTelemetry.instance.contextProvider.activeSpan
+    let parentSpan =
+      explicitParent.flatMap { $0.isEnded ? nil : $0.otelSpan }
+      ?? Terra.currentSpan().flatMap { $0.isEnded ? nil : $0.otelSpan }
+      ?? OpenTelemetry.instance.contextProvider.activeSpan
     if let parentSpan {
       spanBuilder.setParent(parentSpan)
     }
@@ -234,8 +248,13 @@ public enum Terra {
       name: name,
       span: span,
       parentSpan: parentSpan,
+      initialAttributes: attributes,
       ownsLifecycle: false
     )
+    let markDetachedParentEnded = Terra._hasDetachedParentEndedMarker
+    if markDetachedParentEnded {
+      span.addEvent(name: "detached.parent.ended")
+    }
     let scope = Scope<Kind>(span: span)
     defer {
       let endMemorySnapshot = TerraSystemProfiler.isInstalled
@@ -252,14 +271,16 @@ public enum Terra {
       span.end()
     }
 
-    return try await OpenTelemetry.instance.contextProvider.withActiveSpan(span) {
-      do {
-        return try await body(scope)
-      } catch let cancellation as CancellationError {
-        throw cancellation
-      } catch {
-        scope.recordError(error, captureMessage: allowErrorMessageCapture)
-        throw error
+    return try await Terra._consumeDetachedParentEndedMarker { _ in
+      try await OpenTelemetry.instance.contextProvider.withActiveSpan(span) {
+        do {
+          return try await body(scope)
+        } catch let cancellation as CancellationError {
+          throw cancellation
+        } catch {
+          scope.recordError(error, captureMessage: allowErrorMessageCapture)
+          throw error
+        }
       }
     }
   }

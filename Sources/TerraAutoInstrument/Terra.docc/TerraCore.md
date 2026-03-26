@@ -30,6 +30,26 @@ let value = try await Terra
 
 If work crosses a detached-task boundary, use ``Terra/SpanHandle/detached(priority:_:)`` or ``Terra/AgentHandle/detached(priority:_:)`` instead of raw `Task.detached` so the parent span remains linked.
 
+If detached work starts after the parent span already ended, Terra no longer throws. The detached task continues and the first replacement span records `detached.parent.ended` so the lost linkage is visible in traces.
+
+Structured chat prompts are also first-class in explicit tracing flows:
+
+```swift
+import Terra
+
+let result = try await Terra.agentic(name: "planner", id: "issue-42") { agent in
+  try await agent.infer(
+    "gpt-4o-mini",
+    messages: [
+      .init(role: "system", content: "You are a precise coding assistant."),
+      .init(role: "user", content: "Plan this refactor.")
+    ]
+  ) {
+    "plan"
+  }
+}
+```
+
 ## Privacy Model
 
 Terra's privacy system uses ``Terra/PrivacyPolicy`` to control how sensitive content is handled in traces.
@@ -207,7 +227,7 @@ try await Terra.start(config)
 ``Terra/Configuration/Features`` is an OptionSet controlling which instrumentations are enabled:
 
 - ``Terra/Configuration/Features/coreML`` — Auto-instrument CoreML predictions
-- ``Terra/Configuration/Features/http`` — Auto-instrument AI API HTTP calls
+- ``Terra/Configuration/Features/http`` — Auto-instrument AI API HTTP calls, including active-parent linkage, prompt message metadata, and streaming chunk telemetry
 - ``Terra/Configuration/Features/sessions`` — Enable session tracking
 - ``Terra/Configuration/Features/signposts`` — Enable OS signpost integration
 - ``Terra/Configuration/Features/logs`` — Enable structured logging

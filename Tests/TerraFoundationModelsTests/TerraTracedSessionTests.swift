@@ -117,6 +117,8 @@ private enum GuardrailError: Error, CustomStringConvertible {
   }
 }
 
+@Suite("TerraFoundationModels top-level", .serialized)
+struct TerraTracedSessionTopLevelTests {
 @available(macOS 26.0, iOS 26.0, *)
 @Test("TerraTracedSession initializes with default model identifier")
 func tracedSessionInitializesWithDefaultIdentifier() {
@@ -231,15 +233,19 @@ func foundationModelsProviderMetadata() async throws {
   let span = try #require(harness.finishedSpans().first(where: { $0.name == "gen_ai.inference" }))
   #expect(span.attributes[Terra.Keys.GenAI.providerName]?.description == "apple/foundation-model")
 }
+}
 
 #else
 
 // FoundationModels is not available on this platform or SDK.
 // These tests confirm the module compiles cleanly as a stub.
 
+@Suite("TerraFoundationModels stub", .serialized)
+struct TerraFoundationModelsStubTests {
 @Test("TerraFoundationModels stub compiles without FoundationModels framework")
 func foundationModelsNotAvailable() {
   #expect(true)
+}
 }
 
 #endif

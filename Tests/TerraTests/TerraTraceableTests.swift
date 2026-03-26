@@ -13,7 +13,7 @@ struct TerraTraceableTests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    _ = try await Terra.inference(model: "model@request").execute { _ in
+    _ = await Terra.inference(model: "model@request").execute { _ in
       TraceableResponse()
     }
 

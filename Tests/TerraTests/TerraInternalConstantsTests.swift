@@ -1,7 +1,7 @@
 import Testing
 @testable import TerraCore
 
-@Suite("Internal constants string values")
+@Suite("Internal constants string values", .serialized)
 struct TerraInternalConstantsTests {
   @Test("SpanNames have expected string values")
   func spanNames_expectedValues() {

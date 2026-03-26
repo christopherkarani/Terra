@@ -3,7 +3,7 @@ import Testing
 import OpenTelemetryApi
 @testable import TerraCoreML
 
-@Suite("CalculatedMetrics")
+@Suite("CalculatedMetrics", .serialized)
 struct CalculatedMetricsTests {
 
   @Test("1GB model + 1s = 1.0 GB/s bandwidth")
@@ -44,7 +44,7 @@ struct CalculatedMetricsTests {
   }
 }
 
-@Suite("ComputeDeviceGuess")
+@Suite("ComputeDeviceGuess", .serialized)
 struct ComputeDeviceGuessTests {
 
   @Test("< 20ms → likely ANE")

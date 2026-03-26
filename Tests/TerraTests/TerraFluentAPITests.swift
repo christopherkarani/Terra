@@ -18,7 +18,7 @@ final class TerraFluentAPITests: XCTestCase {
   }
 
   func testInferenceFluentRun_createsInferenceSpan() async throws {
-    let result = try await Terra.inference(model: "local/fluent", prompt: "hello").execute {
+    let result = await Terra.inference(model: "local/fluent", prompt: "hello").execute {
       "ok"
     }
 

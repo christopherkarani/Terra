@@ -8,7 +8,7 @@ struct TerraClosureAPITests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    let value = try await Terra.inference(model: "local/model") {
+    let value = await Terra.inference(model: "local/model") {
       "ok"
     }
 
@@ -22,7 +22,7 @@ struct TerraClosureAPITests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    let value = try await Terra.inference(model: "local/model") { trace in
+    let value = await Terra.inference(model: "local/model") { trace in
       trace.attribute(Terra.Key.provider, "unit-test")
       return "ok"
     }
@@ -37,8 +37,8 @@ struct TerraClosureAPITests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    _ = try await Terra.agent(name: "planner") {
-      try await Terra.inference(model: "local/model") { "ok" }
+    _ = await Terra.agent(name: "planner") {
+      await Terra.inference(model: "local/model") { "ok" }
     }
 
     let spans = support.finishedSpans()
@@ -68,10 +68,10 @@ struct TerraClosureAPITests {
     let support = TerraTestSupport()
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
-    _ = try await Terra.stream(model: "local/model") { "ok" }
-    _ = try await Terra.tool(name: "search", callId: "call-1") { "ok" }
-    _ = try await Terra.embedding(model: "embed-model") { "ok" }
-    _ = try await Terra.safetyCheck(name: "toxicity", subject: "hello") { "ok" }
+    _ = await Terra.stream(model: "local/model") { "ok" }
+    _ = await Terra.tool(name: "search", callId: "call-1") { "ok" }
+    _ = await Terra.embedding(model: "embed-model") { "ok" }
+    _ = await Terra.safetyCheck(name: "toxicity", subject: "hello") { "ok" }
 
     let spans = support.finishedSpans()
     #expect(spans.contains { $0.name == Terra.SpanNames.inference })

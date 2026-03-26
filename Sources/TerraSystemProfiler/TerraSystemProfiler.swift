@@ -104,9 +104,12 @@ public enum TerraSystemProfiler {
   ) -> [String: AttributeValue] {
     guard let start, let end else { return [:] }
     let delta = Int64(end.residentBytes) - Int64(start.residentBytes)
+    let peakMB = Double(max(start.residentBytes, end.residentBytes)) / 1_048_576
     return [
       "process.memory.resident_delta_mb": .double(Double(delta) / 1_048_576),
-      "process.memory.peak_mb": .double(Double(max(start.residentBytes, end.residentBytes)) / 1_048_576),
+      "process.memory.peak_mb": .double(peakMB),
+      "terra.process.memory_peak_mb": .double(peakMB),
+      "terra.hw.rss_mb": .double(peakMB),
     ]
   }
 }

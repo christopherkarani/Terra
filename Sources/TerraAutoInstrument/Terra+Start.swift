@@ -347,6 +347,7 @@ extension Terra {
   public static func quickStart() async throws {
     var config = Configuration(preset: .quickstart)
     config.privacy = .capturing
+    config.profiling = [.memory, .thermal, .metal]
     config.destination = .endpoint(URL(string: "http://localhost:4318")!)
     try await start(config)
   }

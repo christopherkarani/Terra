@@ -4,7 +4,7 @@ import OpenTelemetryApi
 @testable import TerraCoreML
 
 #if canImport(CoreML)
-@Suite("ComputePlanAnalysis")
+@Suite("ComputePlanAnalysis", .serialized)
 struct ComputePlanAnalysisTests {
 
   private func makeSummary(
@@ -18,7 +18,9 @@ struct ComputePlanAnalysisTests {
       nodeCount: ops.count,
       captureDurationMS: 1.0,
       operationEstimates: ops,
-      errorType: nil
+      errorType: nil,
+      probeStatus: "captured",
+      probeSource: "mlcomputeplan"
     )
   }
 
@@ -118,6 +120,13 @@ struct ComputePlanAnalysisTests {
     let attrs = analysis.telemetryAttributes
     #expect(attrs["terra.compute_plan.total_ops"] == AttributeValue.int(3))
     #expect(attrs["terra.compute_plan.is_mixed_execution"] == AttributeValue.bool(true))
+  }
+
+  @Test("compute plan summary emits canonical probe metadata")
+  func summaryTelemetryAttributes() {
+    let attrs = makeSummary(ops: [makeOp(device: "ane")]).telemetryAttributes
+    #expect(attrs["terra.hw.ane.probe_status"] == AttributeValue.string("captured"))
+    #expect(attrs["terra.hw.ane.probe_source"] == AttributeValue.string("mlcomputeplan"))
   }
 
   @Test("ANEFallbackAssessment telemetry attributes")

@@ -182,7 +182,7 @@ extension Terra {
     runtime: String? = nil,
     temperature: Double? = nil,
     maxOutputTokens: Int? = nil,
-    _ body: @Sendable () async throws -> R
+    _ body: @escaping @Sendable () async throws -> R
   ) async rethrows -> R {
     try await inference(
       model: model,
@@ -205,7 +205,7 @@ extension Terra {
     runtime: String? = nil,
     temperature: Double? = nil,
     maxOutputTokens: Int? = nil,
-    _ body: @Sendable (InferenceTrace) async throws -> R
+    _ body: @escaping @Sendable (InferenceTrace) async throws -> R
   ) async rethrows -> R {
     var call = inference(model: model, prompt: prompt)
     if let provider { call = call.provider(provider) }
@@ -224,7 +224,7 @@ extension Terra {
     runtime: String? = nil,
     temperature: Double? = nil,
     maxOutputTokens: Int? = nil,
-    _ body: @Sendable () async throws -> R
+    _ body: @escaping @Sendable () async throws -> R
   ) async rethrows -> R {
     try await stream(
       model: model,
@@ -247,7 +247,7 @@ extension Terra {
     runtime: String? = nil,
     temperature: Double? = nil,
     maxOutputTokens: Int? = nil,
-    _ body: @Sendable (StreamingTrace) async throws -> R
+    _ body: @escaping @Sendable (StreamingTrace) async throws -> R
   ) async rethrows -> R {
     var call = stream(model: model, prompt: prompt)
     if let provider { call = call.provider(provider) }
@@ -264,7 +264,7 @@ extension Terra {
     inputCount: Int? = nil,
     provider: String? = nil,
     runtime: String? = nil,
-    _ body: @Sendable () async throws -> R
+    _ body: @escaping @Sendable () async throws -> R
   ) async rethrows -> R {
     try await embedding(
       model: model,
@@ -283,7 +283,7 @@ extension Terra {
     inputCount: Int? = nil,
     provider: String? = nil,
     runtime: String? = nil,
-    _ body: @Sendable (EmbeddingTrace) async throws -> R
+    _ body: @escaping @Sendable (EmbeddingTrace) async throws -> R
   ) async rethrows -> R {
     var call = embedding(model: model, inputCount: inputCount)
     if let provider { call = call.provider(provider) }
@@ -298,7 +298,7 @@ extension Terra {
     id: String? = nil,
     provider: String? = nil,
     runtime: String? = nil,
-    _ body: @Sendable () async throws -> R
+    _ body: @escaping @Sendable () async throws -> R
   ) async rethrows -> R {
     try await agent(
       name: name,
@@ -317,7 +317,7 @@ extension Terra {
     id: String? = nil,
     provider: String? = nil,
     runtime: String? = nil,
-    _ body: @Sendable (AgentTrace) async throws -> R
+    _ body: @escaping @Sendable (AgentTrace) async throws -> R
   ) async rethrows -> R {
     var call = agent(name: name, id: id)
     if let provider { call = call.provider(provider) }
@@ -333,7 +333,7 @@ extension Terra {
     type: String? = nil,
     provider: String? = nil,
     runtime: String? = nil,
-    _ body: @Sendable () async throws -> R
+    _ body: @escaping @Sendable () async throws -> R
   ) async rethrows -> R {
     try await tool(
       name: name,
@@ -354,7 +354,7 @@ extension Terra {
     type: String? = nil,
     provider: String? = nil,
     runtime: String? = nil,
-    _ body: @Sendable () async throws -> R
+    _ body: @escaping @Sendable () async throws -> R
   ) async rethrows -> R {
     try await tool(name: name, callId: callID, type: type, provider: provider, runtime: runtime, body)
   }
@@ -367,7 +367,7 @@ extension Terra {
     type: String? = nil,
     provider: String? = nil,
     runtime: String? = nil,
-    _ body: @Sendable (ToolTrace) async throws -> R
+    _ body: @escaping @Sendable (ToolTrace) async throws -> R
   ) async rethrows -> R {
     var call = tool(name: name, callId: callId, type: type)
     if let provider { call = call.provider(provider) }
@@ -383,7 +383,7 @@ extension Terra {
     type: String? = nil,
     provider: String? = nil,
     runtime: String? = nil,
-    _ body: @Sendable (ToolTrace) async throws -> R
+    _ body: @escaping @Sendable (ToolTrace) async throws -> R
   ) async rethrows -> R {
     try await tool(name: name, callId: callID, type: type, provider: provider, runtime: runtime, body)
   }
@@ -395,7 +395,7 @@ extension Terra {
     subject: String? = nil,
     provider: String? = nil,
     runtime: String? = nil,
-    _ body: @Sendable () async throws -> R
+    _ body: @escaping @Sendable () async throws -> R
   ) async rethrows -> R {
     try await safetyCheck(
       name: name,
@@ -414,7 +414,7 @@ extension Terra {
     subject: String? = nil,
     provider: String? = nil,
     runtime: String? = nil,
-    _ body: @Sendable (SafetyCheckTrace) async throws -> R
+    _ body: @escaping @Sendable (SafetyCheckTrace) async throws -> R
   ) async rethrows -> R {
     var call = safetyCheck(name: name, subject: subject)
     if let provider { call = call.provider(provider) }
@@ -484,7 +484,7 @@ extension Terra {
       request: InferenceRequest,
       attributes: AttributeBag,
       parent: Terra.SpanHandle? = nil,
-      _ body: @Sendable (InferenceTrace) async throws -> R
+      _ body: @escaping @Sendable (InferenceTrace) async throws -> R
     ) async rethrows -> R {
       Terra.agentContext?.recordModel(request.model)
       return try await Terra.withInferenceSpan(request, parent: parent) { scope in
@@ -509,7 +509,7 @@ extension Terra {
       request: StreamingRequest,
       attributes: AttributeBag,
       parent: Terra.SpanHandle? = nil,
-      _ body: @Sendable (StreamingTrace) async throws -> R
+      _ body: @escaping @Sendable (StreamingTrace) async throws -> R
     ) async rethrows -> R {
       Terra.agentContext?.recordModel(request.model)
       return try await Terra.withStreamingInferenceSpan(request, parent: parent) { scope in
@@ -524,7 +524,7 @@ extension Terra {
       request: EmbeddingRequest,
       attributes: AttributeBag,
       parent: Terra.SpanHandle? = nil,
-      _ body: @Sendable (EmbeddingTrace) async throws -> R
+      _ body: @escaping @Sendable (EmbeddingTrace) async throws -> R
     ) async rethrows -> R {
       return try await Terra.withEmbeddingSpan(request, parent: parent) { scope in
         if !attributes.values.isEmpty {
@@ -538,7 +538,7 @@ extension Terra {
       request: AgentRequest,
       attributes: AttributeBag,
       parent: Terra.SpanHandle? = nil,
-      _ body: @Sendable (AgentTrace) async throws -> R
+      _ body: @escaping @Sendable (AgentTrace) async throws -> R
     ) async rethrows -> R {
       let context = Terra.AgentContext()
       return try await Terra.$agentContext.withValue(context) {
@@ -563,7 +563,7 @@ extension Terra {
       request: ToolRequest,
       attributes: AttributeBag,
       parent: Terra.SpanHandle? = nil,
-      _ body: @Sendable (ToolTrace) async throws -> R
+      _ body: @escaping @Sendable (ToolTrace) async throws -> R
     ) async rethrows -> R {
       Terra.agentContext?.recordTool(request.name)
       return try await Terra.withToolExecutionSpan(tool: request, parent: parent) { scope in
@@ -578,7 +578,7 @@ extension Terra {
       request: SafetyCheckRequest,
       attributes: AttributeBag,
       parent: Terra.SpanHandle? = nil,
-      _ body: @Sendable (SafetyCheckTrace) async throws -> R
+      _ body: @escaping @Sendable (SafetyCheckTrace) async throws -> R
     ) async rethrows -> R {
       return try await Terra.withSafetyCheckSpan(request, parent: parent) { scope in
         if !attributes.values.isEmpty {
@@ -669,14 +669,14 @@ extension Terra {
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable (InferenceTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable (InferenceTrace) async throws -> R) async rethrows -> R {
       let request: InferenceRequest = {
         var copy = self.request
         if metadata.includeContent {
@@ -696,13 +696,13 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable (InferenceTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable (InferenceTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }
@@ -770,14 +770,14 @@ extension Terra {
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable (StreamingTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable (StreamingTrace) async throws -> R) async rethrows -> R {
       let request: StreamingRequest = {
         var copy = self.request
         if metadata.includeContent {
@@ -797,13 +797,13 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable (StreamingTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable (StreamingTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }
@@ -853,14 +853,14 @@ extension Terra {
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable (EmbeddingTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable (EmbeddingTrace) async throws -> R) async rethrows -> R {
       try await runtime.withSession { session in
         try await session.runEmbedding(
           request: request,
@@ -873,13 +873,13 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable (EmbeddingTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable (EmbeddingTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }
@@ -929,14 +929,14 @@ extension Terra {
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable (AgentTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable (AgentTrace) async throws -> R) async rethrows -> R {
       try await runtime.withSession { session in
         try await session.runAgent(
           request: request,
@@ -949,13 +949,13 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable (AgentTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable (AgentTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }
@@ -1005,14 +1005,14 @@ extension Terra {
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable (ToolTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable (ToolTrace) async throws -> R) async rethrows -> R {
       try await runtime.withSession { session in
         try await session.runTool(
           request: request,
@@ -1025,13 +1025,13 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable (ToolTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable (ToolTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }
@@ -1081,14 +1081,14 @@ extension Terra {
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute { _ in
         try await body()
       }
     }
 
     @discardableResult
-    package func execute<R>(_ body: @Sendable (SafetyCheckTrace) async throws -> R) async rethrows -> R {
+    package func execute<R>(_ body: @escaping @Sendable (SafetyCheckTrace) async throws -> R) async rethrows -> R {
       let request: SafetyCheckRequest = {
         var copy = self.request
         if metadata.includeContent {
@@ -1108,13 +1108,13 @@ extension Terra {
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable () async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await execute(body)
     }
 
     @available(*, deprecated, message: "Use execute(_:) instead.")
     @discardableResult
-    package func run<R>(_ body: @Sendable (SafetyCheckTrace) async throws -> R) async rethrows -> R {
+    package func run<R>(_ body: @escaping @Sendable (SafetyCheckTrace) async throws -> R) async rethrows -> R {
       try await execute(body)
     }
   }

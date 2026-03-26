@@ -11,9 +11,20 @@ extension Terra {
 
   // MARK: - Requests
 
+  public struct ChatMessage: Sendable, Hashable {
+    public var role: String
+    public var content: String
+
+    public init(role: String, content: String) {
+      self.role = role
+      self.content = content
+    }
+  }
+
   package struct InferenceRequest: Sendable, Hashable {
     package var model: String
     package var prompt: String?
+    package var messages: [ChatMessage]?
     package var includeContent: Bool
 
     package var maxOutputTokens: Int?
@@ -22,12 +33,14 @@ extension Terra {
     package init(
       model: String,
       prompt: String? = nil,
+      messages: [ChatMessage]? = nil,
       includeContent: Bool = false,
       maxOutputTokens: Int? = nil,
       temperature: Double? = nil
     ) {
       self.model = model
       self.prompt = prompt
+      self.messages = messages
       self.includeContent = includeContent
       self.maxOutputTokens = maxOutputTokens
       self.temperature = temperature
@@ -35,6 +48,10 @@ extension Terra {
 
     package static func chat(model: String, prompt: String? = nil) -> Self {
       .init(model: model, prompt: prompt)
+    }
+
+    package static func chat(model: String, messages: [ChatMessage], prompt: String? = nil) -> Self {
+      .init(model: model, prompt: prompt, messages: messages)
     }
 
     package func maxOutputTokens(_ value: Int) -> Self {
@@ -47,6 +64,25 @@ extension Terra {
       var copy = self
       copy.temperature = value
       return copy
+    }
+
+    package var promptMessageCount: Int? {
+      messages?.count
+    }
+
+    package var promptRole0: String? {
+      messages?.first?.role
+    }
+
+    package var compatibilityPrompt: String? {
+      if let firstUser = messages?.first(where: { $0.role.caseInsensitiveCompare("user") == .orderedSame }),
+         !firstUser.content.isEmpty {
+        return firstUser.content
+      }
+      if let firstMessage = messages?.first(where: { !$0.content.isEmpty }) {
+        return firstMessage.content
+      }
+      return prompt
     }
   }
 

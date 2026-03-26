@@ -9,8 +9,8 @@ struct TerraAgentContextTests {
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = try await Terra.agent(name: "planner").execute {
-      _ = try await Terra.inference(model: "m1") { "ok" }
-      _ = try await Terra.tool(name: "search", callId: "call-1") { "ok" }
+      _ = await Terra.inference(model: "m1") { "ok" }
+      _ = await Terra.tool(name: "search", callId: "call-1") { "ok" }
       return "done"
     }
 
@@ -29,7 +29,7 @@ struct TerraAgentContextTests {
 
     _ = try await Terra.agent(name: "planner").execute {
       let task = Task {
-        _ = try await Terra.tool(name: "structured", callId: "call-1") { "ok" }
+        _ = await Terra.tool(name: "structured", callId: "call-1") { "ok" }
       }
       _ = try await task.value
       return "done"
@@ -48,7 +48,7 @@ struct TerraAgentContextTests {
 
     _ = try await Terra.agent(name: "planner").execute {
       let task = Task.detached {
-        _ = try await Terra.tool(name: "detached", callId: "call-1") { "ok" }
+        _ = await Terra.tool(name: "detached", callId: "call-1") { "ok" }
       }
       _ = try await task.value
       return "done"
@@ -67,7 +67,7 @@ struct TerraAgentContextTests {
 
     _ = try await Terra.agentic(name: "planner") { agent in
       let task = agent.detached {
-        _ = try await $0.tool("detached-helper", callId: "call-1") { "ok" }
+        _ = await $0.tool("detached-helper", callId: "call-1") { "ok" }
       }
       _ = try await task.value
       return "done"

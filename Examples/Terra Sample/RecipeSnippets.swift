@@ -16,7 +16,10 @@ enum TerraRecipeSnippets {
     await Terra
       .infer(
         "gpt-4o-mini",
-        prompt: prompt,
+        messages: [
+          .init(role: "system", content: "You write concise release summaries."),
+          .init(role: "user", content: prompt)
+        ],
         provider: Terra.ProviderID("openai"),
         runtime: Terra.RuntimeID("http_api")
       )

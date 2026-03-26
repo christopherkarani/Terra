@@ -3,7 +3,7 @@ import Testing
 import OpenTelemetryApi
 @testable import TerraCoreML
 
-@Suite("ModelSizeDetector")
+@Suite("ModelSizeDetector", .serialized)
 struct ModelSizeDetectorTests {
 
   @Test("detects size from .mlmodelc weights directory")

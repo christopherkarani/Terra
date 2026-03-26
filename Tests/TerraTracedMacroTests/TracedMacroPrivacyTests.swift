@@ -44,6 +44,8 @@ private struct MacroPrivacySubject {
   }
 }
 
+@Suite("TracedMacro privacy", .serialized)
+struct TracedMacroPrivacyTests {
 @Test("Traced macro path respects privacy defaults for prompt capture")
 func tracedMacroRespectsPrivacyDefaults() async throws {
   let secret = "macro-secret-prompt"
@@ -57,4 +59,5 @@ func tracedMacroRespectsPrivacyDefaults() async throws {
   #expect(span.attributes[Terra.Keys.Terra.promptLength] == nil)
   #expect(span.attributes[Terra.Keys.Terra.promptHMACSHA256] == nil)
   #expect(span.attributes.values.allSatisfy { !$0.description.contains(secret) })
+}
 }

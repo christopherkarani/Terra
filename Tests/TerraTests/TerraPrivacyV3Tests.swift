@@ -1,6 +1,8 @@
 import Testing
 @testable import TerraCore
 
+@Suite("Privacy V3", .serialized)
+struct TerraPrivacyV3TopLevelTests {
 @Test("Privacy enum has four cases")
 func privacyEnumCases() {
   let policies: [Terra.PrivacyPolicy] = [.redacted, .lengthOnly, .capturing, .silent]
@@ -27,4 +29,5 @@ func redactionStrategyMapping() {
   #expect(Terra.PrivacyPolicy.lengthOnly.redactionStrategy == .lengthOnly)
   #expect(Terra.PrivacyPolicy.capturing.redactionStrategy == .hashHMACSHA256)
   #expect(Terra.PrivacyPolicy.silent.redactionStrategy == .drop)
+}
 }

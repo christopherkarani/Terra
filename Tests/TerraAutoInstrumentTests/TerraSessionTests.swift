@@ -79,7 +79,9 @@ private func unsupportedComputePlanSummary() -> TerraCoreMLComputePlanSummary {
     nodeCount: 0,
     captureDurationMS: 0,
     operationEstimates: [],
-    errorType: nil
+    errorType: nil,
+    probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.unsupportedOS.rawValue,
+    probeSource: "mlcomputeplan"
   )
 }
 #endif
@@ -335,7 +337,9 @@ struct TerraSessionTests {
             nodeCount: 0,
             captureDurationMS: 0,
             operationEstimates: [],
-            errorType: nil
+            errorType: nil,
+            probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.unsupportedOS.rawValue,
+            probeSource: "mlcomputeplan"
           )
         }
       )
@@ -401,7 +405,9 @@ struct TerraSessionTests {
         .init(identifier: "program.main.op0.conv", kind: "program_operation", preferredDevice: "ane", supportedDevices: ["ane", "cpu"]),
         .init(identifier: "program.main.op1.softmax", kind: "program_operation", preferredDevice: "cpu", supportedDevices: ["cpu"]),
       ],
-      errorType: nil
+      errorType: nil,
+      probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.captured.rawValue,
+      probeSource: "mlcomputeplan"
     )
 
     let session = TerraSession(

@@ -43,31 +43,25 @@ public enum HTTPAIInstrumentation {
         return config
     }
 
-    public static func install(
-        hosts: Set<String> = defaultAIHosts,
-        openClawGatewayHosts: Set<String> = [],
-        openClawMode: String = "disabled"
-    ) {
-        lock.lock()
-        configuration = Configuration(
+    package static func makeConfiguration(
+        hosts: Set<String>,
+        openClawGatewayHosts: Set<String>,
+        openClawMode: String
+    ) -> URLSessionInstrumentationConfiguration {
+        let config = Configuration(
             hosts: hosts,
             openClawGatewayHosts: openClawGatewayHosts,
             openClawMode: openClawMode
         )
-        let shouldCreate = instance == nil && (!hosts.isEmpty || !openClawGatewayHosts.isEmpty)
-        lock.unlock()
 
-        guard shouldCreate else { return }
-        let config = URLSessionInstrumentationConfiguration(
+        return URLSessionInstrumentationConfiguration(
             shouldInstrument: { request in
-                let config = loadConfiguration()
                 guard !config.hosts.isEmpty || !config.openClawGatewayHosts.isEmpty else { return false }
                 guard let host = request.url?.host else { return false }
                 return isHostMatched(host, hosts: config.hosts)
                     || isHostMatched(host, hosts: config.openClawGatewayHosts)
             },
             nameSpan: { request in
-                let config = loadConfiguration()
                 guard !config.hosts.isEmpty || !config.openClawGatewayHosts.isEmpty else { return nil }
                 guard let host = request.url?.host else { return nil }
                 if isHostMatched(host, hosts: config.openClawGatewayHosts) {
@@ -79,12 +73,24 @@ public enum HTTPAIInstrumentation {
                 return nil
             },
             spanCustomization: { request, spanBuilder in
-                let config = loadConfiguration()
                 guard !config.hosts.isEmpty || !config.openClawGatewayHosts.isEmpty else { return }
+
+                if let currentSpan = Terra.currentSpan(), !currentSpan.isEnded {
+                    spanBuilder.setParent(currentSpan.otelSpan)
+                }
 
                 spanBuilder.setAttribute(key: Terra.Keys.Terra.autoInstrumented, value: true)
                 spanBuilder.setAttribute(key: Terra.Keys.Terra.runtime, value: "http_api")
-                spanBuilder.setAttribute(key: Terra.Keys.GenAI.operationName, value: "chat")
+
+                let inheritedOperationName: String
+                if let currentSpan = Terra.currentSpan(),
+                   case let .string(value)? = currentSpan.attributeValue(for: Terra.Keys.GenAI.operationName),
+                   value == "invoke_agent" {
+                    inheritedOperationName = value
+                } else {
+                    inheritedOperationName = "chat"
+                }
+                spanBuilder.setAttribute(key: Terra.Keys.GenAI.operationName, value: inheritedOperationName)
 
                 if let host = request.url?.host {
                     let isOpenClawGateway = isHostMatched(host, hosts: config.openClawGatewayHosts)
@@ -100,34 +106,64 @@ public enum HTTPAIInstrumentation {
                 guard let body = request.httpBody,
                       let parsed = AIRequestParser.parse(body: body) else { return }
 
-                if let model = parsed.model {
-                    spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestModel, value: model)
+                applyRequestAttributes(parsed, to: spanBuilder)
+            },
+            injectCustomHeaders: { request, span in
+                let parsedRequest = request.httpBody.flatMap(AIRequestParser.parse(body:))
+                if parsedRequest?.stream == true {
+                    HTTPAIStreamingObserver.shared.installIfNeeded()
                 }
-                if let maxTokens = parsed.maxTokens {
-                    spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestMaxTokens, value: maxTokens)
+                HTTPAIStreamingObserver.shared.attachProperties(to: &request, span: span, parsedRequest: parsedRequest)
+            },
+            createdRequest: { request, span in
+                let parsedRequest = request.httpBody.flatMap(AIRequestParser.parse(body:))
+                if parsedRequest?.stream == true {
+                    HTTPAIStreamingObserver.shared.installIfNeeded()
                 }
-                if let temperature = parsed.temperature {
-                    spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestTemperature, value: temperature)
-                }
-                if let stream = parsed.stream {
-                    spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestStream, value: stream)
-                }
+                HTTPAIStreamingObserver.shared.register(request: request, span: span, parsedRequest: parsedRequest)
             },
             receivedResponse: { _, dataOrFile, span in
-                guard let data = dataOrFile as? Data,
-                      let parsed = AIResponseParser.parse(data: data) else { return }
+                let data = dataOrFile as? Data
+                let parsed = data.flatMap(AIResponseParser.parse(data:))
 
-                if let model = parsed.model {
+                if let model = parsed?.model {
                     span.setAttribute(key: Terra.Keys.GenAI.responseModel, value: model)
                 }
-                if let inputTokens = parsed.inputTokens {
+                if let inputTokens = parsed?.inputTokens {
                     span.setAttribute(key: Terra.Keys.GenAI.usageInputTokens, value: inputTokens)
                 }
-                if let outputTokens = parsed.outputTokens {
+                if let outputTokens = parsed?.outputTokens {
                     span.setAttribute(key: Terra.Keys.GenAI.usageOutputTokens, value: outputTokens)
                 }
+
+                HTTPAIStreamingObserver.shared.finish(span: span, parsedResponse: parsed)
+            },
+            receivedError: { _, _, _, span in
+                HTTPAIStreamingObserver.shared.finish(span: span, parsedResponse: nil)
             },
             semanticConvention: .old
+        )
+    }
+
+    public static func install(
+        hosts: Set<String> = defaultAIHosts,
+        openClawGatewayHosts: Set<String> = [],
+        openClawMode: String = "disabled"
+    ) {
+        lock.lock()
+        configuration = Configuration(
+            hosts: hosts,
+            openClawGatewayHosts: openClawGatewayHosts,
+            openClawMode: openClawMode
+        )
+        let shouldCreate = instance == nil && (!hosts.isEmpty || !openClawGatewayHosts.isEmpty)
+        lock.unlock()
+
+        guard shouldCreate else { return }
+        let config = makeConfiguration(
+            hosts: hosts,
+            openClawGatewayHosts: openClawGatewayHosts,
+            openClawMode: openClawMode
         )
 
         lock.lock()
@@ -140,6 +176,7 @@ public enum HTTPAIInstrumentation {
         lock.lock()
         defer { lock.unlock() }
         instance = nil
+        HTTPAIStreamingObserver.shared.reset()
         configuration = Configuration(
             hosts: defaultAIHosts,
             openClawGatewayHosts: [],
@@ -173,5 +210,27 @@ public enum HTTPAIInstrumentation {
         if isHostBoundaryMatch(host: host, target: "api.cohere.com") { return "cohere" }
         if isHostBoundaryMatch(host: host, target: "api.fireworks.ai") { return "fireworks" }
         return host
+    }
+
+    private static func applyRequestAttributes(_ parsed: ParsedRequest, to spanBuilder: SpanBuilder) {
+        if let model = parsed.model {
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestModel, value: model)
+        }
+        if let maxTokens = parsed.maxTokens {
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestMaxTokens, value: maxTokens)
+        }
+        if let temperature = parsed.temperature {
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestTemperature, value: temperature)
+        }
+        if let stream = parsed.stream {
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.requestStream, value: stream)
+        }
+        if !parsed.messages.isEmpty {
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.promptMessageCount, value: parsed.messages.count)
+            spanBuilder.setAttribute(key: Terra.Keys.GenAI.promptRole0, value: parsed.messages[0].role)
+            if Terra.shouldCaptureAutoInstrumentedPromptContent() {
+                spanBuilder.setAttribute(key: Terra.Keys.GenAI.promptContent, value: parsed.messages[0].content)
+            }
+        }
     }
 }

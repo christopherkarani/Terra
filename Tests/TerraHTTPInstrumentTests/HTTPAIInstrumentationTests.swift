@@ -1,7 +1,7 @@
 import Testing
 @testable import TerraHTTPInstrument
 
-@Suite("HTTPAIInstrumentation Host Matching")
+@Suite("HTTPAIInstrumentation Host Matching", .serialized)
 struct HTTPAIInstrumentationTests {
   @Test("Host boundary match allows exact host and subdomains")
   func hostBoundaryAllowsExactAndSubdomain() {

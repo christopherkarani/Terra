@@ -4,7 +4,7 @@ import Testing
 @testable import OpenTelemetrySdk
 @testable import TerraTraceKit
 
-@Suite("TraceKit ConcurrentAccessTests")
+@Suite("TraceKit ConcurrentAccessTests", .serialized)
 struct ConcurrentAccessTests {
   @Test("TraceLoader handles concurrent loads without crashing")
   func concurrentLoadsAreStable() async throws {

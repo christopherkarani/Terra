@@ -3,7 +3,7 @@ import Testing
 import OpenTelemetryApi
 @testable import TerraSystemProfiler
 
-@Suite("ThermalMonitor")
+@Suite("ThermalMonitor", .serialized)
 struct ThermalMonitorTests {
 
   @Test("state labels for all thermal states")

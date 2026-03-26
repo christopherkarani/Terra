@@ -29,6 +29,10 @@ enum TerraTelemetryClassifier {
   static let hardwareNamePrefixes = [
     "terra.process.",
     "terra.hw.",
+    "terra.memory.",
+    "terra.cache.",
+    "terra.exec.route.",
+    "terra.espresso.",
   ]
   static let hardwareAttributeKeys: Set<String> = [
     "terra.process.thermal_state",
@@ -40,6 +44,20 @@ enum TerraTelemetryClassifier {
     "terra.hw.memory_churn_mb",
     "terra.hw.gpu_occupancy_pct",
     "terra.hw.ane_utilization_pct",
+    "terra.hw.ane.hw_execution_time_ns",
+    "terra.hw.ane.host_overhead_ms",
+    "terra.hw.ane.probe_status",
+    "terra.hw.ane.probe_source",
+    "terra.exec.route.requested",
+    "terra.exec.route.observed",
+    "terra.exec.route.estimated_primary",
+    "terra.exec.route.supported",
+    "terra.exec.route.capture_mode",
+    "terra.exec.route.confidence",
+    "terra.espresso.total_gflops",
+    "terra.espresso.memory_bound_ops",
+    "terra.espresso.compute_bound_ops",
+    "terra.espresso.avg_work_unit_efficiency",
   ]
 
   static func isRecommendationEvent(
@@ -96,6 +114,10 @@ enum TerraTelemetryClassifier {
     return attributes.keys.contains { key in
       key.hasPrefix("terra.process.")
         || key.hasPrefix("terra.hw.")
+        || key.hasPrefix("terra.memory.")
+        || key.hasPrefix("terra.cache.")
+        || key.hasPrefix("terra.exec.route.")
+        || key.hasPrefix("terra.espresso.")
         || hardwareAttributeKeys.contains(key)
     }
   }

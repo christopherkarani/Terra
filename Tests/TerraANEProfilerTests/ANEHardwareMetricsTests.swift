@@ -4,7 +4,7 @@ import OpenTelemetryApi
 import CTerraANEBridge
 @testable import TerraANEProfiler
 
-@Suite("ANEHardwareMetrics")
+@Suite("ANEHardwareMetrics", .serialized)
 struct ANEHardwareMetricsTests {
 
   @Test("converts from C struct")
@@ -37,6 +37,8 @@ struct ANEHardwareMetricsTests {
 
     #expect(attrs["terra.ane.hardware_execution_time_ns"] == AttributeValue.int(10000))
     #expect(attrs["terra.ane.host_overhead_us"] == AttributeValue.double(2.5))
+    #expect(attrs["terra.hw.ane.hw_execution_time_ns"] == AttributeValue.int(10000))
+    #expect(attrs["terra.hw.ane.host_overhead_ms"] == AttributeValue.double(0.0025))
     #expect(attrs["terra.ane.segment_count"] == AttributeValue.int(5))
     #expect(attrs["terra.ane.fully_ane"] == AttributeValue.bool(false))
     #expect(attrs["terra.ane.available"] == AttributeValue.bool(true))
@@ -51,7 +53,7 @@ struct ANEHardwareMetricsTests {
   }
 }
 
-@Suite("ANEHardwareProfiler")
+@Suite("ANEHardwareProfiler", .serialized)
 struct ANEHardwareProfilerTests {
 
   @Test("availability probe runs without crash")
@@ -73,7 +75,7 @@ struct ANEHardwareProfilerTests {
   }
 }
 
-@Suite("ANEProfilerSession")
+@Suite("ANEProfilerSession", .serialized)
 struct ANEProfilerSessionTests {
 
   @Test("stop without start returns metrics")

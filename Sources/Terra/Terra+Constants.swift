@@ -36,6 +36,9 @@ extension Terra {
   package enum Keys {
     package enum GenAI {
       package static let operationName = "gen_ai.operation.name"
+      package static let promptMessageCount = "gen_ai.prompt.message_count"
+      package static let promptRole0 = "gen_ai.prompt.role_0"
+      package static let promptContent = "gen_ai.prompt.content"
 
       /// OTel standard key for the requested model.
       package static let requestModel = "gen_ai.request.model"
@@ -109,8 +112,11 @@ extension Terra {
 
       // MARK: Runtime diagnostics
       package static let thermalState = "terra.process.thermal_state"
+      package static let gpuOccupancyPct = "terra.hw.gpu_occupancy_pct"
       package static let processMemoryResidentDeltaMB = "process.memory.resident_delta_mb"
       package static let processMemoryPeakMB = "process.memory.peak_mb"
+      package static let canonicalProcessMemoryPeakMB = "terra.process.memory_peak_mb"
+      package static let canonicalRSSMB = "terra.hw.rss_mb"
 
       // MARK: Latency attributes
       package static let latencyModelLoadMs = "terra.coreml.load.duration_ms"
@@ -159,6 +165,10 @@ extension Terra {
       // MARK: ANE hardware profiling
       package static let aneHardwareExecutionTimeNs = "terra.ane.hardware_execution_time_ns"
       package static let aneHostOverheadUs = "terra.ane.host_overhead_us"
+      package static let canonicalANEHardwareExecutionTimeNs = "terra.hw.ane.hw_execution_time_ns"
+      package static let canonicalANEHostOverheadMs = "terra.hw.ane.host_overhead_ms"
+      package static let canonicalANEProbeStatus = "terra.hw.ane.probe_status"
+      package static let canonicalANEProbeSource = "terra.hw.ane.probe_source"
       package static let aneSegmentCount = "terra.ane.segment_count"
       package static let aneFullyANE = "terra.ane.fully_ane"
       package static let aneAvailable = "terra.ane.available"

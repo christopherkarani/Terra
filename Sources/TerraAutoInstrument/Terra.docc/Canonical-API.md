@@ -5,6 +5,7 @@ Use the composable call API as the canonical path for single operations, and use
 ## Operation Factories
 
 - ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``
+- ``Terra/infer(_:messages:prompt:provider:runtime:temperature:maxTokens:)``
 - ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``
 - ``Terra/embed(_:inputCount:provider:runtime:)``
 - ``Terra/agent(_:id:provider:runtime:)``
@@ -60,7 +61,13 @@ import Terra
 let answer = try await Terra.agentic(name: "planner", id: "issue-42") { agent in
   agent.checkpoint("plan")
 
-  let plan = try await agent.infer("gpt-4o-mini", prompt: "Plan the fix.") {
+  let plan = try await agent.infer(
+    "gpt-4o-mini",
+    messages: [
+      .init(role: "system", content: "You plan small code changes."),
+      .init(role: "user", content: "Plan the fix.")
+    ]
+  ) {
     "Investigate and patch"
   }
 
@@ -72,6 +79,8 @@ let answer = try await Terra.agentic(name: "planner", id: "issue-42") { agent in
   return plan + docs
 }
 ```
+
+HTTP AI spans created under this workflow inherit the active agent span automatically when HTTP auto-instrumentation is enabled.
 
 ## Reusable Examples
 
@@ -108,6 +117,8 @@ let results = try await Terra
   .under(parent)
   .run { "result for query" }
 ```
+
+If detached work starts after an explicit parent span already ended, Terra still runs the detached task and records a `detached.parent.ended` event on the first replacement span.
 
 ## Next Guides
 

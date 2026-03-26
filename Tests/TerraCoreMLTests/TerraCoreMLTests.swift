@@ -7,6 +7,9 @@ import Testing
 
 // MARK: - Keys Constants
 
+@Suite("TerraCoreML top-level", .serialized)
+struct TerraCoreMLTopLevelTests {
+
 @Test("Keys.runtime has expected value")
 func keysRuntimeValue() {
   #expect(TerraCoreML.Keys.runtime == "terra.runtime")
@@ -90,5 +93,6 @@ func coreMLAttributesExcludeContent() {
   #expect(attrs[Terra.Keys.Terra.safetySubjectLength] == nil)
   #expect(attrs[Terra.Keys.Terra.safetySubjectHMACSHA256] == nil)
   #expect(attrs[Terra.Keys.Terra.safetySubjectSHA256] == nil)
+}
 }
 #endif
