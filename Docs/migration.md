@@ -4,6 +4,7 @@ This guide migrates existing integrations to the canonical composable API:
 
 - Startup: `Terra.start(...)` (`async`)
 - Operations: `Terra.infer/stream/embed/agent/tool/safety`
+- Agent loops: `Terra.agentic(name:id:_:)`
 - Terminal: `.run { ... }`
 - Metadata: `trace.tag(...)` for `TraceHandle`, or `span.attribute(...)` when you are using `SpanHandle`
 - Per-call content capture: `.capture(.includeContent)`
@@ -20,6 +21,8 @@ This guide migrates existing integrations to the canonical composable API:
 | `withToolExecutionSpan(...)` | `Terra.tool(...).run { ... }` |
 | `withEmbeddingSpan(...)` | `Terra.embed(...).run { ... }` |
 | `withSafetyCheckSpan(...)` | `Terra.safety(...).run { ... }` |
+| multi-step planner / tool loop | `Terra.agentic(name:id:_:) { agent in ... }` |
+| raw `Task.detached` with tracing assumptions | `SpanHandle.detached(...)` or `AgentHandle.detached(...)` |
 | `.execute { ... }` | `.run { ... }` |
 | `.attribute(...)` | `trace.tag(...)` |
 | `.includeContent()` | `.capture(.includeContent)` |
@@ -102,6 +105,8 @@ Lifecycle/configuration throws now surface as `Terra.TerraError` with stable `co
 - `persistence_setup_failed`
 - `already_started`
 - `invalid_lifecycle_state`
+- `wrong_api_for_agentic`
+- `context_not_propagated`
 
 Example assertion:
 
@@ -127,5 +132,6 @@ try await Terra.start(config)
 
 1. Move startup calls to `Terra.start(...)`.
 2. Replace operation names (`inference` -> `infer`, `embedding` -> `embed`, `safetyCheck` -> `safety`).
-3. Replace terminals/modifiers (`execute` -> `run`, `attribute` -> `tag` for `TraceHandle`, `includeContent` -> `capture(.includeContent)`).
-4. Validate traces in your OTLP backend after rollout.
+3. Move multi-step agent loops to `Terra.agentic(...)` and replace raw `Task.detached` trace assumptions with Terra's detached helpers.
+4. Replace terminals/modifiers (`execute` -> `run`, `attribute` -> `tag` for `TraceHandle`, `includeContent` -> `capture(.includeContent)`).
+5. Validate traces in your OTLP backend after rollout.

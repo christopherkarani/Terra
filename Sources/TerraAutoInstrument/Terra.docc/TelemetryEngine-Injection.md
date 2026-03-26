@@ -15,6 +15,8 @@ Engine implementers handle ``Terra/TelemetryEngine/run(context:attributes:_:)``.
 
 ## Public SDK Testing Guidance
 
+For public SDK tests, keep using the public API surface. Use ``Terra/agentic(name:id:_:)`` when the test covers a multi-step workflow, or bind individual operations with ``Terra/Operation/under(_:)`` when a child span must attach to a chosen parent.
+
 ```swift
 import Terra
 import OpenTelemetrySdk
@@ -25,15 +27,15 @@ Terra.install(.init(
   registerProvidersAsGlobal: false
 ))
 
-let value = try await Terra
-  .tool(
+let value = try await Terra.agentic(name: "planner-test", id: "issue-42") { agent in
+  try await agent.tool(
     "search",
     callId: "call-1"
-  )
-  .run { trace in
+  ) { trace in
     trace.event("tool.test")
     return "stubbed"
   }
+}
 ```
 
 Public SDK consumers should keep using the canonical public factories and swap the installed tracer provider for deterministic tests.

@@ -111,11 +111,14 @@ let result = try await Terra
 
 ## Manual Span Creation
 
-For custom CoreML workflows, create spans manually:
+For custom CoreML workflows, create spans manually. If one CoreML step must stay attached to a wider parent workflow, bind the inference operation with ``Terra/Operation/under(_:)`` or run it from ``Terra/agentic(name:id:_:)``.
 
 ```swift
 import Terra
 import CoreML
+
+let parent = Terra.startSpan(name: "batch-import")
+defer { parent.end() }
 
 let result = try await Terra
   .infer(
@@ -123,13 +126,13 @@ let result = try await Terra
     runtime: Terra.RuntimeID("coreml"),
     provider: Terra.ProviderID("coreml")
   )
+  .under(parent)
   .run { trace in
     trace.tag("terra.coreml.compute_units", "cpuAndGPU")
     trace.tag("terra.coreml.batch_size", "1")
     trace.event("coreml.prediction.start")
 
     let model = try MLModel(contentsOf: modelURL)
-    let input = try model.inputFeatureDescriptor(for: "input")
     let output = try model.prediction(from: inputProvider)
 
     trace.event("coreml.prediction.complete")

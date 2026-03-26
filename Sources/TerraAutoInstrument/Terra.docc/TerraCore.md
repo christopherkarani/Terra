@@ -6,6 +6,30 @@ Core runtime concepts for Terra telemetry.
 
 TerraCore provides the foundational types and protocols that power Terra's observability layer. This article covers the privacy model, lifecycle state machine, telemetry engine protocol, and configuration options.
 
+## Agentic and Manual Tracing
+
+Terra exposes three explicit ownership patterns for spans:
+
+- ``Terra/agentic(name:id:_:)`` for multi-step agent loops with child inference and tool work.
+- ``Terra/trace(name:id:_:)-swift.method`` for one async task that owns a root span for the duration of the closure.
+- ``Terra/startSpan(name:id:attributes:)`` when lifecycle must outlive the current closure and be ended manually.
+
+When a child operation must attach to a specific parent span outside ambient task-local context, bind it with ``Terra/Operation/under(_:)``.
+
+```swift
+import Terra
+
+let root = Terra.startSpan(name: "sync")
+defer { root.end() }
+
+let value = try await Terra
+  .tool("search", callId: "call-1")
+  .under(root)
+  .run { "ok" }
+```
+
+If work crosses a detached-task boundary, use ``Terra/SpanHandle/detached(priority:_:)`` or ``Terra/AgentHandle/detached(priority:_:)`` instead of raw `Task.detached` so the parent span remains linked.
+
 ## Privacy Model
 
 Terra's privacy system uses ``Terra/PrivacyPolicy`` to control how sensitive content is handled in traces.

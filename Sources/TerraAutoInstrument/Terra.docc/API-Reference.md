@@ -667,10 +667,14 @@ Terra also exposes a discoverability layer and explicit span lifecycle APIs for 
 
 ### Manual Tracing
 
+- ``Terra/agentic(name:id:_:)``
 - ``Terra/currentSpan()``
 - ``Terra/isTracing()``
 - ``Terra/startSpan(name:id:attributes:)``
 - ``Terra/trace(name:id:_:)-swift.method``
+- ``Terra/Operation/under(_:)``
+- ``Terra/SpanHandle/detached(priority:_:)``
+- ``Terra/AgentHandle/detached(priority:_:)``
 - ``Terra/activeSpans()``
 - ``Terra/visualize(_:)-swift.method``
 - ``Terra/onSpanStart(_:)``
@@ -688,6 +692,8 @@ Terra also exposes a discoverability layer and explicit span lifecycle APIs for 
 - ``Terra/reconfigure(_:)``
 
 These entry points are the right choice when you need explicit lifecycle ownership, a local-dev default, or machine-readable guidance for agents.
+
+Use ``Terra/agentic(name:id:_:)`` as the default choice for multi-step workflows that alternate between inference and tools. Use ``Terra/Operation/under(_:)`` when a child call must bind to a specific parent span explicitly, and use the detached helpers instead of raw `Task.detached` when the parent trace must remain linked.
 
 ---
 

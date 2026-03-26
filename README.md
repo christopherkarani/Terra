@@ -65,6 +65,48 @@ let answer = try await Terra
 
 For new code, prefer raw `String` model identifiers and `callId:` labels. `Terra.ModelID` and `Terra.ToolCallID` remain available as compatibility wrappers, while `Terra.ProviderID` and `Terra.RuntimeID` stay structured for attribution.
 
+## Agentic Workflows
+
+Use `Terra.agentic` when one workflow spans multiple inference and tool steps or needs to cross detached-task boundaries while keeping one root trace.
+
+```swift
+import Terra
+
+let result = try await Terra.agentic(name: "issue-triage", id: issue.id) { agent in
+    agent.checkpoint("plan")
+
+    let draft = try await agent.infer("gpt-4o-mini", prompt: issue.body) { trace in
+        trace.event("plan.generated")
+        return try await llm.generate(issue.body)
+    }
+
+    let docs = try await agent.tool("search", callId: "search-1") { trace in
+        trace.event("tool.started")
+        return try await searchIndex.lookup(draft)
+    }
+
+    let detached = agent.detached {
+        try await $0.tool("fetch-metadata", callId: "metadata-1") { "metadata" }
+    }
+
+    _ = try await detached.value
+    agent.event("workflow.complete")
+    return docs
+}
+```
+
+When work must attach to an explicit parent span outside `Terra.agentic`, bind it directly:
+
+```swift
+let root = Terra.startSpan(name: "sync")
+defer { root.end() }
+
+let result = try await Terra
+    .tool("search", callId: "call-1")
+    .under(root)
+    .run { "ok" }
+```
+
 For function-level instrumentation, use `@Traced` from `TerraTracedMacro`.
 
 ## Other Repo Parts

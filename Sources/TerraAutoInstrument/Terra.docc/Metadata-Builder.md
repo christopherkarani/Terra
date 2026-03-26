@@ -1,6 +1,6 @@
 # Metadata Builder
 
-Use ``Terra/TraceHandle`` methods inside ``Terra/Operation/run(_:)-swift.method`` to attach events and attributes to spans.
+Use ``Terra/TraceHandle`` methods inside ``Terra/Operation/run(_:)-swift.method`` or the `agent.infer` / `agent.tool` helpers from ``Terra/agentic(name:id:_:)`` to attach events and attributes to spans.
 
 ## Trace Annotations Inside run
 
@@ -45,3 +45,24 @@ _ = try await Terra
 > For numeric aggregation (sums, percentiles) use ``Terra/TraceHandle/tokens(input:output:)`` instead.
 
 Use <doc:TelemetryEngine-Injection> when you need deterministic test seams.
+
+## Binding Work to an Explicit Parent
+
+When child work starts outside the parent's immediate closure, bind it explicitly with ``Terra/Operation/under(_:)``:
+
+```swift
+import Terra
+
+let parent = Terra.startSpan(name: "sync")
+defer { parent.end() }
+
+_ = try await Terra
+  .tool("search", callId: "call-1")
+  .under(parent)
+  .run { trace in
+    trace.event("tool.invoked")
+    return ["result"]
+  }
+```
+
+If the work must hop into a detached task, prefer ``Terra/SpanHandle/detached(priority:_:)`` or ``Terra/AgentHandle/detached(priority:_:)`` over raw `Task.detached`.

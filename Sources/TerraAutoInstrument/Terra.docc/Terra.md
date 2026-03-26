@@ -2,7 +2,7 @@
 
 OpenTelemetry-native observability for on-device GenAI workloads on Apple platforms.
 
-Terra's canonical surface is task-oriented: build an operation with ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``, ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``, ``Terra/embed(_:inputCount:provider:runtime:)``, ``Terra/agent(_:id:provider:runtime:)``, ``Terra/tool(_:callId:type:provider:runtime:)``, or ``Terra/safety(_:subject:provider:runtime:)``, then execute with ``Terra/Operation/run(_:)-swift.method``.
+Terra's canonical surface is task-oriented: build an operation with ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``, ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``, ``Terra/embed(_:inputCount:provider:runtime:)``, ``Terra/agent(_:id:provider:runtime:)``, ``Terra/tool(_:callId:type:provider:runtime:)``, or ``Terra/safety(_:subject:provider:runtime:)``, then execute with ``Terra/Operation/run(_:)-swift.method``. For multi-step loops that need one root span across model calls, tools, and detached tasks, prefer ``Terra/agentic(name:id:_:)``.
 
 ## Start Here
 
@@ -29,6 +29,7 @@ Terra's canonical surface is task-oriented: build an operation with ``Terra/infe
 - ``Terra/examples()``
 - ``Terra/ask(_:)``
 - ``Terra/currentSpan()``
+- ``Terra/agentic(name:id:_:)``
 - ``Terra/startSpan(name:id:attributes:)``
 - ``Terra/trace(name:id:_:)-swift.method``
 

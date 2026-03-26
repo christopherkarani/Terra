@@ -64,14 +64,14 @@ let output = try await Terra
 Nest agents, tools, and inference naturally:
 
 ```swift
-let plan = try await Terra.agent("trip-planner", id: "agent-42").run {
-    let docs = try await Terra
+let plan = try await Terra.agentic(name: "trip-planner", id: "agent-42") { agent in
+    let docs = try await agent
         .tool("web-search", callId: "web-search-1")
-        .run { "search results" }
+        { "search results" }
 
-    return try await Terra
+    return try await agent
         .infer("gpt-4o-mini", prompt: docs)
-        .run { "itinerary" }
+        { "itinerary" }
 }
 ```
 
@@ -82,10 +82,11 @@ let plan = try await Terra.agent("trip-planner", id: "agent-42").run {
 ```swift
 func runAgent(query: String) async throws -> String {
     let result = try await Terra
-        .agent("research-assistant", id: UUID().uuidString)
-        .run { trace in
+        .agentic(name: "research-assistant", id: UUID().uuidString) { agent in
+            agent.checkpoint("search")
+
             // Step 1: Web search
-            let searchResults = try await Terra
+            let searchResults = try await agent
                 .tool("web_search", callId: "search-1")
                 .run { trace in
                     trace.tag("search.query", query)
@@ -96,7 +97,7 @@ func runAgent(query: String) async throws -> String {
                 }
 
             // Step 2: Summarize findings
-            let summary = try await Terra
+            let summary = try await agent
                 .infer(
                     "gpt-4o-mini",
                     prompt: "Summarize: \(searchResults)"
@@ -108,7 +109,7 @@ func runAgent(query: String) async throws -> String {
                 }
 
             // Step 3: Validate
-            let validated = try await Terra
+            let validated = try await agent
                 .tool("validator", callId: "validate-1")
                 .run { trace in
                     trace.event("validation.start")
@@ -126,35 +127,37 @@ func runAgent(query: String) async throws -> String {
 ```swift
 func processWithTools(userRequest: String) async throws -> [String] {
     var results: [String] = []
+    try await Terra.agentic(name: "tool-orchestrator", id: UUID().uuidString) { agent in
+        // Tool 1: Intent classification
+        let intent = try await agent
+            .tool("classify", callId: "classify-1")
+            .run { trace in
+                trace.tag("user.request", userRequest)
+                trace.event("intent.classify")
+                return classifyIntent(userRequest)
+            }
+        results.append(intent)
 
-    // Tool 1: Intent classification
-    let intent = try await Terra
-        .tool("classify", callId: "classify-1")
-        .run { trace in
-            trace.tag("user.request", userRequest)
-            trace.event("intent.classify")
-            return classifyIntent(userRequest)
-        }
-    results.append(intent)
+        // Tool 2: Entity extraction (dependent on intent)
+        let entities = try await agent
+            .tool("extract", callId: "extract-1")
+            .run { trace in
+                trace.tag("intent", intent)
+                trace.event("entity.extract")
+                return extractEntities(userRequest)
+            }
+        results.append(contentsOf: entities)
 
-    // Tool 2: Entity extraction (dependent on intent)
-    let entities = try await Terra
-        .tool("extract", callId: "extract-1")
-        .run { trace in
-            trace.tag("intent", intent)
-            trace.event("entity.extract")
-            return extractEntities(userRequest)
-        }
-    results.append(contentsOf: entities)
-
-    // Tool 3: Generate response (dependent on both)
-    let response = try await Terra
-        .infer("gpt-4o-mini", prompt: "\(intent): \(entities)")
-        .run { trace in
-            trace.tokens(input: 200, output: 150)
-            return generateResponse(intent: intent, entities: entities)
-        }
-    results.append(response)
+        // Tool 3: Generate response (dependent on both)
+        let response = try await agent
+            .infer("gpt-4o-mini", prompt: "\(intent): \(entities)")
+            .run { trace in
+                trace.tokens(input: 200, output: 150)
+                return generateResponse(intent: intent, entities: entities)
+            }
+        results.append(response)
+        return ()
+    }
 
     return results
 }
@@ -164,26 +167,27 @@ func processWithTools(userRequest: String) async throws -> [String] {
 
 ```swift
 func fetchAll(query: String) async throws -> [String] {
-    async let web = Terra
-        .tool("web_search", callId: "web")
-        .run { "web results for \(query)" }
+    try await Terra.agentic(name: "parallel-fetch", id: query) { agent in
+        async let web = agent
+            .tool("web_search", callId: "web")
+            { "web results for \(query)" }
 
-    async let news = Terra
-        .tool("news_search", callId: "news")
-        .run { "news results for \(query)" }
+        async let news = agent
+            .tool("news_search", callId: "news")
+            { "news results for \(query)" }
 
-    async let academic = Terra
-        .tool("academic_search", callId: "academic")
-        .run { "academic results for \(query)" }
+        async let academic = agent
+            .tool("academic_search", callId: "academic")
+            { "academic results for \(query)" }
 
-    let (webResults, newsResults, academicResults) = try await (web, news, academic)
+        let (webResults, newsResults, academicResults) = try await (web, news, academic)
 
-    // Synthesize results
-    let synthesis = try await Terra
-        .infer("gpt-4o-mini", prompt: "Combine: \(webResults), \(newsResults), \(academicResults)")
-        .run { "combined results" }
+        let synthesis = try await agent
+            .infer("gpt-4o-mini", prompt: "Combine: \(webResults), \(newsResults), \(academicResults)")
+            { "combined results" }
 
-    return [webResults, newsResults, academicResults, synthesis]
+        return [webResults, newsResults, academicResults, synthesis]
+    }
 }
 ```
 
