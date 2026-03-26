@@ -1,6 +1,6 @@
 # Canonical API
 
-Use the composable call API as the canonical path.
+Use the composable call API as the canonical path for model, agent, tool, embedding, and safety work.
 
 ## Operation Factories
 
@@ -32,7 +32,7 @@ Common composition methods:
 ```swift
 import Terra
 
-try await Terra.start(.init(preset: .quickstart))
+try await Terra.quickStart()
 let answer = try await Terra
   .infer(
     "gpt-4o-mini",
@@ -74,3 +74,4 @@ let results = try await Terra
 - Metadata builder patterns: <doc:Metadata-Builder>
 - Stable lifecycle errors: <doc:TerraError-Model>
 - Protocol seams and deterministic engines: <doc:TelemetryEngine-Injection>
+- Discovery helpers and manual spans: <doc:API-Reference>

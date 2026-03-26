@@ -1,5 +1,7 @@
 # cookbook.md Audit
 
+> **Archival note:** This report is historical. Treat the current source and DocC bundle as the source of truth.
+
 Audited against:
 - `Sources/Terra/Terra+ComposableAPI.swift`
 - `Sources/Terra/Terra+FluentAPI.swift`

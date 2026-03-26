@@ -1,6 +1,6 @@
 # Terra Public API Inventory
 
-This document is a comprehensive inventory of Terra's public API surface, extracted directly from source files.
+This document is a historical inventory snapshot. The current source and DocC bundle are the source of truth; treat this file as reference material that may lag behind the implementation.
 
 ---
 

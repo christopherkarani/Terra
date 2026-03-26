@@ -41,9 +41,9 @@ try await Terra.start()
 
 // Explicit opt-in for content capture
 let result = try await Terra
-    .infer(model: "gpt-4o-mini", prompt: prompt)
-    .includeContent()  // User explicitly enabled
-    .execute { "response" }
+    .infer("gpt-4o-mini", prompt: prompt)
+    .capture(.includeContent)  // User explicitly enabled
+    .run { "response" }
 ```
 
 Observability shouldn't require surveillance—but you have to intentionally design it that way.
@@ -125,8 +125,8 @@ try await Terra.start(.init(preset: .production))
 
 // Full observability, zero content capture
 let result = try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
-    .execute { trace in
+    .infer("gpt-4o-mini", prompt: prompt)
+    .run { trace in
         trace.tokens(input: 128, output: 64)
         return try await llm.generate(prompt)
     }

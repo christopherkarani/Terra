@@ -4,12 +4,12 @@ This path gets one traced call running with current canonical APIs.
 
 ## 1) Start Terra
 
-Initialize once with ``Terra/start(_:)``.
+Initialize once with ``Terra/quickStart()`` for the most explicit local-development setup, or use ``Terra/start(_:)`` if you want preset-driven configuration.
 
 ```swift
 import Terra
 
-try await Terra.start()
+try await Terra.quickStart()
 ```
 
 ## 2) Run One Instrumented Inference

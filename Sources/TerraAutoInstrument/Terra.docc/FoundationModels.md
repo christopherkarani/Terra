@@ -92,7 +92,7 @@ let privateResponse = try await session.respond(to: "Sensitive query")
 // Include content for debugging (use in development only)
 let debugResponse = try await session.respond(
   to: "Query",
-  promptCapture: .includeContent  // Captures full prompt/response
+  promptCapture: .includeContent  // Overrides the per-call capture setting; privacy policy still applies
 )
 ```
 

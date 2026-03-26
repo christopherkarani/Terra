@@ -2,6 +2,10 @@
 
 Use Terra's typed identifiers instead of raw strings when building calls.
 
+> **Note:** `ModelID` and `ToolCallID` are compatibility wrappers retained for older call sites.
+> New code should pass model names and tool call IDs as `String` values directly, while
+> `ProviderID` and `RuntimeID` remain the structured wrappers for provider/runtime attribution.
+
 ## Types
 
 - ``Terra/ModelID``
@@ -20,10 +24,10 @@ Use Terra's typed identifiers instead of raw strings when building calls.
 ```swift
 import Terra
 
-let model = "gpt-4o-mini"
+let model: Terra.ModelID = "gpt-4o-mini"
 let provider = Terra.ProviderID("openai")
 let runtime = Terra.RuntimeID("http_api")
-let toolCallID = "call-42"
+let toolCallID: Terra.ToolCallID = "call-42"
 
 _ = try await Terra
   .infer(model, prompt: "Hello", provider: provider, runtime: runtime)

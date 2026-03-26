@@ -5,10 +5,10 @@ This guide migrates existing integrations to the canonical composable API:
 - Startup: `Terra.start(...)` (`async`)
 - Operations: `Terra.infer/stream/embed/agent/tool/safety`
 - Terminal: `.run { ... }`
-- Metadata: `.attr(...)` / `.metadata { ... }`
+- Metadata: `trace.tag(...)` or `trace.attribute(...)` depending on whether you are using `TraceHandle` or `SpanHandle`
 - Per-call content capture: `.capture(.includeContent)`
 - Stable lifecycle errors: `Terra.TerraError` (`code`-based)
-- Typed identifiers: `Terra.ModelID`, `Terra.ProviderID`, `Terra.RuntimeID`, `Terra.ToolCallID`
+- Typed identifiers: `Terra.ProviderID`, `Terra.RuntimeID`; `Terra.ModelID` and `Terra.ToolCallID` remain as compatibility wrappers for older call sites
 
 ## API Mapping
 
@@ -21,7 +21,7 @@ This guide migrates existing integrations to the canonical composable API:
 | `withEmbeddingSpan(...)` | `Terra.embed(...).run { ... }` |
 | `withSafetyCheckSpan(...)` | `Terra.safety(...).run { ... }` |
 | `.execute { ... }` | `.run { ... }` |
-| `.attribute(...)` | `.attr(...)` |
+| `.attribute(...)` | `trace.attribute(...)` |
 | `.includeContent()` | `.capture(.includeContent)` |
 | `Terra.inference(...)` | `Terra.infer(...)` |
 | `Terra.embedding(...)` | `Terra.embed(...)` |
@@ -84,7 +84,7 @@ let answer = try await Terra
 
 ```swift
 let answer = try await Terra
-  .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
+  .infer("gpt-4o-mini", prompt: prompt)
   .capture(.includeContent)
   .run { trace in
     // Use trace.tag() for attributes within the run closure

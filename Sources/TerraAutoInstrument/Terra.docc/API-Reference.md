@@ -2,6 +2,9 @@
 
 Complete reference for Terra's public API surface.
 
+> **Compatibility note:** `ModelID` and `ToolCallID` are deprecated wrappers kept for older call sites.
+> New code should pass model names and tool call IDs as raw `String` values.
+
 ## Typed IDs
 
 ### ModelID
@@ -16,11 +19,15 @@ Uniquely identifies a model used for inference, embeddings, or agent operations.
 |-----------|------|-------------|
 | `rawValue` | `String` | The model identifier string |
 
-**When to use**: Pass to ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``, ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``, ``Terra/embed(_:_:inputCount:provider:runtime:)`` (model, inputCount), and ``Terra/agent(_:name:id:provider:runtime:)``.
+**When to use**: Pass to ``Terra/infer(_:prompt:provider:runtime:temperature:maxTokens:)``, ``Terra/stream(_:prompt:provider:runtime:temperature:maxTokens:expectedTokens:)``, ``Terra/embed(_:inputCount:provider:runtime:)``, and the compatibility overloads on ``Terra/agent(_:id:provider:runtime:)`` and ``Terra/tool(_:callId:type:provider:runtime:)`` when you are migrating from wrapper types.
 
 **Constants pattern**:
 
 ```swift
+// Canonical form uses raw strings
+Terra.infer("gpt-4o-mini", prompt: "What is machine learning?")
+
+// Compatibility wrapper for older call sites
 extension Terra.ModelID {
     static let gpt4oMini = Self("gpt-4o-mini")
     static let claude3 = Self("claude-3-opus")
@@ -87,10 +94,10 @@ Uniquely identifies a single tool invocation within an agent workflow.
 
 ```swift
 // Auto-generated unique ID
-let callID = 
+let callId = Terra.ToolCallID()
 
 // Explicit ID
-let callID = "call-12345"
+let callId = Terra.ToolCallID("call-12345")
 ```
 
 ---
@@ -101,7 +108,7 @@ let callID = "call-12345"
 
 ```swift
 public static func infer(
-    _ model: ModelID,
+    _ model: String,
     prompt: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil,
@@ -116,7 +123,7 @@ Creates an inference operation for non-streaming model responses.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `model` | `ModelID` | (required) | The model to use for inference |
+| `model` | `String` | (required) | The model to use for inference |
 | `prompt` | `String?` | `nil` | The input prompt (optional; can be set at runtime) |
 | `provider` | `ProviderID?` | `nil` | The provider name for attribution |
 | `runtime` | `RuntimeID?` | `nil` | The execution runtime |
@@ -144,7 +151,7 @@ try await Terra
 
 ```swift
 public static func stream(
-    _ model: ModelID,
+    _ model: String,
     prompt: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil,
@@ -160,7 +167,7 @@ Creates a streaming inference operation.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `model` | `ModelID` | (required) | The model to use |
+| `model` | `String` | (required) | The model to use |
 | `prompt` | `String?` | `nil` | The input prompt |
 | `provider` | `ProviderID?` | `nil` | The provider name |
 | `runtime` | `RuntimeID?` | `nil` | The execution runtime |
@@ -189,7 +196,7 @@ try await Terra
 
 ```swift
 public static func embed(
-    _ model: ModelID,
+    _ model: String,
     inputCount: Int? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
@@ -202,7 +209,7 @@ Creates an embedding operation.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `model` | `ModelID` | (required) | The embedding model |
+| `model` | `String` | (required) | The embedding model |
 | `inputCount` | `Int?` | `nil` | Number of input texts |
 | `provider` | `ProviderID?` | `nil` | The provider name |
 | `runtime` | `RuntimeID?` | `nil` | The execution runtime |
@@ -253,7 +260,7 @@ try await Terra
 ```swift
 public static func tool(
     _ name: String,
-    callId: ToolCallID = .init(),
+    callId: String,
     type: String? = nil,
     provider: ProviderID? = nil,
     runtime: RuntimeID? = nil
@@ -267,7 +274,7 @@ Creates a tool execution operation.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `name` | `String` | (required) | The tool name |
-| `callID` | `ToolCallID` | `.init()` | Unique call identifier |
+| `callId` | `String` | required | Unique call identifier |
 | `type` | `String?` | `nil` | Tool type (e.g., "web_search") |
 | `provider` | `ProviderID?` | `nil` | The provider name |
 | `runtime` | `RuntimeID?` | `nil` | The execution runtime |
@@ -459,7 +466,7 @@ trace.tokens(input: 120, output: 45)
 
 ```swift
 @discardableResult
-public func responseModel(_ value: ModelID) -> Self
+public func responseModel(_ value: String) -> Self
 ```
 
 Records the actual model that generated the response.
@@ -469,6 +476,8 @@ Records the actual model that generated the response.
 ```swift
 trace.responseModel("gpt-4o-mini")
 ```
+
+`ModelID` remains accepted through a compatibility overload, but raw strings are the preferred form for new code.
 
 ### chunk(_:)
 
@@ -636,6 +645,44 @@ Shuts down and clears all cached configuration state.
 await Terra.reset()
 // Terra.start() can now be called with any configuration
 ```
+
+---
+
+## Discovery and Manual Tracing
+
+Terra also exposes a discoverability layer and explicit span lifecycle APIs for coding agents and advanced integrations.
+
+### Discovery Helpers
+
+- ``Terra/capabilities()``
+- ``Terra/guides()``
+- ``Terra/examples()``
+- ``Terra/ask(_:)``
+- ``Terra/diagnose()``
+
+### Manual Tracing
+
+- ``Terra/currentSpan()``
+- ``Terra/isTracing()``
+- ``Terra/startSpan(name:id:attributes:)``
+- ``Terra/trace(name:id:_:)-swift.method``
+- ``Terra/activeSpans()``
+- ``Terra/visualize(_:)-swift.method``
+- ``Terra/onSpanStart(_:)``
+- ``Terra/onSpanEnd(_:)``
+- ``Terra/onError(_:)``
+- ``Terra/removeHooks()``
+- ``Terra/register(_:)``
+
+### Startup Helpers
+
+- ``Terra/start(_:)``
+- ``Terra/quickStart()``
+- ``Terra/shutdown()``
+- ``Terra/reset()``
+- ``Terra/reconfigure(_:)``
+
+These entry points are the right choice when you need explicit lifecycle ownership, a local-dev default, or machine-readable guidance for agents.
 
 ---
 

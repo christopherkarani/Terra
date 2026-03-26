@@ -1,5 +1,7 @@
 # Terra SDK Documentation Accuracy Baseline Report
 
+> **Archival note:** This report is historical. Treat the current source and DocC bundle as the source of truth.
+
 **Generated:** 2026-03-25
 **Branch:** docs
 **Auditors:** Multi-agent swarm analysis

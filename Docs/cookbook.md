@@ -2,6 +2,8 @@
 
 Copy-paste recipes for common Terra instrumentation patterns.
 
+> **Note:** These examples still show `Terra.ModelID` and `Terra.ToolCallID` in a few places for compatibility. New code should prefer raw string model names and `callId:` strings.
+
 ## Quickstart
 
 ```swift
@@ -64,7 +66,7 @@ Nest agents, tools, and inference naturally:
 ```swift
 let plan = try await Terra.agent("trip-planner", id: "agent-42").run {
     let docs = try await Terra
-        .tool("web-search", callID: Terra.ToolCallID())
+        .tool("web-search", callId: "web-search-1")
         .run { "search results" }
 
     return try await Terra
@@ -84,7 +86,7 @@ func runAgent(query: String) async throws -> String {
         .run { trace in
             // Step 1: Web search
             let searchResults = try await Terra
-                .tool("web_search", callID: Terra.ToolCallID("search-1"))
+                .tool("web_search", callId: "search-1")
                 .run { trace in
                     trace.tag("search.query", query)
                     trace.event("tool.search.start")
@@ -107,7 +109,7 @@ func runAgent(query: String) async throws -> String {
 
             // Step 3: Validate
             let validated = try await Terra
-                .tool("validator", callID: Terra.ToolCallID("validate-1"))
+                .tool("validator", callId: "validate-1")
                 .run { trace in
                     trace.event("validation.start")
                     return try validateOutput(summary)
@@ -127,7 +129,7 @@ func processWithTools(userRequest: String) async throws -> [String] {
 
     // Tool 1: Intent classification
     let intent = try await Terra
-        .tool("classify", callID: Terra.ToolCallID("classify-1"))
+        .tool("classify", callId: "classify-1")
         .run { trace in
             trace.tag("user.request", userRequest)
             trace.event("intent.classify")
@@ -137,7 +139,7 @@ func processWithTools(userRequest: String) async throws -> [String] {
 
     // Tool 2: Entity extraction (dependent on intent)
     let entities = try await Terra
-        .tool("extract", callID: Terra.ToolCallID("extract-1"))
+        .tool("extract", callId: "extract-1")
         .run { trace in
             trace.tag("intent", intent)
             trace.event("entity.extract")
@@ -163,15 +165,15 @@ func processWithTools(userRequest: String) async throws -> [String] {
 ```swift
 func fetchAll(query: String) async throws -> [String] {
     async let web = Terra
-        .tool("web_search", callID: Terra.ToolCallID("web"))
+        .tool("web_search", callId: "web")
         .run { "web results for \(query)" }
 
     async let news = Terra
-        .tool("news_search", callID: Terra.ToolCallID("news"))
+        .tool("news_search", callId: "news")
         .run { "news results for \(query)" }
 
     async let academic = Terra
-        .tool("academic_search", callID: Terra.ToolCallID("academic"))
+        .tool("academic_search", callId: "academic")
         .run { "academic results for \(query)" }
 
     let (webResults, newsResults, academicResults) = try await (web, news, academic)

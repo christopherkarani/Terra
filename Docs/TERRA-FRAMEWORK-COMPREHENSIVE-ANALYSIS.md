@@ -1,5 +1,7 @@
 # Terra Framework - Comprehensive Technical Analysis
 
+> **Archival note:** This is a historical analysis document. Some examples reflect older compatibility layers; the current source and DocC pages are authoritative.
+
 > **Generated**: 2026-03-25
 > **Purpose**: Complete understanding of Terra's architecture, patterns, and unique characteristics
 
@@ -148,7 +150,7 @@ enum RedactionStrategy: Sendable, Hashable {
 ```
 
 **Unique Privacy Features**:
-- Per-request privacy override via `.includeContent()`
+- Per-request privacy override via `.capture(.includeContent)`
 - HMAC-SHA256 provides reversible anonymization (key stored)
 - Legacy SHA256 for compatibility with existing systems
 - Content dropped by default - explicit opt-in required
@@ -160,7 +162,7 @@ Key request types:
 - `StreamingRequest` - Extends InferenceRequest with expectedOutputTokens
 - `EmbeddingRequest` - Model ID, inputCount
 - `AgentRequest` - Agent name, optional ID
-- `ToolRequest` - Tool name, callID, type
+- `ToolRequest` - Tool name, callId, type
 - `SafetyCheckRequest` - Check name, subject
 
 ### 5. Fluent API (`Terra+FluentAPI.swift`)
@@ -169,11 +171,10 @@ Builder pattern for all operations:
 
 ```swift
 try await Terra
-  .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
-  .provider("openai")
+  .infer("gpt-4o-mini", prompt: prompt, provider: Terra.ProviderID("openai"))
   .temperature(0.7)
   .tokens(input: 128, output: 64)
-  .execute { trace in
+  .run { trace in
     trace.tokens(input: 128, output: 64)
     return try await llm.generate(prompt)
   }
@@ -592,7 +593,7 @@ Terra enum provides clean static API over complex OpenTelemetry internals.
 ### 2. Builder Pattern
 Fluent API with method chaining for configuration:
 ```swift
-Terra.infer(model: "gpt-4o").provider("openai").temperature(0.7)
+Terra.infer("gpt-4o", provider: Terra.ProviderID("openai")).temperature(0.7)
 ```
 
 ### 3. Scope/Context Pattern

@@ -2,6 +2,8 @@
 
 Terra integrates with Apple ML frameworks and popular GenAI backends. This guide covers setup and best practices for each integration.
 
+> **Note:** Use raw string model identifiers and `callId:` strings in new code. `Terra.ModelID` and `Terra.ToolCallID` remain only for compatibility with older call sites.
+
 ## Core ML
 
 Capture deterministic runtime facts from CoreML model executions.
@@ -222,7 +224,7 @@ func contentCapture() async throws {
 
 - Attach counts and latencies as numeric attributes
 - Use bounded string labels for model/device/runtime identifiers
-- Capture content only with explicit `.includeContent()` and only in development
+- Capture content only with explicit `.capture(.includeContent)` and only in development
 - Use ``Terra/PrivacyPolicy`` to control default behavior
 
 ### Don't

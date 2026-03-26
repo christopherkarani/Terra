@@ -14,7 +14,7 @@
 
 ---
 
-Terra instruments model inference, streaming, agents, tool calls, embeddings, safety checks, Core ML calls, and HTTP AI requests. By default it keeps content capture off and export local.
+Terra instruments model inference, streaming, agents, tool calls, embeddings, safety checks, Core ML calls, and HTTP AI requests. By default it keeps content capture off and exports to the local dashboard.
 
 ```swift
 import Terra
@@ -53,15 +53,17 @@ Swift consumers use the vendored `libtera.xcframework`. If you're working on the
 ```swift
 import Terra
 
-try await Terra.start(.init(preset: .production))
+try await Terra.quickStart()
 
 let answer = try await Terra
-    .infer(Terra.ModelID("gpt-4o-mini"), prompt: prompt)
-    .execute { trace in
+    .infer("gpt-4o-mini", prompt: prompt)
+    .run { trace in
         trace.tokens(input: 128, output: 64)
         return try await llm.generate(prompt)
     }
 ```
+
+For new code, prefer raw `String` model identifiers and `callId:` labels. `Terra.ModelID` and `Terra.ToolCallID` remain available as compatibility wrappers.
 
 For function-level instrumentation, use `@Traced` from `TerraTracedMacro`.
 

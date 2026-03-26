@@ -52,7 +52,7 @@ try await Terra.start(.init(preset: .production))
 
 // Use CoreML normally — spans are created automatically
 let model = try! MLModel(contentsOf: modelURL, configuration: config)
-let input = try MLFeatureProvider()
+let input = try MLDictionaryFeatureProvider(dictionary: [:])
 let prediction = try model.prediction(from: input)
 
 // Spans include:
@@ -100,7 +100,7 @@ let result = try await Terra
     config.computeUnits = .all
 
     let model = try MLModel(contentsOf: modelURL, configuration: config)
-    let input = try MLFeatureProvider()
+    let input = try MLDictionaryFeatureProvider(dictionary: [:])
     let prediction = try model.prediction(from: input)
 
     return "ok"

@@ -1,5 +1,7 @@
 # Terra Documentation Audit Report
 
+> **Archival note:** This report is historical. Treat the current source and DocC bundle as the source of truth.
+
 ## Critical Discrepancies Found
 
 ### Issue #1: `.attr()` Method Does Not Exist on Operation

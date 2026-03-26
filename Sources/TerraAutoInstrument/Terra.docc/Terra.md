@@ -18,9 +18,19 @@ Terra's canonical surface is task-oriented: build an operation with ``Terra/infe
 ## Core Symbols
 
 - ``Terra/start(_:)``
+- ``Terra/quickStart()``
 - ``Terra/shutdown() async``
+- ``Terra/diagnose()``
 - ``Terra/Operation``
 - ``Terra/TraceHandle``
+- ``Terra/SpanHandle``
+- ``Terra/capabilities()``
+- ``Terra/guides()``
+- ``Terra/examples()``
+- ``Terra/ask(_:)``
+- ``Terra/currentSpan()``
+- ``Terra/startSpan(name:id:attributes:)``
+- ``Terra/trace(name:id:_:)-swift.method``
 
 ## Topics
 
