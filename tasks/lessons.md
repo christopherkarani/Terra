@@ -13,3 +13,4 @@
 - For skill creation work, keep one canonical reference file per concept; duplicate topic files make the skill harder for agents to follow and add noise without adding coverage.
 - TerraViewer guidance needs an explicit emission matrix, not just a narrative contract, when the app consumes SDK telemetry across multiple surfaces.
 - TerraViewer identity guidance should split resource attributes from span attributes, and content guidance should explicitly prefer raw content vs hash vs length based on privacy.
+- TerraViewer readability depends on naming conventions too; the skill should spell out how to name sessions, workflow roots, agents, tools, and model routes instead of assuming the caller will choose good defaults.

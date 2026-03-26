@@ -67,3 +67,4 @@
 - Ran `quick_validate.py` successfully after the skill and reference docs were assembled.
 - Added a TerraViewer contract plus an emission matrix so agents know the exact span-to-surface requirements for Mission Control and TraceTree.
 - Clarified resource-vs-span identity placement, content redaction fallback behavior, and TerraViewer smoke-test verification steps.
+- Added explicit naming conventions so agents choose meaningful session/root/agent/tool/model labels instead of generic defaults.
