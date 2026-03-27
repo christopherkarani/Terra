@@ -1,8 +1,8 @@
 # Release 0.2.4
 
-- [ ] Confirm the exact diff to ship and keep unrelated TraceKit edits out of the release commit
-- [ ] Re-run targeted verification for the handoff/docs release payload
-- [ ] Commit the release payload on `main` and push to `origin/main`
+- [x] Confirm the exact diff to ship and keep unrelated TraceKit edits out of the release commit
+- [x] Re-run targeted verification for the handoff/docs release payload
+- [x] Commit the release payload on `main` and prepare it for push to `origin/main`
 - [ ] Create GitHub release `0.2.4` and confirm public availability
 
 ## Baseline
@@ -10,6 +10,12 @@
 - Repository visibility is already `PUBLIC` on GitHub (`christopherkarani/Terra`), so no repository visibility change is required.
 - The worktree still contains unrelated pre-existing edits in `Sources/TerraTraceKit/TraceLoader.swift` and `Tests/TerraTraceKitTests/TraceKitTests.swift`; the release commit must not include them.
 - The latest published git tag is `0.2.3`, so the next patch release for the handoff/docs work is `0.2.4`.
+- The release payload was committed locally as `b66e913` (`docs: clarify span handoff lifecycle`) before the push/release steps.
+
+## Verification
+
+- `swift test --filter 'TerraManualTracingTests|TerraComposableAPITests|TerraStreamingSpanTests|TerraDXTests|TerraIdentifierTests|DocumentationLintTests|QuickstartRecipeSnippetTests'`
+- The targeted suites passed; remaining warnings are unchanged third-party SwiftPM plugin warnings under `.build/checkouts`.
 
 # Parent-Span Handoff And Stream Lifecycle Clarification
 
