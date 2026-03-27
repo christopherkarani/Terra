@@ -13,3 +13,6 @@ let answer = try await Terra.workflow(name: "status.update", id: "demo-1") { wor
   }
 }
 ```
+
+If the model emits a tool call that will execute after the child inference or stream
+closure returns, capture `try span.handoff().tool(...)` before that child span ends.

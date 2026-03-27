@@ -31,3 +31,15 @@ defer { parent.end() }
 
 _ = try await Terra.tool("search", callId: "manual-1").under(parent).run { "ok" }
 ```
+
+## Deferred Tool Handoff
+
+```swift
+let answer = try await Terra.workflow(name: "request") { workflow in
+  let deferred = try await workflow.stream("gpt-4o-mini", prompt: "Explain") { span in
+    span.firstToken()
+    return try span.handoff().tool("search", callId: "search-1")
+  }
+  return try await deferred.run { "docs" }
+}
+```

@@ -64,6 +64,13 @@ extension Terra {
         "Terra.startSpan(name:id:attributes:)"
       ),
       capability(
+        "tool_handoff",
+        "Capture a long-lived parent for tool work that executes after an inference or stream child ends.",
+        #"let deferred = try span.handoff().tool("search", callId: "search-1")"#,
+        "SpanHandle.handoff(), SpanHandle.withToolParent(_:)",
+        preference: .secondary
+      ),
+      capability(
         "child_operations",
         "Record inference, streaming, tool, embedding, safety, and agent child operations under the current workflow.",
         #"let answer = try await workflow.infer("gpt-4o-mini", prompt: "Summarize") { "ok" }"#,
@@ -292,9 +299,23 @@ extension Terra {
         """
       ),
       guide(
+        "Deferred Tool Handoff",
+        problem: "A tool call may be discovered inside an inference or stream child span, but executed only after that child span ends.",
+        solution: "Capture `span.handoff()` while the wider workflow or manual parent is still alive, then build the later tool call from that handoff instead of reusing the child span itself.",
+        codeExample: """
+        let docs = try await Terra.workflow(name: "stream-and-tool") { workflow in
+          let deferred = try await workflow.stream("gpt-4o-mini", prompt: "Explain") { span in
+            span.firstToken()
+            return try span.handoff().tool("search", callId: "search-1")
+          }
+          return try await deferred.run { "docs" }
+        }
+        """
+      ),
+      guide(
         "Manual Parent For Later Work",
         problem: "A tool call may need an explicit parent chosen outside its closure.",
-        solution: "Create the parent with `Terra.startSpan(...)`, then bind the operation with `.under(parent)`.",
+        solution: "Use `Terra.startSpan(...)` only when the parent lifecycle truly must outlive the wider workflow body, then keep that parent alive until the later tool call is created.",
         codeExample: """
         let parent = Terra.startSpan(name: "manual-parent")
         defer { parent.end() }
@@ -651,22 +672,21 @@ extension Terra {
 
     if normalized.contains("tool") && normalized.contains("stream") {
       return Guidance(
-        why: "A streaming child span ends when its closure returns. Later tool work needs either the wider workflow root or an explicit manual parent that outlives the stream closure.",
-        apiToUse: "Use `Terra.workflow(name:id:_:)` for the full request. If the parent lifecycle must cross a closure boundary manually, use `Terra.startSpan(name:id:attributes:)` and bind later work with `.under(parent)`.",
+        why: "A streaming child span ends when its closure returns. Tool work emitted mid-stream must be rebound to a wider workflow or manual parent before that child span closes.",
+        apiToUse: "Use `Terra.workflow(name:id:_:)` for the full request, then capture `span.handoff()` or use `span.withToolParent(...)` inside the stream closure. Use `Terra.startSpan(name:id:attributes:)` only when the parent lifecycle must be manual beyond the workflow body.",
         codeExample: """
-        let parent = Terra.startSpan(name: "stream-and-tool")
-        defer { parent.end() }
-
-        _ = try await Terra.stream("gpt-4o-mini", prompt: "Explain").under(parent).run { span in
-          span.firstToken()
-          return "draft"
+        let docs = try await Terra.workflow(name: "stream-and-tool") { workflow in
+          let deferred = try await workflow.stream("gpt-4o-mini", prompt: "Explain") { span in
+            span.firstToken()
+            return try span.handoff().tool("search", callId: "search-1")
+          }
+          return try await deferred.run { "docs" }
         }
-
-        _ = try await Terra.tool("search", callId: "search-1").under(parent).run { "docs" }
         """,
         commonMistakes: [
-          "Assuming a child operation closure stays open for later work.",
-          "Ending the parent before the later tool call finishes.",
+          "Assuming a child operation closure stays open for later work after it returns.",
+          "Holding onto the streaming child span instead of handing later tool work off to the wider parent.",
+          "Ending the workflow/manual parent before the deferred tool span is created.",
           "Launching detached work from the stream closure without preserving the parent context.",
         ]
       )

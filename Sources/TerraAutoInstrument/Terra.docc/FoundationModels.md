@@ -16,3 +16,7 @@ let answer = try await Terra.workflow(name: "assistant.request") { workflow in
   return try await session.respond(to: "Draft a reply")
 }
 ```
+
+If your surrounding workflow turns a model-emitted tool call into a later Terra tool span,
+capture the parent with `span.handoff()` from the child span that observed that tool call
+instead of trying to reuse the child span after it ends.

@@ -108,6 +108,9 @@ let answer = try await Terra
 
 Use `SpanHandle.detached(...)` when parent linkage matters across detached tasks.
 If the work must outlive the current closure entirely, create an explicit parent with `Terra.startSpan(...)`.
+If a tool call is discovered inside an inference or stream child span but executed later,
+capture `try span.handoff().tool(...)` or use `try await span.withToolParent { parent in ... }`
+before the child closure returns.
 
 ## Recommended Migration Order
 

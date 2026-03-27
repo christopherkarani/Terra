@@ -79,6 +79,33 @@ enum TerraRecipeSnippets {
       }
     }
   }
+
+  static func deferredToolRecipe(task: String) async throws -> String {
+    try await Terra.workflow(name: "planner.deferred-tool", id: "workflow-2") { workflow in
+      let deferred = try await workflow.stream(
+        "gpt-4o-mini",
+        prompt: "Decide whether this task needs search: \(task)",
+        provider: Terra.ProviderID("openai"),
+        runtime: Terra.RuntimeID("http_api")
+      ) { span in
+        span.firstToken()
+        span.chunk(3)
+        return try span.handoff().tool(
+          "search",
+          callId: "workflow-tool-2",
+          type: "web_search",
+          provider: Terra.ProviderID("openai"),
+          runtime: Terra.RuntimeID("http_api")
+        )
+      }
+
+      return await deferred.run { span in
+        span.event("tool.invoked")
+        span.attribute("sample.kind", "deferred-tool")
+        return "deferred-search-results"
+      }
+    }
+  }
 }
 
 #endif

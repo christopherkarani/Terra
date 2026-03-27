@@ -9,6 +9,10 @@ let session = TerraTracedSession(modelIdentifier: "apple/foundation-model")
 let answer = try await session.respond(to: "Summarize this note")
 ```
 
+Wrap it in `Terra.workflow(...)` when the session is one step inside a wider request,
+and use `span.handoff()` if that surrounding workflow needs to execute a later Terra
+tool call after a child inference or stream span closes.
+
 ## MLX
 
 ```swift
@@ -29,3 +33,7 @@ let answer = try await Terra.workflow(name: "coreml.request") { workflow in
   }
 }
 ```
+
+Use `Terra.startSpan(...)` only when the parent must outlive the wider workflow body.
+If tool work is discovered inside a child inference or stream span but runs later,
+capture `span.handoff()` before the child span ends.

@@ -24,6 +24,23 @@ let answer = try await Terra.workflow(name: "chat.stream", id: "req-2") { workfl
 }
 ```
 
+The stream span closes and writes its final streaming metrics when the closure returns.
+If a tool call is emitted during streaming but executed later, capture a handoff first.
+
+## Deferred Tool Handoff
+
+```swift
+let result = try await Terra.workflow(name: "tool.after.stream", id: "req-2b") { workflow in
+  let deferred = try await workflow.stream("gpt-4o-mini", prompt: "Explain the fix") { span in
+    span.firstToken()
+    span.chunk(5)
+    return try span.handoff().tool("search", callId: "search-2", type: "web_search")
+  }
+
+  return try await deferred.run { "docs" }
+}
+```
+
 ## Tool Execution
 
 ```swift

@@ -42,6 +42,7 @@ struct TerraDXTests {
 
     #expect(help.contains("Terra.workflow(name:id:_:)"))
     #expect(help.contains("Terra.workflow(name:id:messages:_:)"))
+    #expect(help.contains("SpanHandle.handoff()"))
     #expect(help.contains("Terra.startSpan(name:id:attributes:)"))
     #expect(!help.contains("Terra.trace(name:id:_:)"))
     #expect(!help.contains("Terra.agentic(name:id:_:)"))

@@ -10,7 +10,8 @@ New integrations should follow this sequence:
 2. ``Terra/help()``
 3. ``Terra/diagnose()``
 4. ``Terra/workflow(name:id:_:)-swift.method`` or ``Terra/workflow(name:id:messages:_:)-swift.method``
-5. ``Terra/startSpan(name:id:attributes:)`` only when lifecycle must outlive one closure
+5. ``Terra/SpanHandle/handoff()`` or ``Terra/SpanHandle/withToolParent(_:)`` for deferred tool work discovered inside a child span
+6. ``Terra/startSpan(name:id:attributes:)`` only when lifecycle must outlive the wider workflow body
 
 ## Root APIs
 
@@ -61,6 +62,8 @@ Key methods:
 - `responseModel(_:)`
 - `recordError(_:)`
 - `checkpoint(_:)`
+- `handoff()`
+- `withToolParent(_:)`
 - `end()`
 - `detached(priority:_:)`
 
@@ -83,6 +86,18 @@ try await Terra.workflow(name: "chat") { workflow in
     return "Hi"
   }
   return answer
+}
+```
+
+Deferred tool example:
+
+```swift
+let docs = try await Terra.workflow(name: "stream-and-tool") { workflow in
+  let deferred = try await workflow.stream("gpt-4o-mini", prompt: "Explain") { span in
+    span.firstToken()
+    return try span.handoff().tool("search", callId: "search-1")
+  }
+  return try await deferred.run { "docs" }
 }
 ```
 
@@ -139,5 +154,6 @@ Model names and tool call identifiers are plain `String` values.
 
 - Use `workflow` for the normal one-request root.
 - Use `workflow(..., messages:)` when transcript mutation is part of the root workflow.
+- Use `handoff()` / `withToolParent(...)` when a tool call is emitted inside an inference or stream child span but executed later.
 - Use `startSpan` only for explicit long-lived parent control.
 - Use `SpanHandle.detached(...)` instead of raw `Task.detached` when parent trace linkage matters.

@@ -223,23 +223,23 @@ extension Terra {
 
     /// Binds the operation to an explicit Terra parent span.
     ///
-    /// Use this when child work must stay attached to a long-lived manual or agentic
-    /// span even if the call executes outside the parent closure's immediate task context.
+    /// The supplied parent must still be alive when this operation starts. Use this for
+    /// direct parent control when you already have a long-lived workflow or manual span.
+    /// If you are inside an inference or stream child span and need a later tool call,
+    /// capture `span.handoff()` or use `span.withToolParent(...)` before the child span ends.
     public func under(_ parent: SpanHandle) -> Self {
       var copy = self
       copy.parentSpan = parent
       return copy
     }
 
-    /// Executes the operation with the active Terra span handle.
+    /// Executes the operation, ignoring the active span handle.
     ///
-    /// This overload passes a `SpanHandle` to the body, allowing you to record
-    /// custom events, attributes, and metrics on the active span. The handle must
-    /// be captured and used within the async body to ensure data is attached to
-    /// the correct span.
+    /// Use this overload when you only need automatic span creation and error recording,
+    /// but do not need to add custom events or attributes.
     ///
-    /// - Parameter body: An async closure that receives a `SpanHandle` and performs the work.
-    /// - Returns: The result of the body, propagated unchanged.
+    /// - Parameter body: An async closure that performs the work.
+    /// - Returns: The result of the body.
     /// - Throws: Any error thrown by `body`, with error state recorded on the span.
     @discardableResult
     public func run<R: Sendable>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
@@ -248,13 +248,16 @@ extension Terra {
       }
     }
 
-    /// Executes the operation, ignoring the trace handle.
+    /// Executes the operation with the active Terra span handle.
     ///
-    /// Use this overload when you only need automatic span creation and error recording,
-    /// but do not need to add custom events or attributes.
+    /// This overload passes a `SpanHandle` to the body so you can record events,
+    /// attributes, and streaming metrics on the child span while it is alive.
+    /// The handle is closure-scoped; if later tool work must outlive this child closure,
+    /// capture a deferred parent with `handoff()` or `withToolParent(...)` from the handle
+    /// before returning.
     ///
-    /// - Parameter body: An async closure that performs the work.
-    /// - Returns: The result of the body.
+    /// - Parameter body: An async closure that receives a `SpanHandle` and performs the work.
+    /// - Returns: The result of the body, propagated unchanged.
     /// - Throws: Any error thrown by `body`, with error state recorded on the span.
     @discardableResult
     public func run<R: Sendable>(_ body: @escaping @Sendable (SpanHandle) async throws -> R) async rethrows -> R {
@@ -437,7 +440,10 @@ extension Terra {
   ///
   /// Use this factory method when making streaming calls where tokens are received
   /// incrementally. The resulting `Operation` creates a span that records chunk events,
-  /// time-to-first-token, and total output token counts.
+  /// time-to-first-token, and total output token counts. Those final stream metrics are
+  /// written when the stream closure returns or throws. If a tool call is emitted
+  /// mid-stream but executed later, capture a handoff from the streaming `SpanHandle`
+  /// before the closure exits and run the tool under that wider parent.
   ///
   /// - Parameters:
   ///   - model: The model identifier for the inference call.
@@ -539,7 +545,10 @@ extension Terra {
   /// Creates a tool-call operation representing a single tool invocation with an explicit call ID.
   ///
   /// Use this overload when the calling context already has a stable identifier and
-  /// you want the trace to correlate with upstream agent/tooling records.
+  /// you want the trace to correlate with upstream agent/tooling records. For deferred
+  /// tool work discovered inside an inference or stream child span, prefer
+  /// `try span.handoff().tool(...)` or `span.withToolParent(...)` rather than storing
+  /// the child span itself past closure return.
   public static func tool(
     _ name: String,
     callId: String,

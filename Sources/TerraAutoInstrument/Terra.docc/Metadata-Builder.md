@@ -23,3 +23,18 @@ let value = try await Terra.workflow(name: "stream.request") { workflow in
   }
 }
 ```
+
+Streaming chunk, first-token, and final output-token attributes are finalized when the
+streaming closure returns or throws. If a later tool call is discovered mid-stream,
+capture `span.handoff()` before leaving the closure.
+
+```swift
+let value = try await Terra.workflow(name: "stream.request") { workflow in
+  let deferred = try await workflow.stream("gpt-4o-mini", prompt: "Explain") { span in
+    span.firstToken()
+    span.chunk(4)
+    return try span.handoff().tool("search", callId: "search-1")
+  }
+  return try await deferred.run { "docs" }
+}
+```

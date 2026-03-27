@@ -10,6 +10,40 @@ extension Terra {
     @TaskLocal static var current = false
   }
 
+  /// A captured parent for tool work that must execute after the current child span ends.
+  ///
+  /// Create this from `SpanHandle.handoff()` while the current inference or streaming span
+  /// still has a live workflow or manual parent. The returned helper can then build tool
+  /// operations that stay attached to that longer-lived parent.
+  ///
+  /// ```swift
+  /// let deferred = try span.handoff().tool("search", callId: "search-1")
+  /// let docs = try await deferred.run { "docs" }
+  /// ```
+  public struct ToolParentHandoff: Sendable {
+    private let parent: SpanHandle
+
+    fileprivate init(parent: SpanHandle) {
+      self.parent = parent
+    }
+
+    /// Creates a tool operation already bound to the captured long-lived parent.
+    public func tool(
+      _ name: String,
+      callId: String? = nil,
+      type: String? = nil,
+      provider: ProviderID? = nil,
+      runtime: RuntimeID? = nil
+    ) -> Operation {
+      let operation = if let callId {
+        Terra.tool(name, callId: callId, type: type, provider: provider, runtime: runtime)
+      } else {
+        Terra.tool(name, type: type, provider: provider, runtime: runtime)
+      }
+      return operation.under(parent)
+    }
+  }
+
   /// A sendable handle to an active Terra span.
   ///
   /// Use `SpanHandle` when span lifecycle must outlive a single closure or when
@@ -129,11 +163,37 @@ extension Terra {
 
     /// Ends the span if this handle owns the lifecycle.
     ///
-    /// `Terra.workflow {}` owns lifecycle automatically. `Terra.currentSpan()` may return
-    /// a handle for a span owned elsewhere, in which case `end()` is ignored and Terra
-    /// emits guidance in debug builds.
+    /// `Terra.workflow {}` owns lifecycle automatically. Child spans created by
+    /// `SpanHandle.infer(...)`, `SpanHandle.stream(...)`, and `SpanHandle.tool(...)`
+    /// end when their closure returns, so they are not reusable later unless you first
+    /// capture a tool handoff via `handoff()` or route later work under a wider
+    /// `Terra.startSpan(...)` / workflow parent.
     public func end() {
       storage.end()
+    }
+
+    /// Captures the nearest still-live parent that is valid for deferred tool work.
+    ///
+    /// Use this inside an inference or streaming closure when the model emits a tool call
+    /// that will be executed after the current child span ends. The handoff is only valid
+    /// while the captured workflow/manual parent is still alive.
+    ///
+    /// ```swift
+    /// let deferred = try span.handoff().tool("search", callId: "search-1")
+    /// ```
+    public func handoff() throws -> ToolParentHandoff {
+      ToolParentHandoff(parent: try _resolveToolParent())
+    }
+
+    /// Resolves the long-lived parent to use for tool work that outlives this span's closure.
+    ///
+    /// Use this when you need raw parent control instead of the one-line `handoff().tool(...)`
+    /// helper.
+    @discardableResult
+    public func withToolParent<R: Sendable>(
+      _ body: @escaping @Sendable (SpanHandle) async throws -> R
+    ) async throws -> R {
+      try await body(try _resolveToolParent())
     }
 
     /// Runs detached work while keeping this span active in the new task.
@@ -162,6 +222,10 @@ extension Terra {
       }
     }
 
+    /// Creates a non-streaming child inference span under this handle.
+    ///
+    /// The child span ends when the closure returns. If the model response will trigger
+    /// later tool execution, capture `span.handoff()` inside that child closure before it ends.
     @discardableResult
     public func infer<R: Sendable>(
       _ model: String,
@@ -256,6 +320,12 @@ extension Terra {
         .run(body)
     }
 
+    /// Creates a streaming child inference span under this handle.
+    ///
+    /// Streaming metrics such as first token, chunk count, and final output tokens are
+    /// finalized when the streaming closure returns or throws. If a tool call is emitted
+    /// mid-stream but executed later, hand it off to a wider parent with `handoff()` or
+    /// `withToolParent(...)` before the stream closure exits.
     @discardableResult
     public func stream<R: Sendable>(
       _ model: String,
@@ -305,6 +375,11 @@ extension Terra {
         .run(body)
     }
 
+    /// Creates a tool child span under this handle.
+    ///
+    /// Use this for tool work that executes immediately inside the current closure. If the
+    /// tool will be executed later, do not hold onto the child span itself; capture a
+    /// deferred parent via `handoff()` or `withToolParent(...)` and build the tool there.
     @discardableResult
     public func tool<R: Sendable>(
       _ name: String,
@@ -436,6 +511,21 @@ extension Terra {
         onOutputTokens: onOutputTokens,
         onFirstToken: onFirstToken
       )
+    }
+
+    fileprivate func _resolveToolParent() throws -> SpanHandle {
+      if storage.canBeToolHandoffParent {
+        return self
+      }
+
+      if let parentId = parentId,
+         let parentStorage = Terra.spanRegistry.get(spanId: parentId),
+         parentStorage.canBeToolHandoffParent
+      {
+        return SpanHandle(storage: parentStorage)
+      }
+
+      throw Terra._toolParentHandoffError(spanName: name)
     }
   }
 
@@ -802,6 +892,13 @@ extension Terra {
       return value
     }
 
+    var canBeToolHandoffParent: Bool {
+      lock.lock()
+      let value = ownsLifecycle && !ended && span.isRecording
+      lock.unlock()
+      return value
+    }
+
     func end() {
       lock.lock()
       if ended {
@@ -1034,6 +1131,7 @@ extension Terra {
   ///
   /// Use this when an agentic workflow needs a parent span that survives beyond a
   /// single `.run {}` closure, such as deferred tool execution or multi-phase work.
+  /// Later child operations must be created before this span ends.
   ///
   /// ```swift
   /// let span = Terra.startSpan(name: "tool-call", id: "call-42")
@@ -1074,6 +1172,10 @@ extension Terra {
   }
 
   /// Traces a workflow under one root span and exposes `SpanHandle` as the only public tracing handle.
+  ///
+  /// The workflow root stays alive for the full body, so later tool work should prefer
+  /// capturing `handoff()` from a child span or using the workflow handle directly instead
+  /// of trying to reuse a child inference/stream span after its closure ends.
   public static func workflow<R: Sendable>(
     name: String,
     id: String? = nil,
@@ -1248,6 +1350,21 @@ extension Terra {
   /// Registers a callback for every Terra error recorded on an active span.
   public static func onError(_ hook: @escaping @Sendable (any Error, SpanHandle) -> Void) {
     hookRegistry.addError(hook)
+  }
+
+  fileprivate static func _toolParentHandoffError(spanName: String) -> TerraError {
+    TerraError.guidance(
+      message: "Terra could not capture a long-lived parent for deferred tool work from `\(spanName)`.",
+      why: "The current span is closure-scoped, or its workflow/manual parent already ended before the later tool span was created.",
+      correctAPI: "Capture `span.handoff()` or use `withToolParent(...)` while a wider `Terra.workflow(name:id:_:)` or `Terra.startSpan(name:id:attributes:)` parent is still alive.",
+      example: """
+      let deferred = try await workflow.stream("gpt-4o-mini", prompt: "Explain") { span in
+        span.firstToken()
+        return try span.handoff().tool("search", callId: "search-1")
+      }
+      _ = try await deferred.run { "docs" }
+      """
+    )
   }
 
   /// Removes all registered span lifecycle hooks.

@@ -91,9 +91,9 @@ struct TerraManualTracingTests {
   func toolCallGuidanceRecommendsExplicitSpanLifecycle() {
     let guidance = Terra.ask("How do I trace a tool call that happens after streaming?")
 
-    #expect(guidance.apiToUse.contains("Terra.startSpan"))
-    #expect(guidance.codeExample.contains("Terra.tool"))
-    #expect(guidance.commonMistakes.contains(where: { $0.contains("closure") }))
+    #expect(guidance.apiToUse.contains("handoff"))
+    #expect(guidance.codeExample.contains("span.handoff().tool"))
+    #expect(guidance.commonMistakes.contains(where: { $0.contains("stream") }))
   }
 
   @Test("Workflow API keeps child inference and tool spans under one root")
@@ -170,6 +170,78 @@ struct TerraManualTracingTests {
 
     #expect(tool.parentSpanId == nil)
     #expect(tool.events.contains(where: { $0.name == "detached.parent.ended" }))
+  }
+
+  @Test("Deferred tool handoff keeps later tool work under the workflow root after inference")
+  func deferredToolHandoffKeepsLaterToolUnderWorkflowRootAfterInference() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    let value = try await Terra.workflow(name: "planner-handoff", id: "issue-44") { workflow in
+      let deferred = try await workflow.infer("child-model", prompt: "plan") { span in
+        try span.handoff().tool("search", callId: "call-2")
+      }
+      return await deferred.run { "docs" }
+    }
+
+    #expect(value == "docs")
+
+    let spans = support.finishedSpans()
+    let root = try #require(spans.first(where: { $0.name == "planner-handoff" }))
+    let inference = try #require(spans.first(where: { $0.name == Terra.SpanNames.inference }))
+    let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
+
+    #expect(inference.parentSpanId?.hexString == root.spanId.hexString)
+    #expect(tool.parentSpanId?.hexString == root.spanId.hexString)
+    #expect(tool.parentSpanId?.hexString != inference.spanId.hexString)
+  }
+
+  @Test("Deferred tool handoff keeps later tool work under the workflow root after streaming")
+  func deferredToolHandoffKeepsLaterToolUnderWorkflowRootAfterStreaming() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    let value = try await Terra.workflow(name: "stream-handoff", id: "issue-45") { workflow in
+      let deferred = try await workflow.stream("child-model", prompt: "explain") { span in
+        span.firstToken()
+        span.chunk(3)
+        span.event("tool.requested")
+        return try span.handoff().tool("search", callId: "call-3")
+      }
+      return await deferred.run { "docs" }
+    }
+
+    #expect(value == "docs")
+
+    let spans = support.finishedSpans()
+    let root = try #require(spans.first(where: { $0.name == "stream-handoff" }))
+    let stream = try #require(spans.first(where: { $0.name == Terra.SpanNames.inference }))
+    let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
+
+    #expect(stream.parentSpanId?.hexString == root.spanId.hexString)
+    #expect(tool.parentSpanId?.hexString == root.spanId.hexString)
+    #expect(tool.parentSpanId?.hexString != stream.spanId.hexString)
+    #expect(stream.attributes[Terra.Keys.Terra.streamChunkCount]?.description == "1")
+    #expect(stream.attributes[Terra.Keys.Terra.streamOutputTokens]?.description == "3")
+    #expect(stream.attributes[Terra.Keys.Terra.streamTimeToFirstTokenMs] != nil)
+    #expect(stream.events.contains(where: { $0.name == Terra.Keys.Terra.streamFirstTokenEvent }))
+    #expect(stream.events.contains(where: { $0.name == "tool.requested" }))
+  }
+
+  @Test("Tool handoff fails once the long-lived parent has already ended")
+  func toolHandoffFailsWhenLongLivedParentAlreadyEnded() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    let manual = Terra.startSpan(name: "manual-root", id: "issue-46")
+    let child = await Terra.infer("child-model", prompt: "plan").under(manual).run { span in
+      span
+    }
+    manual.end()
+
+    #expect(throws: Terra.TerraError.self) {
+      _ = try child.handoff()
+    }
   }
 
   @Test("Workflow infer messages overload records structured prompt attributes")

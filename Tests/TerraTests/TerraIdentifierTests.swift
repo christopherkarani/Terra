@@ -29,6 +29,7 @@ struct TerraIdentifierTests {
     #expect(capabilities.count >= 10)
     #expect(capabilities.contains { $0.entryPoint == "Terra.workflow(name:id:_:)" && $0.preference == .primary })
     #expect(capabilities.contains { $0.entryPoint == "Terra.workflow(name:id:messages:_:)" && $0.preference == .primary })
+    #expect(capabilities.contains { $0.entryPoint == "SpanHandle.handoff(), SpanHandle.withToolParent(_:)" })
     #expect(capabilities.contains { $0.entryPoint == "Terra.startSpan(name:id:attributes:)" })
     #expect(capabilities.contains { $0.entryPoint == "Terra.currentSpan()" })
     #expect(!capabilities.contains { $0.preference == .compatibility })

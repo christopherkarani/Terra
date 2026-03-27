@@ -1,3 +1,49 @@
+# Release 0.2.4
+
+- [ ] Confirm the exact diff to ship and keep unrelated TraceKit edits out of the release commit
+- [ ] Re-run targeted verification for the handoff/docs release payload
+- [ ] Commit the release payload on `main` and push to `origin/main`
+- [ ] Create GitHub release `0.2.4` and confirm public availability
+
+## Baseline
+
+- Repository visibility is already `PUBLIC` on GitHub (`christopherkarani/Terra`), so no repository visibility change is required.
+- The worktree still contains unrelated pre-existing edits in `Sources/TerraTraceKit/TraceLoader.swift` and `Tests/TerraTraceKitTests/TraceKitTests.swift`; the release commit must not include them.
+- The latest published git tag is `0.2.3`, so the next patch release for the handoff/docs work is `0.2.4`.
+
+# Parent-Span Handoff And Stream Lifecycle Clarification
+
+- [x] Make parent-span lifecycle rules explicit in public method comments and public docs
+- [x] Add a safe deferred-tool handoff helper so later tool work does not depend on reusing an ended child span
+- [x] Expose a clearer `withToolParent` / `handoff` public API for spans that outlive inference or stream child closures
+- [x] Add regression coverage for ended-parent handoff failure, deferred tool execution, and stream/non-stream parentage
+- [x] Run targeted verification and document the result
+
+## Baseline
+
+- The worktree was already dirty before implementation because of unrelated user changes in `Sources/TerraTraceKit/TraceLoader.swift` and `Tests/TerraTraceKitTests/TraceKitTests.swift`; this task avoids those files.
+- Wax CLI is still unavailable in this environment (`waxmcp` not installed), so project memory capture remains blocked for this session.
+- Before edits, Terra already had the right underlying lifecycle behavior for stream finalization and explicit parent spans, but the safe deferred-tool pattern was spread across docs, guidance, and internal knowledge rather than exposed as a clear public API.
+
+## Review
+
+- Added a public tool-first handoff surface in `TerraCore`:
+  - `SpanHandle.handoff()`
+  - `SpanHandle.withToolParent(_:)`
+  - `ToolParentHandoff.tool(...)`
+- The new handoff resolver reuses the nearest still-live workflow/manual parent for later tool execution and throws deterministic Terra guidance when no long-lived parent remains alive.
+- Updated method comments in the manual/composable tracing APIs to make closure ownership explicit, clarify that child inference/stream spans end when their closure returns, and fix the previously swapped `Operation.run` overload documentation.
+- Updated public docs and discovery guidance so the canonical deferred-tool example is now `try span.handoff().tool(...)` rather than only raw `.under(parent)` usage.
+- Added regression coverage for:
+  - deferred tool after non-stream inference
+  - deferred tool after stream
+  - handoff failure after the long-lived parent already ended
+  - updated help/capabilities/guidance expectations for the new surface
+- Verification completed:
+  - `swift test --filter 'TerraManualTracingTests|TerraComposableAPITests|TerraStreamingSpanTests|TerraDXTests|TerraIdentifierTests|DocumentationLintTests'`
+  - `swift test --filter 'TerraManualTracingTests|TerraDXTests|TerraIdentifierTests|DocumentationLintTests'`
+- Residual warnings remain from pre-existing test code and third-party SwiftPM plugin sources under `.build/checkouts`; the new handoff/docs/regression work passed.
+
 # Mission-Critical Audit And Remediation
 
 - [x] Audit mission-critical paths in `TerraCore`, `TerraAutoInstrument`, `TerraHTTPInstrument`, `TerraTraceKit`, and `TerraCoreML`

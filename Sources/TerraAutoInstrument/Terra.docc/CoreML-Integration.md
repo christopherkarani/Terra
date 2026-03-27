@@ -11,4 +11,6 @@ let result = try await Terra.workflow(name: "coreml.request") { workflow in
 }
 ```
 
-Use `Terra.startSpan(...)` only when the parent must outlive the closure.
+Use `Terra.startSpan(...)` only when the parent must outlive the wider workflow body.
+For later tool work discovered inside a child inference or stream span, prefer
+`span.handoff()` / `span.withToolParent(...)` over keeping the child span alive manually.

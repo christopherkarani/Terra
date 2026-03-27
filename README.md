@@ -54,7 +54,8 @@ let result = try await Terra.workflow(name: "planner", messages: &messages) { wo
 
 ## Streaming
 
-Keep streaming under a workflow root:
+Keep streaming under a workflow root. The stream span finalizes chunk and output-token
+metrics when the streaming closure returns or throws:
 
 ```swift
 let streamed = try await Terra.workflow(name: "stream.request") { workflow in
@@ -67,9 +68,27 @@ let streamed = try await Terra.workflow(name: "stream.request") { workflow in
 }
 ```
 
+## Deferred Tool After Stream
+
+If a tool call is discovered inside a child inference/stream span but executed later,
+hand it off to the wider parent before the child closes:
+
+```swift
+let answer = try await Terra.workflow(name: "stream.and.tool") { workflow in
+  let deferred = try await workflow.stream("gpt-4o-mini", prompt: "Explain") { span in
+    span.firstToken()
+    span.chunk(4)
+    return try span.handoff().tool("search", callId: "search-1", type: "web_search")
+  }
+
+  let toolResult = try await deferred.run { "docs" }
+  return toolResult
+}
+```
+
 ## Manual Parent
 
-Use manual lifecycle only when the root cannot own the whole request:
+Use manual lifecycle only when even the workflow root cannot own the whole request:
 
 ```swift
 let parent = Terra.startSpan(name: "manual.request")

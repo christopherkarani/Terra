@@ -33,6 +33,18 @@ let value = try await Terra.workflow(name: "request") { workflow in
 }
 ```
 
+## Deferred Tool After Stream
+
+```swift
+let value = try await Terra.workflow(name: "request") { workflow in
+  let deferred = try await workflow.stream("gpt-4o-mini", prompt: "Explain") { span in
+    span.firstToken()
+    return try span.handoff().tool("search", callId: "search-1")
+  }
+  return try await deferred.run { "docs" }
+}
+```
+
 ## Manual Lifecycle
 
 ```swift
