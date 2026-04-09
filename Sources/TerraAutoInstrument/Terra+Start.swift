@@ -20,6 +20,21 @@ extension Terra {
   ///
   /// - SeeAlso: `Terra.start(_:)`
   public struct Configuration: Sendable, Equatable {
+    public struct ProductionIngest: Sendable, Equatable {
+      public var environmentName: String
+      public var ingestKey: String
+      public var installationID: String?
+
+      public init(
+        environmentName: String,
+        ingestKey: String,
+        installationID: String? = nil
+      ) {
+        self.environmentName = environmentName
+        self.ingestKey = ingestKey
+        self.installationID = installationID
+      }
+    }
 
     /// Predefined configuration presets for common use cases.
     ///
@@ -204,6 +219,13 @@ extension Terra {
     /// with hardware state in dashboards.
     public var profiling: Profiling
 
+    /// Optional production OTLP ingest configuration.
+    ///
+    /// When set, Terra adds the bearer auth header required by the hosted
+    /// control plane and stamps the resource identity fields expected by the
+    /// production ingest contract.
+    public var productionIngest: ProductionIngest?
+
     /// Creates a configuration from a preset, or the `.quickstart` preset by default.
     ///
     /// - Parameter preset: One of `.quickstart`, `.production`, or `.diagnostics`.
@@ -215,18 +237,21 @@ extension Terra {
         features = [.coreML, .http, .sessions, .signposts]
         persistence = .off
         profiling = []
+        productionIngest = nil
       case .production:
         privacy = .redacted
         destination = .localDashboard
         features = [.coreML, .http, .sessions]
         persistence = .balanced(Terra.defaultPersistenceStorageURL())
         profiling = []
+        productionIngest = nil
       case .diagnostics:
         privacy = .redacted
         destination = .localDashboard
         features = [.coreML, .http, .sessions, .signposts, .logs]
         persistence = .balanced(Terra.defaultPersistenceStorageURL())
         profiling = .standard
+        productionIngest = nil
       }
     }
 
@@ -294,11 +319,13 @@ extension Terra {
           otlpLogsEndpoint: endpointURL.appendingPathComponent("v1/logs"),
           metricsExportInterval: features.contains(.logs) ? 15 : 60,
           persistence: persistenceConfig.map(\.asInternalConfiguration),
+          otlpHeaders: [:],
           serviceName: nil,
           serviceVersion: nil,
           resourceAttributes: [:],
           traceSamplingRatio: nil
         ),
+        productionIngest: productionIngest,
         instrumentations: instrumentations,
         openClaw: openClawConfig,
         proxy: nil,
@@ -353,16 +380,19 @@ extension Terra {
   }
 
   static func _performStart(_ config: _ResolvedStartConfiguration) throws {
-    // 0. Resolve service metadata
-    let serviceName = config.openTelemetry.serviceName
-      ?? Bundle.main.bundleIdentifier
-      ?? ProcessInfo.processInfo.processName
-    let serviceVersion = config.openTelemetry.serviceVersion
-      ?? Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-
-    var openTelemetryConfig = config.openTelemetry
-    openTelemetryConfig.serviceName = serviceName
-    openTelemetryConfig.serviceVersion = serviceVersion
+    let bundleInfo = Bundle.main.infoDictionary ?? [:]
+    let bundleIdentifier = Bundle.main.bundleIdentifier
+    let processName = ProcessInfo.processInfo.processName
+    let openTelemetryConfig = _resolveOpenTelemetryConfiguration(
+      config.openTelemetry,
+      productionIngest: config.productionIngest,
+      bundleIdentifier: bundleIdentifier,
+      bundleShortVersion: bundleInfo["CFBundleShortVersionString"] as? String,
+      bundleBuild: bundleInfo["CFBundleVersion"] as? String,
+      processName: processName
+    )
+    let serviceName = openTelemetryConfig.serviceName
+    let serviceVersion = openTelemetryConfig.serviceVersion
 
     // 1. Set up telemetry providers.
     // Use the Zig tracer path only when the resolved configuration can be
@@ -457,6 +487,68 @@ extension Terra {
   /// Returns the minimal `Features` set used by TerraSession for auto-start.
   package static func _minimalFeatures() -> Configuration.Features {
     [.coreML]
+  }
+
+  package static var _defaultPlatformIdentifier: String {
+    #if os(iOS)
+      return "ios"
+    #elseif os(macOS)
+      return "macos"
+    #elseif os(tvOS)
+      return "tvos"
+    #elseif os(watchOS)
+      return "watchos"
+    #elseif os(visionOS)
+      return "visionos"
+    #else
+      return "unknown"
+    #endif
+  }
+
+  package static func _resolveOpenTelemetryConfiguration(
+    _ configuration: OpenTelemetryConfiguration,
+    productionIngest: Configuration.ProductionIngest?,
+    bundleIdentifier: String?,
+    bundleShortVersion: String?,
+    bundleBuild: String?,
+    processName: String
+  ) -> OpenTelemetryConfiguration {
+    var resolved = configuration
+    let serviceName = resolved.serviceName
+      ?? bundleIdentifier
+      ?? processName
+    let serviceVersion = resolved.serviceVersion
+      ?? bundleShortVersion
+
+    resolved.serviceName = serviceName
+    resolved.serviceVersion = serviceVersion
+
+    guard let productionIngest else {
+      return resolved
+    }
+
+    let installationID = Terra.resolveInstallationIdentity(
+      explicit: productionIngest.installationID,
+      namespace: bundleIdentifier ?? serviceName
+    )
+    let appIdentifier = bundleIdentifier ?? serviceName
+    let appVersion = serviceVersion ?? bundleBuild ?? "0.0.0"
+
+    resolved.otlpHeaders["Authorization"] = "Bearer \(productionIngest.ingestKey)"
+    resolved.resourceAttributes["terra.installation.id"] = .string(installationID)
+    resolved.resourceAttributes["service.instance.id"] = .string(installationID)
+    resolved.resourceAttributes["terra.platform"] = .string(_defaultPlatformIdentifier)
+    resolved.resourceAttributes["deployment.environment.name"] = .string(productionIngest.environmentName)
+    resolved.resourceAttributes["deployment.environment"] = .string(productionIngest.environmentName)
+    resolved.resourceAttributes["terra.app.identifier"] = .string(appIdentifier)
+    resolved.resourceAttributes["terra.app.version"] = .string(appVersion)
+    if let bundleIdentifier {
+      resolved.resourceAttributes["terra.app.bundle_id"] = .string(bundleIdentifier)
+    }
+    if let bundleBuild, !bundleBuild.isEmpty {
+      resolved.resourceAttributes["terra.app.build"] = .string(bundleBuild)
+    }
+    return resolved
   }
 }
 
@@ -644,6 +736,7 @@ extension Terra {
   struct _ResolvedStartConfiguration: Sendable {
     var privacy: Privacy
     var openTelemetry: OpenTelemetryConfiguration
+    var productionIngest: Configuration.ProductionIngest?
     var instrumentations: _Instrumentations
     var openClaw: OpenClawConfiguration
     var proxy: ProxyConfiguration?

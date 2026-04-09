@@ -55,4 +55,34 @@ import Testing
     #expect(config.features.contains(.coreML))
     #expect(!config.features.contains(.http))
   }
+
+  @Test func productionIngestAddsAuthHeaderAndRequiredIdentity() {
+    var config = Terra.Configuration(preset: .production)
+    config.destination = .endpoint(URL(string: "https://collector.example.com")!)
+    config.productionIngest = .init(
+      environmentName: "production",
+      ingestKey: "ingest_secret_123",
+      installationID: "install-123"
+    )
+
+    let resolved = Terra._resolveOpenTelemetryConfiguration(
+      config.asAutoInstrumentConfiguration().openTelemetry,
+      productionIngest: config.productionIngest,
+      bundleIdentifier: "com.acme.ios",
+      bundleShortVersion: "1.2.3",
+      bundleBuild: "456",
+      processName: "Acme"
+    )
+
+    #expect(resolved.otlpHeaders["Authorization"] == "Bearer ingest_secret_123")
+    #expect(resolved.resourceAttributes["terra.installation.id"] == .string("install-123"))
+    #expect(resolved.resourceAttributes["service.instance.id"] == .string("install-123"))
+    #expect(resolved.resourceAttributes["terra.app.bundle_id"] == .string("com.acme.ios"))
+    #expect(resolved.resourceAttributes["terra.app.identifier"] == .string("com.acme.ios"))
+    #expect(resolved.resourceAttributes["terra.app.version"] == .string("1.2.3"))
+    #expect(resolved.resourceAttributes["terra.app.build"] == .string("456"))
+    #expect(resolved.resourceAttributes["deployment.environment.name"] == .string("production"))
+    #expect(resolved.resourceAttributes["deployment.environment"] == .string("production"))
+    #expect(resolved.resourceAttributes["terra.platform"] == .string(Terra._defaultPlatformIdentifier))
+  }
 }

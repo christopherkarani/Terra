@@ -68,6 +68,10 @@ object TerraResource {
         }
     }
 
+    fun collect(config: TerraConfig, platform: String = "android"): Map<String, String> {
+        return collect() + config.productionResourceAttributes(platform = platform)
+    }
+
     /**
      * Apply collected resource attributes to a Terra instance as span attributes.
      * Call after [Terra.init] to enrich all subsequent spans.

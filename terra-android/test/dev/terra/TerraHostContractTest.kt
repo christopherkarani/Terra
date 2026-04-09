@@ -39,6 +39,34 @@ class TerraHostContractTest {
     }
 
     @Test
+    fun `production ingest config derives auth header and required resource identity`() {
+        val config = terraConfig {
+            serviceName = "com.acme.android"
+            serviceVersion = "2.1.0"
+            otlpEndpoint = "https://collector.example.com"
+            productionIngest = TerraConfig.ProductionIngest(
+                environmentName = "production",
+                ingestKey = "ingest_secret_123",
+                installationId = "install-android-123",
+                appBuild = "456"
+            )
+        }
+
+        assertEquals("Bearer ingest_secret_123", config.otlpHeaders()["Authorization"])
+
+        val attrs = config.productionResourceAttributes(platform = "android")
+        assertEquals("install-android-123", attrs["terra.installation.id"])
+        assertEquals("install-android-123", attrs["service.instance.id"])
+        assertEquals("com.acme.android", attrs["terra.app.identifier"])
+        assertEquals("com.acme.android", attrs["terra.app.package_id"])
+        assertEquals("2.1.0", attrs["terra.app.version"])
+        assertEquals("456", attrs["terra.app.build"])
+        assertEquals("production", attrs["deployment.environment.name"])
+        assertEquals("production", attrs["deployment.environment"])
+        assertEquals("android", attrs["terra.platform"])
+    }
+
+    @Test
     fun `span context formatting is stable`() {
         val context = SpanContext(
             traceIdHi = 0x0123456789ABCDEFL,

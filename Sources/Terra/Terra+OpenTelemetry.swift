@@ -1,5 +1,6 @@
 import Foundation
 import OpenTelemetryApi
+import OpenTelemetryProtocolExporterCommon
 import OpenTelemetryProtocolExporterHttp
 import OpenTelemetrySdk
 import PersistenceExporter
@@ -34,6 +35,7 @@ extension Terra {
     package var metricsExportInterval: TimeInterval
 
     package var persistence: PersistenceConfiguration?
+    package var otlpHeaders: [String: String]
     package var serviceName: String?
     package var serviceVersion: String?
     package var resourceAttributes: [String: AttributeValue]
@@ -51,6 +53,7 @@ extension Terra {
       otlpLogsEndpoint: URL = defaultOltpHttpLoggingEndpoint(),
       metricsExportInterval: TimeInterval = 60,
       persistence: PersistenceConfiguration? = nil,
+      otlpHeaders: [String: String] = [:],
       serviceName: String? = nil,
       serviceVersion: String? = nil,
       resourceAttributes: [String: AttributeValue] = [:],
@@ -67,6 +70,7 @@ extension Terra {
       self.otlpLogsEndpoint = otlpLogsEndpoint
       self.metricsExportInterval = metricsExportInterval
       self.persistence = persistence
+      self.otlpHeaders = otlpHeaders
       self.serviceName = serviceName
       self.serviceVersion = serviceVersion
       self.resourceAttributes = resourceAttributes
@@ -306,7 +310,10 @@ extension Terra {
   private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> (TracerProviderSdk, Bool) {
     func makeExporter() throws -> any SpanExporter {
       let networkExporter = SimulatorAwareSpanExporter(
-        spanExporter: OtlpHttpTraceExporter(endpoint: configuration.otlpTracesEndpoint)
+        spanExporter: OtlpHttpTraceExporter(
+          endpoint: configuration.otlpTracesEndpoint,
+          config: OtlpConfiguration(headers: configuration.otlpHeaderTuples)
+        )
       )
       let exporter: any SpanExporter
       if let persistence = configuration.persistence {
@@ -387,7 +394,10 @@ extension Terra {
   private static func installMetrics(configuration: OpenTelemetryConfiguration) throws -> MeterProviderSdk {
     func makeExporter() throws -> any MetricExporter {
       let networkExporter = SimulatorAwareMetricExporter(
-        metricExporter: OtlpHttpMetricExporter(endpoint: configuration.otlpMetricsEndpoint)
+        metricExporter: OtlpHttpMetricExporter(
+          endpoint: configuration.otlpMetricsEndpoint,
+          config: OtlpConfiguration(headers: configuration.otlpHeaderTuples)
+        )
       )
       let exporter: any MetricExporter
       if let persistence = configuration.persistence {
@@ -424,7 +434,10 @@ extension Terra {
   private static func installLogs(configuration: OpenTelemetryConfiguration) throws -> (LoggerProviderSdk, any LogRecordProcessor) {
     func makeExporter() throws -> any LogRecordExporter {
       let networkExporter = SimulatorAwareLogExporter(
-        logExporter: OtlpHttpLogExporter(endpoint: configuration.otlpLogsEndpoint)
+        logExporter: OtlpHttpLogExporter(
+          endpoint: configuration.otlpLogsEndpoint,
+          config: OtlpConfiguration(headers: configuration.otlpHeaderTuples)
+        )
       )
       let exporter: any LogRecordExporter
       if let persistence = configuration.persistence {
@@ -530,6 +543,14 @@ extension Terra {
     _ = logProcessor?.shutdown()
 
     Runtime.shared.markStopped()
+  }
+}
+
+private extension Terra.OpenTelemetryConfiguration {
+  var otlpHeaderTuples: [(String, String)] {
+    otlpHeaders
+      .sorted { $0.key < $1.key }
+      .map { ($0.key, $0.value) }
   }
 }
 
