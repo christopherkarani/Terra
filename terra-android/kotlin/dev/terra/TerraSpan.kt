@@ -106,7 +106,7 @@ class TerraSpan internal constructor(
     }
 
     /** Use as a try-with-resources style block. */
-    inline fun <R> use(block: (TerraSpan) -> R): R {
+    fun <R> use(block: (TerraSpan) -> R): R {
         try {
             return block(this)
         } catch (e: Throwable) {

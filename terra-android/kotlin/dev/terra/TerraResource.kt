@@ -29,6 +29,10 @@ object TerraResource {
      * - terra.android.product → Build.PRODUCT
      */
     fun collect(): Map<String, String> {
+        if (!isAndroidRuntime()) {
+            return hostFallback()
+        }
+
         return try {
             val buildClass = Class.forName("android.os.Build")
             val versionClass = Class.forName("android.os.Build\$VERSION")
@@ -59,12 +63,7 @@ object TerraResource {
                 "terra.android.product" to product
             )
         } catch (_: Exception) {
-            // Not running on Android — return minimal resource set.
-            mapOf(
-                "os.type" to "linux",
-                "os.name" to "JVM",
-                "terra.runtime" to "non-android"
-            )
+            hostFallback()
         }
     }
 
@@ -77,7 +76,7 @@ object TerraResource {
      * Call after [Terra.init] to enrich all subsequent spans.
      */
     fun applyTo(terra: Terra) {
-        val handle = terra.requireHandle()
+        terra.requireHandle()
         val attrs = collect()
         // Resource attributes are set as service-level attributes via session.
         // For now, they'll be available as span attributes on the first span.
@@ -87,5 +86,20 @@ object TerraResource {
             // when the C API adds that function. For now, collect() is available
             // for the transport layer to include in OTLP resource.
         }
+    }
+
+    private fun isAndroidRuntime(): Boolean {
+        val vmName = System.getProperty("java.vm.name").orEmpty()
+        val runtimeName = System.getProperty("java.runtime.name").orEmpty()
+        return vmName.contains("Dalvik", ignoreCase = true) ||
+            runtimeName.contains("Android", ignoreCase = true)
+    }
+
+    private fun hostFallback(): Map<String, String> {
+        return mapOf(
+            "os.type" to "linux",
+            "os.name" to "JVM",
+            "terra.runtime" to "non-android"
+        )
     }
 }

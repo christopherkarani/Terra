@@ -106,7 +106,7 @@ class StreamingScope internal constructor(
     }
 
     /** Use as a scoped block — auto-finishes on exit. */
-    inline fun <R> use(block: (StreamingScope) -> R): R {
+    fun <R> use(block: (StreamingScope) -> R): R {
         try {
             return block(this)
         } catch (e: Throwable) {

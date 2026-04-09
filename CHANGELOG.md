@@ -66,3 +66,5 @@ Terra follows [Semantic Versioning](https://semver.org/).
 - Privacy audit remediation H-2: HMAC-SHA256 redaction is the default hashing path for redacted content in non-legacy paths.
 - OpenClaw audit remediation M-1: default gateway hosts are no longer enabled when OpenClaw mode is `.disabled`.
 - API cleanup: internal usage migrated from deprecated `.run` to `.execute` and from `.capture` to `.includeContent`.
+- Android SDK unit tests no longer compile instrumentation-only sources through the main source set.
+- Android host-side resource collection now falls back to JVM attributes unless the SDK is actually running on an Android runtime.

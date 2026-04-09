@@ -49,7 +49,7 @@ android {
         }
 
         getByName("androidTest") {
-            java.srcDirs("kotlin/dev/terra/test")
+            java.srcDirs("androidTest")
         }
     }
 
