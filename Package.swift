@@ -33,7 +33,7 @@ let package = Package(
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift-core.git", from: "2.3.0"),
     .package(url: "https://github.com/open-telemetry/opentelemetry-swift.git", from: "2.3.0"),
     .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
-    .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0")
+    .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.0"..<"700.0.0")
   ],
   targets: [
     // MARK: - Zig Core (C ABI bridge)

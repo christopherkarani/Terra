@@ -56,11 +56,11 @@ echo "==> Creating universal binary with lipo..."
 lipo -create \
   "$BUILD_DIR/aarch64-macos/lib/libterra.a" \
   "$BUILD_DIR/x86_64-macos/lib/libterra.a" \
-  -output "$BUILD_DIR/macos-universal/libterra.a"
+  -output "$BUILD_DIR/macos-universal/libtera.a"
 
 # Verify the fat binary
 echo "==> Verifying universal binary:"
-lipo -info "$BUILD_DIR/macos-universal/libterra.a"
+lipo -info "$BUILD_DIR/macos-universal/libtera.a"
 
 # ── Package as xcframework ───────────────────────────────────────────────
 echo "==> Creating xcframework at $XCFRAMEWORK_DIR..."
@@ -68,7 +68,7 @@ rm -rf "$XCFRAMEWORK_DIR"
 mkdir -p "$VENDOR_DIR"
 
 xcodebuild -create-xcframework \
-  -library "$BUILD_DIR/macos-universal/libterra.a" \
+  -library "$BUILD_DIR/macos-universal/libtera.a" \
   -headers "$ZIG_CORE/include" \
   -output "$XCFRAMEWORK_DIR"
 

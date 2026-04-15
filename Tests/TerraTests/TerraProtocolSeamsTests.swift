@@ -6,6 +6,8 @@ import Testing
 struct TerraProtocolSeamsTests {
   @Test("Injected telemetry engine captures deterministic instrumentation")
   func injectedTelemetryEngineCapturesDeterministicInstrumentation() async throws {
+    let support = TerraTestSupport()
+    _ = support
     let log = SeamLog()
     let engine = MockEngine(log: log)
 
@@ -48,6 +50,8 @@ struct TerraProtocolSeamsTests {
 
   @Test("Injected engine records thrown errors without real transport")
   func injectedEngineRecordsThrownErrors() async {
+    let support = TerraTestSupport()
+    _ = support
     enum ExpectedError: Error { case boom }
 
     let log = SeamLog()
