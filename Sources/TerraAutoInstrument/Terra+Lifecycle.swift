@@ -125,6 +125,39 @@ extension Terra {
         ]
       )
     }
+
+    let persistenceURL: URL?
+    switch config.persistence {
+    case .off:
+      persistenceURL = nil
+    case .balanced(let url), .instant(let url):
+      persistenceURL = url
+    }
+
+    if let persistenceURL {
+      do {
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: persistenceURL.path, isDirectory: &isDirectory)
+        if exists, !isDirectory.boolValue {
+          throw CocoaError(.fileWriteFileExists)
+        }
+        try FileManager.default.createDirectory(
+          at: persistenceURL,
+          withIntermediateDirectories: true,
+          attributes: nil
+        )
+      } catch {
+        throw Terra.TerraError(
+          code: .persistence_setup_failed,
+          message: "Failed to initialize persistence storage.",
+          context: [
+            "transition": "start",
+            "storage_url": persistenceURL.absoluteString,
+          ],
+          underlying: error
+        )
+      }
+    }
   }
 
   static func _mapLifecycleStartError(

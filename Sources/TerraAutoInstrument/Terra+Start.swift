@@ -476,6 +476,9 @@ extension Terra {
       config.instrumentations.contains(.openClawDiagnostics)
       || config.openClaw.shouldEnableDiagnosticsExport
     OpenClawDiagnosticsExporter.configure(configuration: shouldEnableDiagnostics ? config.openClaw : .disabled)
+
+    // Keep lifecycle semantics consistent across both Swift OTel and Zig backend paths.
+    Terra._markRuntimeRunningForLifecycle()
   }
 
   static func _disableAutoInstrumentationsForShutdown() {
