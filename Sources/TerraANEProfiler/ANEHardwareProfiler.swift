@@ -30,13 +30,21 @@ public enum ANEHardwareProfiler {
     state.isInstalled
   }
 
+  /// Returns `true` only when Terra has active hooks that collect ANE metrics.
+  ///
+  /// `isAvailable` means the private probe class exists. This value is stricter:
+  /// it remains false until concrete metric-collection swizzling is installed.
+  public static var isCollecting: Bool {
+    terra_ane_is_collecting()
+  }
+
   /// Installs the ANE profiling hooks.
   ///
-  /// Installs swizzling to intercept ANE-related calls. After installation,
-  /// use ``captureMetrics()`` or ``ANEProfilerSession`` to collect metrics.
+  /// Installs swizzling to intercept ANE-related calls. Probe-only availability
+  /// is not treated as installation; ``isCollecting`` is true only when hooks are active.
   ///
-  /// - Returns: `true` if installation succeeded, `false` if ANE is unavailable
-  ///   or installation failed.
+  /// - Returns: `true` if metric-collection hooks were installed, `false` if ANE
+  ///   is unavailable or the current bridge only supports availability probing.
   @discardableResult
   public static func install() -> Bool {
     guard terra_ane_install_swizzling() else { return false }

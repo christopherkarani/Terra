@@ -30,18 +30,21 @@ bool terra_ane_is_available(void) {
 bool terra_ane_install_swizzling(void) {
     _terra_ane_ensure_lock();
 
-    if (_terra_ane_swizzled) return true;
+    if (_terra_ane_swizzled) return false;
     if (!terra_ane_is_available()) return false;
 
-    // Mark as swizzled — actual swizzling of private APIs would go here
-    // when reverse-engineering the _ANEPerformanceStats interface.
-    // For now, this is a probe point that confirms API availability.
-    _terra_ane_swizzled = YES;
+    // The private API surface is probe-only until concrete performance-stat
+    // methods are mapped. Report availability separately from collection so
+    // callers do not treat zero metrics as real ANE execution evidence.
     [_terra_ane_lock lock];
     _terra_ane_current_metrics.available = true;
     [_terra_ane_lock unlock];
 
-    return true;
+    return false;
+}
+
+bool terra_ane_is_collecting(void) {
+    return _terra_ane_swizzled;
 }
 
 terra_ane_metrics_t terra_ane_get_metrics(void) {
@@ -65,6 +68,10 @@ void terra_ane_reset_metrics(void) {
 // APP_STORE build — all functions are stubs
 
 bool terra_ane_is_available(void) {
+    return false;
+}
+
+bool terra_ane_is_collecting(void) {
     return false;
 }
 

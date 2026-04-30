@@ -456,7 +456,13 @@ public final class OTLPHTTPServer {
       }
       let key = name.lowercased()
       if let existing = headers[key] {
-        headers[key] = existing + ", " + value
+        if key == "content-length" {
+          guard existing.trimmingCharacters(in: .whitespacesAndNewlines) == value else {
+            return .failure(.badRequest("Conflicting Content-Length headers"))
+          }
+        } else {
+          headers[key] = existing + ", " + value
+        }
       } else {
         headers[key] = value
       }
@@ -475,8 +481,9 @@ public final class OTLPHTTPServer {
     }
 
     let trimmedLength = contentLengthValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    let lengthToken = trimmedLength.split(separator: ",", maxSplits: 1).first.map { String($0) } ?? trimmedLength
-    guard let contentLength = Int(lengthToken.trimmingCharacters(in: .whitespacesAndNewlines)), contentLength >= 0 else {
+    guard !trimmedLength.contains(","),
+          let contentLength = Int(trimmedLength),
+          contentLength >= 0 else {
       return .failure(.badRequest("Invalid Content-Length"))
     }
 

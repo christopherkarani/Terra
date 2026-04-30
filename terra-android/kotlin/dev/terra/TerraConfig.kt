@@ -141,5 +141,7 @@ enum class RedactionStrategy {
     /** Replace with length indicator (e.g., "[42 chars]"). */
     LENGTH_ONLY,
     /** HMAC-SHA256 hash with configured key. */
-    HMAC_SHA256;
+    HMAC_SHA256,
+    /** Legacy SHA256 hash without an HMAC key. */
+    SHA256;
 }

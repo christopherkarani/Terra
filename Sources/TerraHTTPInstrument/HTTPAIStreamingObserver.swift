@@ -95,23 +95,37 @@ final class HTTPAIStreamingObserver: @unchecked Sendable {
         span.addEvent(name: "stream.chunk", attributes: attributes, timestamp: timestamp)
     }
 
-    func finish(span: any Span, parsedResponse: ParsedResponse?) {
-        let spanID = span.context.spanId.hexString
-        let now = ContinuousClock.now
-        var state: State?
+  func finish(span: any Span, parsedResponse: ParsedResponse?) {
+    let spanID = span.context.spanId.hexString
+    finish(spanID: spanID, parsedResponse: parsedResponse, error: nil)
+  }
+
+  func finishWithError(request: URLRequest?, error: Error? = nil) {
+    guard let request, let spanID = spanID(for: request) else { return }
+    finish(spanID: spanID, parsedResponse: nil, error: error)
+  }
+
+  private func finish(spanID: String, parsedResponse: ParsedResponse?, error: Error?) {
+    let now = ContinuousClock.now
+    var state: State?
 
         lock.lock()
         state = states.removeValue(forKey: spanID)
         lock.unlock()
 
-        guard let state else { return }
+    guard let state else { return }
 
-        var attributes: [String: AttributeValue] = [
-            Terra.Keys.Terra.streamChunkCount: .int(state.chunkCount),
-        ]
+    var attributes: [String: AttributeValue] = [
+      Terra.Keys.Terra.streamChunkCount: .int(state.chunkCount),
+    ]
+    if let error {
+      attributes["terra.stream.completed"] = .bool(false)
+      attributes["error.type"] = .string(String(reflecting: Swift.type(of: error)))
+      state.span.status = .error(description: String(describing: error))
+    }
 
-        let resolvedOutputTokens = parsedResponse?.outputTokens ?? state.outputTokens
-        if let resolvedOutputTokens {
+    let resolvedOutputTokens = parsedResponse?.outputTokens ?? state.outputTokens
+    if let resolvedOutputTokens {
             attributes[Terra.Keys.GenAI.usageOutputTokens] = .int(resolvedOutputTokens)
             attributes[Terra.Keys.Terra.streamOutputTokens] = .int(resolvedOutputTokens)
         }
@@ -125,15 +139,16 @@ final class HTTPAIStreamingObserver: @unchecked Sendable {
             }
         }
 
-        span.setAttributes(attributes)
+    state.span.setAttributes(attributes)
+    if let error {
+      state.span.addEvent(
+        name: "stream.error",
+        attributes: [
+          "error.message": .string(String(describing: error))
+        ]
+      )
     }
-
-    func finishWithError(request: URLRequest?) {
-        guard let request, let spanID = spanID(for: request) else { return }
-        lock.lock()
-        states.removeValue(forKey: spanID)
-        lock.unlock()
-    }
+  }
 
     func reset() {
         lock.lock()
@@ -194,8 +209,8 @@ final class HTTPAIStreamingObserver: @unchecked Sendable {
 
         case #selector(URLSessionTaskDelegate.urlSession(_:task:didCompleteWithError:)):
             let block: @convention(block) (AnyObject, URLSession, URLSessionTask, Error?) -> Void = { object, session, task, error in
-                if error != nil {
-                    self.finishWithError(request: task.currentRequest ?? task.originalRequest)
+                if let error {
+                    self.finishWithError(request: task.currentRequest ?? task.originalRequest, error: error)
                 }
                 let castedIMP = unsafeBitCast(originalIMP, to: (@convention(c) (AnyObject, Selector, URLSession, URLSessionTask, Error?) -> Void).self)
                 castedIMP(object, selector, session, task, error)

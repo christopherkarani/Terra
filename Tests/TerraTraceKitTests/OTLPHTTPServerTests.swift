@@ -147,6 +147,52 @@ final class OTLPHTTPServerTests: XCTestCase {
     let snapshot = await store.snapshot(filter: nil)
     XCTAssertTrue(snapshot.allSpans.isEmpty)
   }
+
+  func testOTLPHTTPServer_conflictingContentLengthReturns400() async throws {
+    let body = try OTLPTestFixtures.serializedRequest()
+    let store = TraceStore(maxSpans: 50)
+    let server = OTLPHTTPServer(
+      host: "127.0.0.1",
+      port: 0,
+      traceStore: store
+    )
+
+    do {
+      try server.start()
+    } catch {
+      throw XCTSkip("Skipping: unable to bind test server: \(error)")
+    }
+    defer { server.stop() }
+
+    let actualPort = try await waitForBoundPort(server, timeout: 2.0)
+    XCTAssertGreaterThan(actualPort, 0)
+    guard actualPort > 0 else {
+      XCTFail("Server did not bind to an ephemeral port within timeout")
+      return
+    }
+
+    let requestBytes = makeRawRequestWithHeaderLines(
+      host: "127.0.0.1",
+      port: actualPort,
+      headerLines: [
+        "Content-Type: application/x-protobuf",
+        "Content-Encoding: identity",
+        "Content-Length: \(body.count)",
+        "Content-Length: \(body.count + 1)",
+        "Connection: close",
+      ],
+      body: body
+    )
+    let response = try await sendRawRequest(
+      host: "127.0.0.1",
+      port: UInt16(actualPort),
+      request: requestBytes
+    )
+
+    XCTAssertEqual(parseStatusCode(from: response), 400, "Response body: \(parseBody(from: response))")
+    let snapshot = await store.snapshot(filter: nil)
+    XCTAssertTrue(snapshot.allSpans.isEmpty)
+  }
 }
 
 private func waitForBoundPort(
@@ -188,6 +234,24 @@ private func makeRawRequestWithContentLength(
   request += "Content-Encoding: identity\r\n"
   request += "Content-Length: \(declaredContentLength)\r\n"
   request += "Connection: close\r\n"
+  request += "\r\n"
+
+  var data = Data(request.utf8)
+  data.append(body)
+  return data
+}
+
+private func makeRawRequestWithHeaderLines(
+  host: String,
+  port: Int,
+  headerLines: [String],
+  body: Data
+) -> Data {
+  var request = "POST /v1/traces HTTP/1.1\r\n"
+  request += "Host: \(host):\(port)\r\n"
+  for headerLine in headerLines {
+    request += "\(headerLine)\r\n"
+  }
   request += "\r\n"
 
   var data = Data(request.utf8)

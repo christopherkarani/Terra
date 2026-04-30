@@ -224,6 +224,49 @@ func loaderHandlesMixedFiles() throws {
   #expect(result.totalFileCount == 2)
 }
 
+@Test("TraceLoader coalesces parent-child spans across files")
+func loaderCoalescesTracesAcrossFiles() throws {
+  let dir = FileManager.default.temporaryDirectory
+    .appendingPathComponent(UUID().uuidString, isDirectory: true)
+  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: dir) }
+
+  let traceId = TraceId()
+  let rootSpanId = SpanId.random()
+  let childSpanId = SpanId.random()
+
+  let root = makeSpan(
+    name: "root",
+    traceId: traceId,
+    spanId: rootSpanId,
+    start: Date(timeIntervalSince1970: 100),
+    end: Date(timeIntervalSince1970: 105)
+  )
+  let child = makeSpan(
+    name: "child",
+    traceId: traceId,
+    spanId: childSpanId,
+    parentSpanId: rootSpanId,
+    start: Date(timeIntervalSince1970: 101),
+    end: Date(timeIntervalSince1970: 102)
+  )
+
+  try writeSpanFile(spans: [root], to: dir.appendingPathComponent("1000"))
+  try writeSpanFile(spans: [child], to: dir.appendingPathComponent("2000"))
+
+  let loader = TraceLoader(locator: TraceFileLocator(tracesDirectoryURL: dir))
+  let result = try loader.loadTracesWithFailures()
+
+  #expect(result.traces.count == 1)
+  let trace = try #require(result.traces.first)
+  #expect(trace.spans.count == 2)
+  #expect(trace.rootSpans.count == 1)
+  #expect(trace.rootSpans.first?.spanId == rootSpanId)
+
+  let mergedChild = try #require(trace.spans.first(where: { $0.spanId == childSpanId }))
+  #expect(mergedChild.parentSpanId == rootSpanId)
+}
+
 @Test("TraceLoader maxFiles loads only the newest files")
 func loaderRespectsMaxFilesNewestFirst() throws {
   let dir = FileManager.default.temporaryDirectory

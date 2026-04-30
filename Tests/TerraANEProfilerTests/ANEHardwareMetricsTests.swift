@@ -62,6 +62,16 @@ struct ANEHardwareProfilerTests {
     _ = ANEHardwareProfiler.isAvailable
   }
 
+  @Test("probe availability does not imply active metric collection")
+  func availabilityDoesNotImplyCollection() {
+    ANEHardwareProfiler.reset()
+    let installed = ANEHardwareProfiler.install()
+
+    if !installed {
+      #expect(ANEHardwareProfiler.isCollecting == false)
+    }
+  }
+
   @Test("captureMetrics returns valid struct")
   func captureMetrics() {
     let metrics = ANEHardwareProfiler.captureMetrics()

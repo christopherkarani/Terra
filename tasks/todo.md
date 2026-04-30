@@ -1,3 +1,124 @@
+# Terra Codebase Audit And DX Review
+
+- [x] Record baseline worktree state and preserve existing uncommitted user changes
+- [x] Check project memory availability and document the limitation if unavailable
+- [x] Verify SwiftPM/package bootstrap and capture any dependency or binary-target blockers
+- [x] Audit Swift SDK correctness hotspots for privacy, lifecycle, streaming, and macro DX risks
+- [x] Audit TraceKit ingestion/viewer reliability for coalescing, OTLP, and rendering edge cases
+- [x] Audit profiler and native bridge contracts across CoreML, Power/Metal/ANE, Zig, and language bindings
+- [x] Audit repo-level Developer Experience for CI coverage, scripts, docs, and generated artifact hygiene
+- [x] Run targeted verification where local toolchains allow
+- [x] Produce ranked findings with classification, impact, proposed fix shape, and verification command
+
+## Baseline
+
+- The worktree is already dirty before this audit. Existing edits in release/build files, TraceKit, Android, Zig, vendored binaries, and `.agents/` are treated as user-owned and must not be overwritten by the audit.
+- Memory tooling is requested by project instructions, but no usable memory MCP/tool is exposed in this session after tool discovery. Audit notes will remain in `tasks/todo.md`.
+- A prior Swift smoke check hung during third-party dependency checkout for SwiftProtobuf/protobuf rather than Terra source compilation; bootstrap reliability is part of this audit.
+
+## Review
+
+- Verification completed:
+  - `swift package describe --type json` succeeded.
+  - `swift test --target TerraHTTPInstrumentTests` failed immediately because this SwiftPM version does not accept `--target` for `swift test`; use `--filter` or `--skip`-based strategies instead.
+  - `swift test --filter TerraHTTPInstrumentTests` and `swift test --filter DocumentationLintTests` both reached dependency resolution, then stalled while creating the `swift-protobuf` working copy and its protobuf submodules. The processes were stopped after reproducing the bootstrap blocker.
+  - `zig build test --summary all` passed: 193/193 Zig tests.
+  - `cd terra-rust && cargo test -- --test-threads=1` failed at link time: `../zig-core/zig-out/lib/libterra.a` contains archive members that `ld` reports are not Mach-O for the host link.
+  - `python3 -m py_compile terra-python/terra.py` passed.
+  - `cd terra-android && ./gradlew test assembleRelease` and `java -version` both failed because no Java runtime is installed in this environment.
+  - `bash Scripts/validate_no_legacy_refs.sh` exited 0, but emitted repeated `rg` missing-file errors for stale `Docs/*` paths before printing success.
+  - `git ls-files` did not show tracked `.DS_Store`, `.zig-cache`, `zig-out`, object files, `swiftdeps`, or `jniLibs` artifacts.
+- Ranked findings:
+  1. **Confirmed DX blocker: SwiftPM test commands are not reproducible from the approved plan.** `swift test --target ...` is rejected by SwiftPM, and the filter-based fallback repeatedly stalls while checking out `swift-protobuf` protobuf submodules. Impact: agents and humans cannot reliably validate Swift changes from a fresh or partially resolved checkout. Fix shape: replace target-form commands in docs/task templates with supported commands, add a bootstrap script that runs dependency resolution with clear timeout/failure messaging, and document/remediate the `swift-protobuf` submodule checkout requirement. Verify with `swift package resolve`, `swift test --filter TerraHTTPInstrumentTests`, and `swift test --filter DocumentationLintTests`.
+  2. **Confirmed bug: Rust package does not link against the current Zig archive.** `cargo test -- --test-threads=1` fails because `terra-rust/build.rs` links `../zig-core/zig-out/lib/libterra.a`, whose archive members are not Mach-O for the macOS host. Impact: Rust SDK consumers cannot run tests from this checkout. Fix shape: make `build.rs` either build the Zig core for the host target before linking or validate the archive target and fail with a clear remediation; consider using a stable per-platform artifact path. Verify with `cd zig-core && zig build -Dtarget=aarch64-macos` followed by `cd terra-rust && cargo test -- --test-threads=1`.
+  3. **Confirmed bug: Zig OpenTelemetry bridge does not install TaskLocal active context.** `TerraZigOTelBridge.withActiveSpan` starts a span and calls the operation, but `resolveParentContext()` only reads `TerraZigContext.activeSpanContext`; no code writes that TaskLocal. Impact: implicit child parenting through the Zig-backed tracer is suspect even though direct C parent-context tests pass. Fix shape: wrap the operation in `TerraZigContext.$activeSpanContext.withValue(span.zigContext)` for sync and async paths, then add a Swift integration test that creates nested Zig-backed spans without explicit parent pointers. Verify with `swift test --filter ZigBackendIntegrationTests`.
+  4. **Confirmed ABI/documentation gap: SHA256 redaction exists in Zig but not in the public C header or bindings.** `zig-core/src/c_api.zig` accepts redaction value `3 => .sha256`, while `Sources/CTerraBridge/include/terra.h`, `zig-core/include/terra.h`, Rust, Android, and Python expose only drop/length/HMAC values. Impact: cross-language callers cannot intentionally select SHA256 and enum drift can break future bindings. Fix shape: add `TERRA_REDACT_SHA256 = 3` to headers/bindings and add an ABI contract test that compares exported constants across Zig/C/Rust/Python/Android. Verify with `zig build test --summary all`, `cargo test`, Python import tests, and Android unit tests.
+  5. **Likely bug needing repro: explicit ended parents silently fall back to ambient context.** `Terra.withSpan` resolves `explicitParent.flatMap { $0.isEnded ? nil : $0.otelSpan } ?? Terra.currentSpan()...`, so `.under(endedParent)` inside another workflow can attach to the ambient workflow instead of surfacing misuse. Impact: trace trees can look valid while violating the caller's explicit parent intent. Fix shape: if `explicitParent` is non-nil and ended, throw or emit deterministic Terra guidance instead of falling back. Verify with a focused `.under(endedParent)` test inside an active workflow.
+  6. **Likely bug needing repro: HTTP streaming errors drop partial streaming metrics.** `HTTPAIStreamingObserver.finishWithError` removes stream state without emitting chunk count, TTFT, or output-token attributes collected before the error. Impact: failed streams lose the exact diagnostics users need. Fix shape: finalize known stream metrics on error and add an error event/status without pretending the stream succeeded. Verify with delegate-backed SSE tests for chunk, error-after-chunk, and late delegate class registration.
+  7. **Confirmed test gap / protocol bug: OTLP HTTP accepts duplicate `Content-Length` by using the first comma-separated value.** The hand parser combines duplicate headers, then uses the first token. Impact: conflicting lengths are not rejected, which can create ingestion ambiguity. Fix shape: reject duplicate or divergent `Content-Length` values with 400, while allowing identical duplicates only if intentionally supported. Verify with `OTLPHTTPServerTests` for duplicate matching/mismatching lengths, chunked, 100-continue, gzip, oversized header/body, and unsupported encoding.
+  8. **Confirmed telemetry semantics gap: `terra.hw.gpu_occupancy_pct` stores a 0-1 fraction.** `TerraMetalProfiler.attributes(gpuUtilization:)` writes the same fractional value to `metal.gpu_utilization` and `terra.hw.gpu_occupancy_pct`; the key name says percent. Impact: TerraViewer and downstream dashboards can display a 64% workload as 0.64%. Fix shape: either multiply the canonical percent key by 100 or rename/add a fraction key with compatibility handling. Verify with `TerraMetalProfilerAttributeTests` and viewer classifier expectations.
+  9. **Confirmed DX gap: `PowerMetricsCollector` fails silently when permissions/process startup fail.** The collector catches `proc.run()` errors and returns a zero summary later with no reason. Impact: users and agents cannot distinguish "no power draw" from "powermetrics unavailable/unauthorized." Fix shape: expose a start result or diagnostic status while preserving a compatibility wrapper if needed. Verify with tests that inject a failing process runner.
+  10. **Likely bug / honesty gap: ANE profiler install reports success without collecting metrics.** The Objective-C bridge marks itself installed when `_ANEPerformanceStats` exists, but comments say actual swizzling is not implemented and metrics remain mostly static. Impact: users may trust ANE telemetry that is only an availability probe. Fix shape: separate `isAvailable` from `isCollecting`, make install report probe-only status, and update docs/tests. Verify with `TerraANEProfilerTests`.
+  11. **Confirmed macro DX gap: non-literal `streaming:` expressions silently choose inference.** The macro only treats `streaming: true` as streaming; `streaming: someBool` expands to `Terra.infer`. Impact: coding agents can produce code that looks dynamic but traces the wrong operation. Fix shape: emit a diagnostic for non-literal streaming expressions or generate a conditional wrapper. Verify with `TracedMacroExpansionTests` for literal true, literal false, and non-literal streaming.
+  12. **Confirmed docs/CI DX gap: validation and CI do not cover the real repo surface.** CI only runs SwiftLint, `swift test`, and API checks; it does not cover Zig, Rust, Android, Python, script validation, artifact drift, or docs validation. The legacy-reference script checks missing docs paths yet exits green. Impact: cross-language regressions already observed locally would not be caught before merge. Fix shape: add CI jobs or a staged validation script for Zig/Rust/Python/Android where toolchains are available, and make doc validation fail on missing scoped paths. Verify with CI and `bash Scripts/validate_no_legacy_refs.sh`.
+- Residual limits:
+  - Swift target tests could not complete because dependency checkout stalls before compilation.
+  - Android tests could not run locally because Java is missing.
+- Existing user-owned changes outside `tasks/todo.md` were not modified.
+
+# Terra Framework DX Improvements
+
+- [x] Record implementation plan and preserve the existing dirty worktree
+- [x] Add one-command validation for human and coding-agent workflows
+- [x] Add agent-facing source map
+- [x] Add telemetry schema registry and validation
+- [x] Add binding conformance matrix/checks
+- [x] Add golden trace fixtures and tests
+- [x] Add runtime environment diagnostics API
+- [x] Add privacy audit mode
+- [x] Turn docs/examples into executable validation where practical
+- [x] Wire new checks into CI
+- [x] Run available verification and document blocked toolchains
+
+## Baseline
+
+- The worktree is already dirty from the prior audit/remediation and user-owned changes. This pass must add focused files and avoid reverting existing edits.
+- Memory tooling remains unavailable in this session despite project instructions requiring it.
+- SwiftPM test execution remains vulnerable to dependency checkout stalls; new validation should report that clearly rather than hanging silently.
+- Android execution remains locally blocked until a Java runtime is installed.
+
+## Implementation Notes
+
+- Primary goal: make framework contracts explicit and machine-checkable, especially for coding agents.
+- Public runtime additions should be additive and avoid breaking existing API call sites.
+- Generated/source-of-truth artifacts should live in `Docs/` or `Scripts/` and be cheap to validate locally.
+
+## Review
+
+- Added one-command validation in `Scripts/validate.sh` with quick/full modes. It runs docs hygiene, snippet validation, telemetry schema validation, binding conformance, Python syntax, Zig tests, Rust tests, SwiftPM manifest/tests, and Android checks when Java is actually usable.
+- Added `Docs/AGENT_SOURCE_MAP.md` so coding agents can route common Terra changes to canonical source files and focused checks.
+- Added `Docs/telemetry-schema.json` with 117 telemetry entries and `Scripts/validate-telemetry-schema.py` to enforce required fields, allowed types/stability values, duplicate JSON keys, and duplicate telemetry keys.
+- Added `Docs/BINDING_CONFORMANCE.md`, `Scripts/validate-bindings.py`, and `Fixtures/trace-golden/canonical-ai-workflow.json` to lock down binding constants, feature parity, and a canonical workflow/inference/tool/streaming-error trace shape.
+- Added additive runtime APIs:
+  - `Terra.diagnoseEnvironment()` for structured tracing/provider/native/platform/tooling/ANE diagnostics plus recommended fixes.
+  - `Terra.auditPrivacy(...)`, `Terra.auditCapturePolicy(...)`, and validation aliases for strict non-mutating privacy/capture audits.
+- Added focused Swift tests for environment diagnostics and privacy audit behavior. Local SwiftPM test execution remains blocked before compilation by `swift-protobuf` submodule checkout stalls, matching the earlier audit blocker.
+- Wired new cheap checks into CI repository validation. SwiftPM still runs through `Scripts/validate-swiftpm.sh`; Android CI now installs Java before Gradle validation.
+- Verification completed:
+  - `python3 Scripts/validate-doc-snippets.py`
+  - `python3 Scripts/validate-telemetry-schema.py`
+  - `python3 Scripts/validate-bindings.py`
+  - `python3 Scripts/validate-bindings.py --matrix`
+  - `Scripts/validate.sh --quick`
+  - `git diff --check`
+- Verification blocked or skipped:
+  - Focused Swift tests for the new APIs are blocked locally by SwiftPM dependency working-copy creation for `swift-protobuf` nested submodules before Terra compilation starts.
+  - Android Gradle validation is skipped locally because no Java runtime is installed.
+
+# Release 0.3.2
+
+- [ ] Confirm the release commit only contains the requested `swift-syntax` constraint relaxation plus release metadata
+- [x] Update `Package.swift` to accept `swift-syntax` `600.0.0..<700.0.0`
+- [ ] Run `swift package resolve`, `swift build`, and `swift test`
+- [ ] Verify Terra co-resolves with Swarm in a real consumer scaffold
+- [ ] Commit on `main` with the requested message
+- [ ] Create and push annotated tag `0.3.2`
+
+## Baseline
+
+- The worktree is already dirty in unrelated files outside this release scope; those changes must stay out of the release commit.
+- `Package.swift` currently pins `https://github.com/swiftlang/swift-syntax.git` with `from: "602.0.0"`.
+- This patch release is intended only to unblock Swarm/Wax co-residency by widening Terra's `swift-syntax` constraint without changing any other package pins or source behavior.
+
+## Review
+
+- The requested manifest change is applied exactly once in `Package.swift`; no other package pin was changed.
+- Macro compatibility was inspected against `swift-syntax 600.0.0`, and no concrete `602+`-only APIs were found in `Sources/TerraTracedMacroPlugin`, `Sources/TerraTracedMacro`, or the macro tests.
+- Terra-alone dependency solving accepts the widened range and selects `swift-syntax 602.0.0`, which is expected when Terra is resolved without Swarm's tighter `600.x` constraint.
+- In a real cloned Swarm consumer scaffold with the local Terra checkout added as a package dependency, SwiftPM's solver selected `swift-syntax 600.0.1`, which confirms the original Terra/Swarm range conflict is removed.
+- Full `swift build` / `swift test` verification is currently blocked by a pre-existing clean-build issue unrelated to the `swift-syntax` change: `Package.swift` declares binary target `libtera`, while `Vendor/libtera.xcframework/Info.plist` exposes `libterra.a`, and SwiftPM rejects that artifact mapping on a clean build.
+- Initial verification was also impeded by host disk exhaustion during dependency checkout; generated Xcode caches were cleared to restore free space, but the binary-target mismatch remains the release blocker.
+
 # Release 0.2.4
 
 # PR 23 Zig Lifecycle Fix
@@ -217,3 +338,56 @@
 - Added a TerraViewer contract plus an emission matrix so agents know the exact span-to-surface requirements for Mission Control and TraceTree.
 - Clarified resource-vs-span identity placement, content redaction fallback behavior, and TerraViewer smoke-test verification steps.
 - Added explicit naming conventions so agents choose meaningful session/root/agent/tool/model labels instead of generic defaults.
+
+# Terra Codebase Audit Remediation
+
+- [x] Preserve the dirty worktree baseline and avoid reverting user-owned edits
+- [x] Fix explicit ended-parent fallback so child spans do not silently attach to ambient workflow spans
+- [x] Fix Zig-backed active-span propagation for sync and async `withActiveSpan`
+- [x] Preserve partial HTTP streaming metrics and mark stream spans failed on transport errors
+- [x] Reject conflicting or comma-joined `Content-Length` headers in OTLP HTTP ingestion
+- [x] Normalize Metal GPU occupancy percentage units
+- [x] Report PowerMetrics start status instead of silently swallowing launch failures
+- [x] Separate ANE probe availability from active metric collection
+- [x] Reject non-literal `@Traced(streaming:)` values with an explicit diagnostic
+- [x] Add SHA256 redaction enum coverage consistently across C/Zig/Rust/Python/Android bindings
+- [x] Make Rust tests rebuild `libterra.a` for Cargo's host target
+- [x] Add a supported SwiftPM validation script with timeout diagnostics for dependency checkout stalls
+- [x] Refresh docs validation scope and add CI coverage for docs, Zig, Rust, Python, and Android checks
+- [x] Add focused regression tests for the Swift fixes where local test scaffolding exists
+
+## Baseline
+
+- The worktree was already dirty before this remediation. Pre-existing user-owned edits included release/build script changes, `TraceLoader`/TraceKit test changes, Android bridge/runtime changes, Zig C API changes, vendored `libtera.xcframework` changes, and `.agents/`.
+- Project instructions request memory tooling, but no usable memory tool is exposed in this session. This limitation remains recorded rather than simulated.
+- SwiftPM bootstrap reliability remains a live local blocker: focused `swift test` runs reach dependency working-copy creation and then stall inside `swift-protobuf` submodule clones (`abseil-cpp` / `protobuf`) before Terra test compilation starts.
+- Local Android verification is blocked by the missing Java runtime on this machine.
+
+## Review
+
+- Fixed confirmed runtime bugs in Terra-owned sources:
+  - explicit ended parents now call `setNoParent()` and emit `terra.parent.explicit_ended` telemetry instead of falling back to the ambient active span
+  - the Zig OpenTelemetry bridge now binds Terra's task-local Zig context while sync and async active spans run
+  - HTTP streaming completion errors now preserve observed chunk/token metrics, set failed span status, and emit `stream.error`
+  - OTLP HTTP ingestion now rejects conflicting duplicate `Content-Length` headers and comma-joined values
+  - Metal occupancy now reports the canonical percentage value (`64.0` for `0.64` utilization)
+  - PowerMetrics start now exposes `StartResult` / `lastStartResult`
+  - ANE profiler now distinguishes API availability from active collection hooks
+  - `@Traced(streaming:)` now errors on runtime expressions instead of silently treating them as non-streaming
+- Fixed cross-language/DX gaps:
+  - `TERRA_REDACT_SHA256` is now represented in C, Zig, Rust, Python, and Android binding layers
+  - `terra-rust/build.rs` now builds the Zig core for Cargo's host target unless `TERRA_LIB_DIR` is supplied
+  - `Scripts/validate-swiftpm.sh` now runs manifest, dependency resolution, and supported `swift test` invocations with timeout diagnostics for SwiftPM/git checkout stalls
+  - legacy-reference validation now scans existing canonical docs/snippets and fails clearly on missing scan roots
+  - CI now runs docs validation, timeout-bounded SwiftPM validation, Zig tests, Rust tests, Python syntax checking, and Android Gradle validation with Java 17
+- Local verification completed:
+  - `bash Scripts/validate_no_legacy_refs.sh`
+  - `bash -n Scripts/validate-swiftpm.sh Scripts/validate_no_legacy_refs.sh`
+  - `python3 -m py_compile terra-python/terra.py`
+  - `zig build test --summary all`
+  - `cd terra-rust && cargo test -- --test-threads=1`
+  - `swift package describe`
+- Local verification blocked:
+  - `swift test --filter explicitEndedParentDoesNotFallBackToAmbientWorkflow` stalled while cloning `swift-protobuf` submodules before compiling Terra tests
+  - `swift test --skip-update --filter explicitEndedParentDoesNotFallBackToAmbientWorkflow` hit the same `swift-protobuf` submodule clone stall
+  - `cd terra-android && ./gradlew test assembleRelease` is blocked because this machine has no Java runtime installed

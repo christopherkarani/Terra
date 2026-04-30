@@ -3,6 +3,9 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const target_result = target.result;
+    const is_android = target_result.abi.isAndroid();
+    const is_android_x86_64 = is_android and target_result.cpu.arch == .x86_64;
 
     // ── Comptime feature flags ──────────────────────────────────────────
     const no_std = b.option(bool, "TERRA_NO_STD", "Freestanding mode: disables HashMap dedup, file_storage, metrics, events") orelse false;
@@ -22,6 +25,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
+        .single_threaded = if (is_android_x86_64) true else null,
     });
     lib_mod.addOptions("build_options", options);
 
@@ -36,8 +40,9 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(lib);
 
-    // Shared lib, CLI, tests, and benchmarks require an OS — skip on freestanding
-    if (!is_freestanding) {
+    // Shared lib, CLI, tests, and benchmarks require an OS.
+    // Android packages the static core through the NDK JNI bridge instead.
+    if (!is_freestanding and !is_android) {
         // ── Library target: libtera (shared) ────────────────────────────
         const shared_mod = b.createModule(.{
             .root_source_file = b.path("src/root.zig"),

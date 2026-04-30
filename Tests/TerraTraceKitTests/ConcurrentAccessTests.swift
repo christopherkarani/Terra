@@ -6,7 +6,7 @@ import Testing
 
 @Suite("TraceKit ConcurrentAccessTests", .serialized)
 struct ConcurrentAccessTests {
-  @Test("TraceLoader handles concurrent loads without crashing")
+  @Test("TraceLoader coalesces duplicate trace snapshots during concurrent loads")
   func concurrentLoadsAreStable() async throws {
     let tempDir = FileManager.default.temporaryDirectory
       .appendingPathComponent("ConcurrentAccessTests-\(UUID().uuidString)", isDirectory: true)
@@ -47,7 +47,8 @@ struct ConcurrentAccessTests {
     }
 
     let result = try loader.loadTracesWithFailures()
-    #expect(result.traces.count == 20)
+    #expect(result.traces.count == 1)
+    #expect(result.traces.first?.spans.count == 1)
     #expect(result.failures.isEmpty)
   }
 }

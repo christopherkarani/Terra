@@ -62,6 +62,7 @@ class RedactionStrategy(IntEnum):
     DROP = 0
     LENGTH_ONLY = 1
     HMAC_SHA256 = 2
+    SHA256 = 3
 
 
 class StatusCode(IntEnum):

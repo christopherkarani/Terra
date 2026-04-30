@@ -172,6 +172,28 @@ struct TerraManualTracingTests {
     #expect(tool.events.contains(where: { $0.name == "detached.parent.ended" }))
   }
 
+  @Test("Explicit ended parent does not fall back to ambient workflow")
+  func explicitEndedParentDoesNotFallBackToAmbientWorkflow() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    let endedParent = Terra.startSpan(name: "ended-parent", id: "issue-ended-parent")
+    endedParent.end()
+
+    try await Terra.workflow(name: "ambient-root", id: "issue-ambient") { _ in
+      try await Terra.tool("search", callId: "call-ended-explicit").under(endedParent).run { "ok" }
+    }
+
+    let spans = support.finishedSpans()
+    let root = try #require(spans.first(where: { $0.name == "ambient-root" }))
+    let tool = try #require(spans.first(where: { $0.name == Terra.SpanNames.toolExecution }))
+
+    #expect(tool.parentSpanId == nil)
+    #expect(tool.parentSpanId?.hexString != root.spanId.hexString)
+    #expect(tool.attributes["terra.parent.explicit_ended"]?.description == "true")
+    #expect(tool.events.contains(where: { $0.name == "terra.parent.explicit_ended" }))
+  }
+
   @Test("Deferred tool handoff keeps later tool work under the workflow root after inference")
   func deferredToolHandoffKeepsLaterToolUnderWorkflowRootAfterInference() async throws {
     let support = TerraTestSupport()

@@ -133,14 +133,24 @@ final class TerraZigSpanBuilder: SpanBuilder {
   func withActiveSpan<T>(_ operation: (any SpanBase) throws -> T) rethrows -> T {
     let span = startSpan()
     defer { span.end() }
-    return try operation(span)
+    guard let zigSpan = span as? TerraZigOTelSpan else {
+      return try operation(span)
+    }
+    return try TerraZigContext.$activeSpanContext.withValue(zigSpan.zigContext) {
+      try operation(span)
+    }
   }
 
   @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
   func withActiveSpan<T>(_ operation: (any SpanBase) async throws -> T) async rethrows -> T {
     let span = startSpan()
     defer { span.end() }
-    return try await operation(span)
+    guard let zigSpan = span as? TerraZigOTelSpan else {
+      return try await operation(span)
+    }
+    return try await TerraZigContext.$activeSpanContext.withValue(zigSpan.zigContext) {
+      try await operation(span)
+    }
   }
 
   func startSpan() -> any Span {

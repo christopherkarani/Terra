@@ -7,8 +7,8 @@ import Foundation
 /// power consumption samples. This collector is only available on macOS and requires
 /// elevated privileges.
 ///
-/// - Important: `powermetrics` requires sudo access. The collector will fail silently
-///   if run without sufficient privileges.
+/// - Important: `powermetrics` requires sudo access. Use ``startWithStatus(domains:intervalMs:)``
+///   or ``lastStartResult`` to inspect launch failures on systems without sufficient privileges.
 ///
 /// ## Usage
 /// ```swift
@@ -24,9 +24,22 @@ import Foundation
 ///
 /// - SeeAlso: ``PowerSummary``, ``PowerSample``
 public enum PowerMetricsCollector {
+  public enum StartResult: Equatable, Sendable {
+    case started
+    case alreadyRunning
+    case unavailable
+    case failed(String)
+
+    public var didStart: Bool {
+      if case .started = self { return true }
+      return false
+    }
+  }
+
   private static let lock = NSLock()
   private static var process: Process?
   private static var pipe: Pipe?
+  private static var lastStartResultValue: StartResult?
 
   private static let _isAvailable: Bool = FileManager.default.isExecutableFile(atPath: "/usr/bin/powermetrics")
 
@@ -36,6 +49,12 @@ public enum PowerMetricsCollector {
   /// Returns `false` on non-macOS platforms or if the tool is not installed.
   public static func isAvailable() -> Bool {
     _isAvailable
+  }
+
+  public static var lastStartResult: StartResult? {
+    lock.lock()
+    defer { lock.unlock() }
+    return lastStartResultValue
   }
 
   /// Starts collecting power metrics.
@@ -51,10 +70,23 @@ public enum PowerMetricsCollector {
   /// - Note: Call ``stop()`` to end collection and retrieve the summary.
   ///   Nested calls while a session is active are ignored.
   public static func start(domains: PowerDomains = .all, intervalMs: Int = 1000) {
+    _ = startWithStatus(domains: domains, intervalMs: intervalMs)
+  }
+
+  @discardableResult
+  public static func startWithStatus(domains: PowerDomains = .all, intervalMs: Int = 1000) -> StartResult {
     lock.lock()
     defer { lock.unlock() }
 
-    guard process == nil else { return }
+    guard _isAvailable else {
+      lastStartResultValue = .unavailable
+      return .unavailable
+    }
+
+    guard process == nil else {
+      lastStartResultValue = .alreadyRunning
+      return .alreadyRunning
+    }
 
     var samplers: [String] = []
     if domains.contains(.cpu) { samplers.append("cpu_power") }
@@ -78,8 +110,12 @@ public enum PowerMetricsCollector {
       try proc.run()
       process = proc
       pipe = outputPipe
+      lastStartResultValue = .started
+      return .started
     } catch {
-      // powermetrics requires sudo — will fail without it
+      let result = StartResult.failed(error.localizedDescription)
+      lastStartResultValue = result
+      return result
     }
   }
 

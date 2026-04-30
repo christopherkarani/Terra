@@ -46,6 +46,7 @@ pub const TERRA_CONTENT_ALWAYS: c_int = 2;
 pub const TERRA_REDACT_DROP: c_int = 0;
 pub const TERRA_REDACT_LENGTH_ONLY: c_int = 1;
 pub const TERRA_REDACT_HMAC_SHA256: c_int = 2;
+pub const TERRA_REDACT_SHA256: c_int = 3;
 
 // ── Status code ─────────────────────────────────────────────────────────────
 

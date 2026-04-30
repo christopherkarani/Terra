@@ -13,7 +13,7 @@ struct TerraMetalProfilerAttributeTests {
     )
 
     #expect(attrs["metal.gpu_utilization"] == AttributeValue.double(0.64))
-    #expect(attrs["terra.hw.gpu_occupancy_pct"] == AttributeValue.double(0.64))
+    #expect(attrs["terra.hw.gpu_occupancy_pct"] == AttributeValue.double(64.0))
     #expect(attrs["metal.memory_in_flight_mb"] == AttributeValue.double(128))
     #expect(attrs["metal.compute_time_ms"] == AttributeValue.double(9.5))
   }

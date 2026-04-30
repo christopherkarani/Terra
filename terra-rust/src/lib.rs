@@ -778,6 +778,9 @@ mod tests {
         assert!(!raw.service_name.is_null());
         let name = unsafe { std::ffi::CStr::from_ptr(raw.service_name) };
         assert_eq!(name.to_str().unwrap(), "test-svc");
+
+        let sha_config = TerraConfig::new().redaction_strategy(RedactionStrategy::Sha256);
+        assert_eq!(sha_config.to_raw().redaction_strategy, ffi::TERRA_REDACT_SHA256);
     }
 
     #[test]

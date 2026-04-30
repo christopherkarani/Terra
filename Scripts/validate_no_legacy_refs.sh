@@ -24,10 +24,9 @@ RG_BASE=(
 
 SCOPE=(
   README.md
-  Docs/Front_Facing_API.md
-  Docs/Front_Facing_API_Examples.md
-  Docs/API_Cookbook.md
-  Docs/Integrations.md
+  Docs/cookbook.md
+  Docs/integrations.md
+  Docs/Profiler-Integration.md
   Examples
   website/src
 )
@@ -43,6 +42,13 @@ PATTERNS=(
   'Terra\.(inference|stream|embedding)\(model:'
   '\b(InferenceCall|StreamingCall|EmbeddingCall|AgentCall|ToolCall|SafetyCheckCall)\b'
 )
+
+for path in "${SCOPE[@]}"; do
+  if [[ ! -e "$path" ]]; then
+    echo "FAIL: Legacy-reference validation path does not exist: $path" >&2
+    exit 1
+  fi
+done
 
 for pat in "${PATTERNS[@]}"; do
   if "${RG_BASE[@]}" -n -e "$pat" "${SCOPE[@]}"; then

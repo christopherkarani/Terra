@@ -2,6 +2,7 @@
 // C ABI function implementations. All functions: null-safe, never panic, return terra_error_t or ?*Handle.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const terra_mod = @import("terra.zig");
 const config_mod = @import("config.zig");
 const span_mod = @import("span.zig");
@@ -83,16 +84,43 @@ pub const TERRA_ERR_OUT_OF_MEMORY: c_int = 4;
 pub const TERRA_ERR_TRANSPORT_FAILED: c_int = 5;
 pub const TERRA_ERR_SHUTTING_DOWN: c_int = 6;
 
-// ── Last error (threadlocal for safe error reporting) ───────────────────
-threadlocal var last_error_code: c_int = TERRA_OK;
-threadlocal var last_error_msg: [256]u8 = [_]u8{0} ** 256;
-threadlocal var last_error_msg_len: u8 = 0;
+// Zig's x86_64 Android TLS path pulls in __tls_get_addr when linked into the
+// NDK-built JNI bridge. Avoid TLS there so emulator builds link cleanly.
+const use_threadlocal_errors = !(builtin.abi == .android and builtin.cpu.arch == .x86_64);
+
+threadlocal var tls_last_error_code: c_int = TERRA_OK;
+threadlocal var tls_last_error_msg: [256]u8 = [_]u8{0} ** 256;
+threadlocal var tls_last_error_msg_len: u8 = 0;
+
+var global_last_error_lock: std.Thread.Mutex = .{};
+var global_last_error_code: c_int = TERRA_OK;
+var global_last_error_msg: [256]u8 = [_]u8{0} ** 256;
+var global_last_error_msg_len: u8 = 0;
+
+inline fn lastErrorCodePtr() *c_int {
+    return if (use_threadlocal_errors) &tls_last_error_code else &global_last_error_code;
+}
+
+inline fn lastErrorMsgPtr() *[256]u8 {
+    return if (use_threadlocal_errors) &tls_last_error_msg else &global_last_error_msg;
+}
+
+inline fn lastErrorMsgLenPtr() *u8 {
+    return if (use_threadlocal_errors) &tls_last_error_msg_len else &global_last_error_msg_len;
+}
 
 fn setLastError(code: c_int, msg: []const u8) void {
-    last_error_code = code;
+    if (!use_threadlocal_errors) {
+        global_last_error_lock.lock();
+        defer global_last_error_lock.unlock();
+    }
+
+    lastErrorCodePtr().* = code;
     const copy_len = @min(msg.len, @as(usize, 255));
+    const last_error_msg = lastErrorMsgPtr();
+    @memset(last_error_msg, 0);
     @memcpy(last_error_msg[0..copy_len], msg[0..copy_len]);
-    last_error_msg_len = @intCast(copy_len);
+    lastErrorMsgLenPtr().* = @intCast(copy_len);
 }
 
 fn mapContentPolicy(raw: c_int) !privacy.ContentPolicy {
@@ -366,11 +394,21 @@ pub export fn terra_span_context(s: ?*const Span) callconv(.c) SpanContext {
 // ── Diagnostics ─────────────────────────────────────────────────────────
 
 pub export fn terra_last_error() callconv(.c) c_int {
-    return last_error_code;
+    if (!use_threadlocal_errors) {
+        global_last_error_lock.lock();
+        defer global_last_error_lock.unlock();
+    }
+    return lastErrorCodePtr().*;
 }
 
 pub export fn terra_last_error_message(buf: ?[*]u8, max_len: u32) callconv(.c) u32 {
     const b = buf orelse return 0;
+    if (!use_threadlocal_errors) {
+        global_last_error_lock.lock();
+        defer global_last_error_lock.unlock();
+    }
+    const last_error_msg_len = lastErrorMsgLenPtr().*;
+    const last_error_msg = lastErrorMsgPtr();
     const copy_len = @min(@as(u32, last_error_msg_len), max_len);
     @memcpy(b[0..copy_len], last_error_msg[0..copy_len]);
     return copy_len;

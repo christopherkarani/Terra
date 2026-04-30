@@ -36,6 +36,7 @@ class TerraHostContractTest {
         assertEquals(ContentPolicy.OPT_IN, config.contentPolicy)
         assertEquals(RedactionStrategy.HMAC_SHA256, config.redactionStrategy)
         assertEquals("host-secret", config.hmacKey)
+        assertEquals(3, RedactionStrategy.SHA256.ordinal)
     }
 
     @Test

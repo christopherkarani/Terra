@@ -1,0 +1,1198 @@
+{
+  "schema_version": 1,
+  "description": "Agent-facing registry for Terra telemetry keys emitted by the main SDK modules. Keep this in sync with Sources/Terra/Terra+Constants.swift and module-specific key owners.",
+  "entry_required_fields": [
+    "key",
+    "type",
+    "unit",
+    "owner_module",
+    "stability",
+    "viewer_behavior",
+    "examples"
+  ],
+  "allowed_types": [
+    "string",
+    "int",
+    "double",
+    "bool",
+    "event"
+  ],
+  "allowed_stability": [
+    "stable",
+    "experimental",
+    "deprecated",
+    "internal"
+  ],
+  "registry": [
+    {
+      "key": "gen_ai.operation.name",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_summary",
+      "examples": ["inference"],
+      "description": "OpenTelemetry GenAI operation name for inference, embeddings, agent, tool, and safety spans."
+    },
+    {
+      "key": "gen_ai.prompt.message_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": [3],
+      "description": "Number of prompt messages parsed from a chat request."
+    },
+    {
+      "key": "gen_ai.prompt.role_0",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": ["user"],
+      "description": "Role of the first prompt message when request parsing is enabled."
+    },
+    {
+      "key": "gen_ai.prompt.content",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraHTTPInstrument",
+      "stability": "experimental",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": ["Summarize the last turn"],
+      "description": "Prompt content captured only when the active privacy policy permits raw content."
+    },
+    {
+      "key": "gen_ai.request.model",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_summary",
+      "examples": ["gpt-4o-mini", "local/llama-3.2-1b"],
+      "description": "Requested model identifier."
+    },
+    {
+      "key": "gen_ai.model",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "deprecated",
+      "viewer_behavior": "legacy_alias",
+      "examples": ["gpt-4o-mini"],
+      "description": "Legacy alias for gen_ai.request.model. New code should emit gen_ai.request.model."
+    },
+    {
+      "key": "gen_ai.request.max_tokens",
+      "type": "int",
+      "unit": "tokens",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": [512],
+      "description": "Requested maximum output tokens."
+    },
+    {
+      "key": "gen_ai.request.temperature",
+      "type": "double",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": [0.7],
+      "description": "Requested sampling temperature."
+    },
+    {
+      "key": "gen_ai.request.stream",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_summary",
+      "examples": [true],
+      "description": "Whether the request is expected to stream output."
+    },
+    {
+      "key": "gen_ai.usage.input_tokens",
+      "type": "int",
+      "unit": "tokens",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "token_summary",
+      "examples": [128],
+      "description": "Consumed input token count."
+    },
+    {
+      "key": "gen_ai.usage.output_tokens",
+      "type": "int",
+      "unit": "tokens",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "token_summary",
+      "examples": [42],
+      "description": "Generated output token count."
+    },
+    {
+      "key": "gen_ai.response.model",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_summary",
+      "examples": ["llama-3.2-1b-instruct"],
+      "description": "Model identifier reported by the response."
+    },
+    {
+      "key": "gen_ai.provider.name",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_summary",
+      "examples": ["openai-compatible", "apple/foundation-model"],
+      "description": "Provider responsible for the model request."
+    },
+    {
+      "key": "gen_ai.agent.name",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_summary",
+      "examples": ["planner"],
+      "description": "Agent span display name."
+    },
+    {
+      "key": "gen_ai.agent.id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": ["agent-42"],
+      "description": "Caller-provided agent invocation identifier."
+    },
+    {
+      "key": "gen_ai.tool.name",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_summary",
+      "examples": ["search"],
+      "description": "Tool span display name."
+    },
+    {
+      "key": "gen_ai.tool.type",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": ["web_search"],
+      "description": "Tool category or integration type."
+    },
+    {
+      "key": "gen_ai.tool.call.id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": ["search-1"],
+      "description": "Tool call identifier."
+    },
+    {
+      "key": "terra.privacy.content_policy",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "privacy_badge",
+      "examples": ["metadata_only"],
+      "description": "Configured content capture policy for the span."
+    },
+    {
+      "key": "terra.privacy.content_redaction",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "privacy_badge",
+      "examples": ["hash_hmac_sha256"],
+      "description": "Effective redaction mode applied to privacy-sensitive content."
+    },
+    {
+      "key": "terra.prompt.length",
+      "type": "int",
+      "unit": "characters",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": [48],
+      "description": "Prompt length captured when policy allows metadata or redacted content."
+    },
+    {
+      "key": "terra.prompt.hmac_sha256",
+      "type": "string",
+      "unit": "hmac-sha256",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": ["68a3f2..."],
+      "description": "Keyed digest of the prompt content."
+    },
+    {
+      "key": "terra.prompt.sha256",
+      "type": "string",
+      "unit": "sha256",
+      "owner_module": "Terra",
+      "stability": "deprecated",
+      "viewer_behavior": "legacy_alias",
+      "examples": ["68a3f2..."],
+      "description": "Legacy unkeyed prompt digest retained for migration compatibility."
+    },
+    {
+      "key": "terra.embeddings.input.count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": [12],
+      "description": "Number of inputs passed to an embedding operation."
+    },
+    {
+      "key": "terra.safety.check.name",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_summary",
+      "examples": ["foundation-model-guardrail"],
+      "description": "Safety check span display name."
+    },
+    {
+      "key": "terra.safety.subject.length",
+      "type": "int",
+      "unit": "characters",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": [160],
+      "description": "Length of content sent to a safety check."
+    },
+    {
+      "key": "terra.safety.subject.hmac_sha256",
+      "type": "string",
+      "unit": "hmac-sha256",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": ["9fb21c..."],
+      "description": "Keyed digest of safety-check subject content."
+    },
+    {
+      "key": "terra.safety.subject.sha256",
+      "type": "string",
+      "unit": "sha256",
+      "owner_module": "Terra",
+      "stability": "deprecated",
+      "viewer_behavior": "legacy_alias",
+      "examples": ["9fb21c..."],
+      "description": "Legacy unkeyed safety subject digest retained for migration compatibility."
+    },
+    {
+      "key": "terra.anonymization.key_id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": ["local-dev-key"],
+      "description": "Identifier for the anonymization key used to produce HMAC digests."
+    },
+    {
+      "key": "terra.auto_instrumented",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_badge",
+      "examples": [true],
+      "description": "Marks spans created by auto-instrumentation rather than manual tracing."
+    },
+    {
+      "key": "terra.runtime",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_summary",
+      "examples": ["coreml", "foundation_models", "mlx", "http_api"],
+      "description": "Runtime backend that produced the span."
+    },
+    {
+      "key": "terra.openclaw.gateway",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "TerraHTTPInstrument",
+      "stability": "experimental",
+      "viewer_behavior": "integration_badge",
+      "examples": [true],
+      "description": "Marks spans that flowed through the OpenClaw gateway path."
+    },
+    {
+      "key": "terra.openclaw.mode",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraHTTPInstrument",
+      "stability": "experimental",
+      "viewer_behavior": "integration_detail",
+      "examples": ["proxy"],
+      "description": "OpenClaw integration mode recorded for gateway spans."
+    },
+    {
+      "key": "terra.export.local_only",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "local_export_filter",
+      "examples": [true],
+      "description": "Keeps a signal in local persistence without forwarding it to the OTLP exporter."
+    },
+    {
+      "key": "terra.stream.time_to_first_token_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "lifecycle_metric",
+      "examples": [84.2],
+      "description": "Elapsed time until the first streamed token."
+    },
+    {
+      "key": "terra.stream.tokens_per_second",
+      "type": "double",
+      "unit": "tokens/s",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "lifecycle_metric",
+      "examples": [31.8],
+      "description": "Streaming throughput after the first token is observed."
+    },
+    {
+      "key": "terra.stream.output_tokens",
+      "type": "int",
+      "unit": "tokens",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "token_summary",
+      "examples": [42],
+      "description": "Output tokens accumulated during streaming."
+    },
+    {
+      "key": "terra.stream.chunk_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "lifecycle_metric",
+      "examples": [9],
+      "description": "Number of streaming chunks observed."
+    },
+    {
+      "key": "terra.first_token",
+      "type": "event",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "lifecycle_event",
+      "examples": ["terra.first_token"],
+      "description": "Event emitted when the first streamed token is observed."
+    },
+    {
+      "key": "terra.process.thermal_state",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": ["nominal", "serious"],
+      "description": "Process thermal state at span start."
+    },
+    {
+      "key": "terra.hw.gpu_occupancy_pct",
+      "type": "double",
+      "unit": "percent",
+      "owner_module": "TerraMetalProfiler",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": [62.5],
+      "description": "Estimated GPU occupancy percentage."
+    },
+    {
+      "key": "process.memory.resident_delta_mb",
+      "type": "double",
+      "unit": "MB",
+      "owner_module": "TerraSystemProfiler",
+      "stability": "deprecated",
+      "viewer_behavior": "legacy_hardware_signal",
+      "examples": [12.5],
+      "description": "Legacy resident memory delta. Prefer canonical terra.process.* or terra.hw.* memory keys where available."
+    },
+    {
+      "key": "process.memory.peak_mb",
+      "type": "double",
+      "unit": "MB",
+      "owner_module": "TerraSystemProfiler",
+      "stability": "deprecated",
+      "viewer_behavior": "legacy_hardware_signal",
+      "examples": [160.0],
+      "description": "Legacy process peak memory. Prefer terra.process.memory_peak_mb."
+    },
+    {
+      "key": "terra.process.memory_peak_mb",
+      "type": "double",
+      "unit": "MB",
+      "owner_module": "TerraSystemProfiler",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": [160.0],
+      "description": "Canonical process peak memory in megabytes."
+    },
+    {
+      "key": "terra.hw.rss_mb",
+      "type": "double",
+      "unit": "MB",
+      "owner_module": "TerraSystemProfiler",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": [160.0],
+      "description": "Canonical resident set size in megabytes."
+    },
+    {
+      "key": "terra.coreml.load.duration_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "latency_metric",
+      "examples": [118.4],
+      "description": "Core ML model load duration."
+    },
+    {
+      "key": "terra.latency.e2e_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "latency_metric",
+      "examples": [42.7],
+      "description": "End-to-end inference latency."
+    },
+    {
+      "key": "terra.thermal.state",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraSystemProfiler",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": ["serious"],
+      "description": "Profiled thermal state at the end of a thermal monitoring window."
+    },
+    {
+      "key": "terra.thermal.peak_state",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraSystemProfiler",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": ["critical"],
+      "description": "Highest thermal state observed during the monitoring window."
+    },
+    {
+      "key": "terra.thermal.time_throttled_s",
+      "type": "double",
+      "unit": "s",
+      "owner_module": "TerraSystemProfiler",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": [10.0],
+      "description": "Seconds spent in throttled thermal states."
+    },
+    {
+      "key": "terra.model.size_bytes",
+      "type": "int",
+      "unit": "bytes",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "model_metric",
+      "examples": [1073741824],
+      "description": "Model package size in bytes."
+    },
+    {
+      "key": "terra.model.size_mb",
+      "type": "double",
+      "unit": "MB",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "model_metric",
+      "examples": [1024.0],
+      "description": "Model package size in megabytes."
+    },
+    {
+      "key": "terra.model.weight_file_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "model_metric",
+      "examples": [3],
+      "description": "Number of weight files detected for a model package."
+    },
+    {
+      "key": "terra.model.format",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "model_metric",
+      "examples": ["compiled_model"],
+      "description": "Detected model package format."
+    },
+    {
+      "key": "terra.model.bandwidth_gbps",
+      "type": "double",
+      "unit": "GB/s",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "model_metric",
+      "examples": [1.0],
+      "description": "Estimated model memory bandwidth."
+    },
+    {
+      "key": "terra.model.inference_time_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "model_metric",
+      "examples": [500.0],
+      "description": "Observed model inference time used for calculated metrics."
+    },
+    {
+      "key": "terra.model.compute_device_guess",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "model_metric",
+      "examples": ["likely_ane"],
+      "description": "Heuristic compute device guess from calculated metrics."
+    },
+    {
+      "key": "terra.espresso.total_gflops",
+      "type": "double",
+      "unit": "GFLOPS",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_signal",
+      "examples": [2.0],
+      "description": "Total GFLOPS parsed from Espresso diagnostics."
+    },
+    {
+      "key": "terra.espresso.memory_bound_ops",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_signal",
+      "examples": [0],
+      "description": "Number of memory-bound operations parsed from Espresso diagnostics."
+    },
+    {
+      "key": "terra.espresso.compute_bound_ops",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_signal",
+      "examples": [1],
+      "description": "Number of compute-bound operations parsed from Espresso diagnostics."
+    },
+    {
+      "key": "terra.espresso.avg_work_unit_efficiency",
+      "type": "double",
+      "unit": "ratio",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_signal",
+      "examples": [0.9],
+      "description": "Average work-unit efficiency parsed from Espresso diagnostics."
+    },
+    {
+      "key": "terra.power.cpu_watts",
+      "type": "double",
+      "unit": "watts",
+      "owner_module": "TerraPowerProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "power_metric",
+      "examples": [2.0],
+      "description": "Average CPU power draw."
+    },
+    {
+      "key": "terra.power.gpu_watts",
+      "type": "double",
+      "unit": "watts",
+      "owner_module": "TerraPowerProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "power_metric",
+      "examples": [1.0],
+      "description": "Average GPU power draw."
+    },
+    {
+      "key": "terra.power.ane_watts",
+      "type": "double",
+      "unit": "watts",
+      "owner_module": "TerraPowerProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "power_metric",
+      "examples": [0.5],
+      "description": "Average ANE power draw."
+    },
+    {
+      "key": "terra.power.package_watts",
+      "type": "double",
+      "unit": "watts",
+      "owner_module": "TerraPowerProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "power_metric",
+      "examples": [3.5],
+      "description": "Average package power draw."
+    },
+    {
+      "key": "terra.power.sample_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraPowerProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "power_metric",
+      "examples": [1],
+      "description": "Number of power samples included in the summary."
+    },
+    {
+      "key": "terra.compute_plan.total_ops",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_detail",
+      "examples": [3],
+      "description": "Total operation count in the Core ML compute plan analysis."
+    },
+    {
+      "key": "terra.compute_plan.ane_ops",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_detail",
+      "examples": [2],
+      "description": "Operations estimated to prefer ANE execution."
+    },
+    {
+      "key": "terra.compute_plan.gpu_ops",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_detail",
+      "examples": [1],
+      "description": "Operations estimated to prefer GPU execution."
+    },
+    {
+      "key": "terra.compute_plan.cpu_ops",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_detail",
+      "examples": [0],
+      "description": "Operations estimated to prefer CPU execution."
+    },
+    {
+      "key": "terra.compute_plan.ane_utilization",
+      "type": "double",
+      "unit": "ratio",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_detail",
+      "examples": [0.67],
+      "description": "Ratio of compute plan operations estimated to prefer ANE execution."
+    },
+    {
+      "key": "terra.compute_plan.dominant_device",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_summary",
+      "examples": ["ane"],
+      "description": "Dominant estimated execution device."
+    },
+    {
+      "key": "terra.compute_plan.is_mixed_execution",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_summary",
+      "examples": [true],
+      "description": "Whether the compute plan spans more than one execution device."
+    },
+    {
+      "key": "terra.ane.fallback_likely",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_summary",
+      "examples": [true],
+      "description": "Whether ANE fallback is likely based on plan and latency evidence."
+    },
+    {
+      "key": "terra.ane.fallback_confidence",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_summary",
+      "examples": ["high"],
+      "description": "Confidence for the ANE fallback assessment."
+    },
+    {
+      "key": "terra.ane.hardware_execution_time_ns",
+      "type": "int",
+      "unit": "ns",
+      "owner_module": "TerraANEProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_signal",
+      "examples": [10000],
+      "description": "ANE hardware execution time from the bridge."
+    },
+    {
+      "key": "terra.ane.host_overhead_us",
+      "type": "double",
+      "unit": "us",
+      "owner_module": "TerraANEProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_signal",
+      "examples": [2.5],
+      "description": "Host overhead around ANE execution."
+    },
+    {
+      "key": "terra.hw.ane.hw_execution_time_ns",
+      "type": "int",
+      "unit": "ns",
+      "owner_module": "TerraANEProfiler",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": [10000],
+      "description": "Canonical ANE hardware execution time."
+    },
+    {
+      "key": "terra.hw.ane.host_overhead_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraANEProfiler",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": [0.0025],
+      "description": "Canonical host overhead around ANE execution."
+    },
+    {
+      "key": "terra.hw.ane.probe_status",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": ["captured"],
+      "description": "Status of the ANE probe or compute plan evidence capture."
+    },
+    {
+      "key": "terra.hw.ane.probe_source",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "hardware_signal",
+      "examples": ["mlcomputeplan"],
+      "description": "Source that produced ANE probe evidence."
+    },
+    {
+      "key": "terra.ane.segment_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraANEProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_signal",
+      "examples": [5],
+      "description": "Number of ANE program segments executed."
+    },
+    {
+      "key": "terra.ane.fully_ane",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "TerraANEProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_signal",
+      "examples": [false],
+      "description": "Whether the full operation ran on ANE."
+    },
+    {
+      "key": "terra.ane.available",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "TerraANEProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_signal",
+      "examples": [true],
+      "description": "Whether ANE hardware is available."
+    },
+    {
+      "key": "terra.exec.route.requested",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "execution_route_summary",
+      "examples": ["cpu_ane"],
+      "description": "Requested execution route or compute unit selection."
+    },
+    {
+      "key": "terra.exec.route.observed",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "execution_route_summary",
+      "examples": ["ane"],
+      "description": "Observed execution route when runtime evidence is available."
+    },
+    {
+      "key": "terra.exec.route.estimated_primary",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "execution_route_summary",
+      "examples": ["ane"],
+      "description": "Primary execution route estimated from static or profiler evidence."
+    },
+    {
+      "key": "terra.exec.route.supported",
+      "type": "string",
+      "unit": "csv",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "execution_route_detail",
+      "examples": ["cpu,gpu,ane"],
+      "description": "Supported execution routes for the model or compute plan."
+    },
+    {
+      "key": "terra.exec.route.capture_mode",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "execution_route_detail",
+      "examples": ["plan_estimated"],
+      "description": "How execution route evidence was captured."
+    },
+    {
+      "key": "terra.exec.route.confidence",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "execution_route_summary",
+      "examples": ["medium"],
+      "description": "Confidence level for execution route evidence."
+    },
+    {
+      "key": "terra.coreml.compute_units",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "execution_route_summary",
+      "examples": ["all", "cpu_and_ane"],
+      "description": "Configured Core ML compute units."
+    },
+    {
+      "key": "terra.coreml.compute_plan.capture_status",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_detail",
+      "examples": ["captured"],
+      "description": "Status of Core ML compute plan capture."
+    },
+    {
+      "key": "terra.coreml.compute_plan.model_structure",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_detail",
+      "examples": ["mlprogram"],
+      "description": "Model structure reported by compute plan diagnostics."
+    },
+    {
+      "key": "terra.coreml.compute_plan.estimated_primary_device",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_summary",
+      "examples": ["ane"],
+      "description": "Primary device estimated by Core ML compute plan diagnostics."
+    },
+    {
+      "key": "terra.coreml.compute_plan.supported_devices",
+      "type": "string",
+      "unit": "csv",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_detail",
+      "examples": ["cpu,gpu,ane"],
+      "description": "Devices supported by the Core ML compute plan."
+    },
+    {
+      "key": "terra.coreml.compute_plan.node_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_detail",
+      "examples": [18],
+      "description": "Node count reported by Core ML compute plan diagnostics."
+    },
+    {
+      "key": "terra.coreml.compute_plan.capture_duration_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "latency_metric",
+      "examples": [23.4],
+      "description": "Time spent capturing Core ML compute plan diagnostics."
+    },
+    {
+      "key": "terra.coreml.compute_plan.estimated_operations",
+      "type": "string",
+      "unit": "json",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "execution_route_detail",
+      "examples": ["[{\"identifier\":\"op1\",\"kind\":\"conv\",\"preferredDevice\":\"ane\",\"supportedDevices\":[\"ane\"]}]"],
+      "description": "Serialized operation estimates from Core ML compute plan diagnostics."
+    },
+    {
+      "key": "terra.coreml.compute_plan.error_type",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "error_detail",
+      "examples": ["terra.coreml.compute_plan.capture_timeout"],
+      "description": "Error type reported when compute plan capture fails."
+    },
+    {
+      "key": "terra.coreml.prediction.duration_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "latency_metric",
+      "examples": [42.7],
+      "description": "Core ML prediction duration emitted by instrumentation."
+    },
+    {
+      "key": "terra.fm.generation.sampling_mode",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraFoundationModels",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": ["top_p"],
+      "description": "Foundation Models generation sampling mode."
+    },
+    {
+      "key": "terra.foundation_models.response_type",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraFoundationModels",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": ["String"],
+      "description": "Swift response type requested from Foundation Models tracing wrappers."
+    },
+    {
+      "key": "terra.fm.guardrail.violation_type",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraFoundationModels",
+      "stability": "experimental",
+      "viewer_behavior": "safety_detail",
+      "examples": ["unsafe_content"],
+      "description": "Guardrail violation type reported by Foundation Models integration."
+    },
+    {
+      "key": "terra.fm.tools.called",
+      "type": "string",
+      "unit": "csv",
+      "owner_module": "TerraFoundationModels",
+      "stability": "experimental",
+      "viewer_behavior": "tool_summary",
+      "examples": ["search,calendar"],
+      "description": "Comma-separated tool names called by a Foundation Models session."
+    },
+    {
+      "key": "terra.fm.tool_call_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraFoundationModels",
+      "stability": "experimental",
+      "viewer_behavior": "tool_summary",
+      "examples": [1],
+      "description": "Number of tool calls observed in a Foundation Models session."
+    },
+    {
+      "key": "terra.fm.tool.name",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraFoundationModels",
+      "stability": "experimental",
+      "viewer_behavior": "tool_detail",
+      "examples": ["search"],
+      "description": "Foundation Models tool name for tool invocation events."
+    },
+    {
+      "key": "terra.fm.tool.arguments",
+      "type": "string",
+      "unit": "json",
+      "owner_module": "TerraFoundationModels",
+      "stability": "experimental",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": ["{\"query\":\"Terra telemetry\"}"],
+      "description": "Serialized Foundation Models tool arguments when capture policy permits."
+    },
+    {
+      "key": "terra.fm.tool.result",
+      "type": "string",
+      "unit": "json",
+      "owner_module": "TerraFoundationModels",
+      "stability": "experimental",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": ["{\"ok\":true}"],
+      "description": "Serialized Foundation Models tool result when capture policy permits."
+    },
+    {
+      "key": "terra.mlx.device",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraMLX",
+      "stability": "experimental",
+      "viewer_behavior": "runtime_detail",
+      "examples": ["gpu"],
+      "description": "MLX execution device label."
+    },
+    {
+      "key": "terra.mlx.memory_footprint_mb",
+      "type": "double",
+      "unit": "MB",
+      "owner_module": "TerraMLX",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_signal",
+      "examples": [512.0],
+      "description": "MLX memory footprint estimate."
+    },
+    {
+      "key": "terra.mlx.model_load_duration_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraMLX",
+      "stability": "experimental",
+      "viewer_behavior": "latency_metric",
+      "examples": [250.0],
+      "description": "MLX model load duration."
+    },
+    {
+      "key": "terra.llama.kv_cache_usage_percent",
+      "type": "double",
+      "unit": "percent",
+      "owner_module": "TerraLlama",
+      "stability": "experimental",
+      "viewer_behavior": "runtime_detail",
+      "examples": [74.2],
+      "description": "Llama KV cache usage percentage."
+    },
+    {
+      "key": "terra.workflow.id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "workflow_detail",
+      "examples": ["req-42"],
+      "description": "Caller-provided workflow identifier."
+    },
+    {
+      "key": "terra.workflow.tools_used",
+      "type": "string",
+      "unit": "csv",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "workflow_summary",
+      "examples": ["search,calculator"],
+      "description": "Sorted tool names observed inside a workflow."
+    },
+    {
+      "key": "terra.workflow.models_used",
+      "type": "string",
+      "unit": "csv",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "workflow_summary",
+      "examples": ["gpt-4o-mini,llama-3.2"],
+      "description": "Sorted model names observed inside a workflow."
+    },
+    {
+      "key": "terra.workflow.inference_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "workflow_summary",
+      "examples": [2],
+      "description": "Number of inference spans observed inside a workflow."
+    },
+    {
+      "key": "terra.workflow.tool_call_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "workflow_summary",
+      "examples": [1],
+      "description": "Number of tool spans observed inside a workflow."
+    }
+  ]
+}

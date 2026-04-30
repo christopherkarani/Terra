@@ -9,7 +9,6 @@ android {
 
     defaultConfig {
         minSdk = 26
-        targetSdk = 34
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -30,6 +29,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     kotlinOptions {
         jvmTarget = "11"
     }
@@ -38,9 +43,9 @@ android {
         getByName("main") {
             java.srcDirs("kotlin/dev/terra")
 
-            // JNI native libraries built via Zig cross-compilation:
-            //   zig build -Dtarget=aarch64-linux-android → jniLibs/arm64-v8a/libterra.so
-            //   zig build -Dtarget=x86_64-linux-android  → jniLibs/x86_64/libterra.so
+            // Native artifacts are produced by Scripts/build-libtera-android.sh:
+            //   Zig builds libterra.a per ABI
+            //   ndk-build links terra_jni.c + libterra.a into jniLibs/<abi>/libtera.so
             jniLibs.srcDirs("jniLibs")
         }
 

@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicLong
 object Terra {
 
     init {
-        System.loadLibrary("terra")
+        System.loadLibrary("tera")
     }
 
     /** Opaque pointer to the native terra_t instance, or 0 if not initialized. */
@@ -121,7 +121,7 @@ object Terra {
         parent: SpanContext? = null
     ): TerraSpan {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginInferenceSpan(
+        val spanPtr = TerraSpan.beginInferenceSpan(
             handle,
             parent?.traceIdHi ?: 0L,
             parent?.traceIdLo ?: 0L,
@@ -140,7 +140,7 @@ object Terra {
         parent: SpanContext? = null
     ): TerraSpan {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginEmbeddingSpan(
+        val spanPtr = TerraSpan.beginEmbeddingSpan(
             handle,
             parent?.traceIdHi ?: 0L,
             parent?.traceIdLo ?: 0L,
@@ -159,7 +159,7 @@ object Terra {
         parent: SpanContext? = null
     ): TerraSpan {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginAgentSpan(
+        val spanPtr = TerraSpan.beginAgentSpan(
             handle,
             parent?.traceIdHi ?: 0L,
             parent?.traceIdLo ?: 0L,
@@ -178,7 +178,7 @@ object Terra {
         parent: SpanContext? = null
     ): TerraSpan {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginToolSpan(
+        val spanPtr = TerraSpan.beginToolSpan(
             handle,
             parent?.traceIdHi ?: 0L,
             parent?.traceIdLo ?: 0L,
@@ -197,7 +197,7 @@ object Terra {
         parent: SpanContext? = null
     ): TerraSpan {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginSafetySpan(
+        val spanPtr = TerraSpan.beginSafetySpan(
             handle,
             parent?.traceIdHi ?: 0L,
             parent?.traceIdLo ?: 0L,
@@ -216,7 +216,7 @@ object Terra {
         parent: SpanContext? = null
     ): StreamingScope {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginStreamingSpan(
+        val spanPtr = TerraSpan.beginStreamingSpan(
             handle,
             parent?.traceIdHi ?: 0L,
             parent?.traceIdLo ?: 0L,

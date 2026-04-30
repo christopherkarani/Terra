@@ -12,6 +12,7 @@ jobs:
     runs-on: macos-latest
     env:
       SWIFTLINT_VERSION: "0.57.1"
+      TERRA_SWIFTPM_TIMEOUT_SECONDS: "900"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,10 +34,16 @@ jobs:
       - name: SwiftLint
         run: swiftlint lint --reporter github-actions-logging
 
-      - name: SwiftPM tests
+      - name: Repository validation
         run: |
           set -euo pipefail
-          swift test
+          bash Scripts/validate_no_legacy_refs.sh
+          python3 Scripts/validate-doc-snippets.py
+          if [ -f Scripts/validate-telemetry-schema.py ]; then python3 Scripts/validate-telemetry-schema.py; fi
+          if [ -f Scripts/validate-bindings.py ]; then python3 Scripts/validate-bindings.py; fi
+
+      - name: SwiftPM tests
+        run: Scripts/validate-swiftpm.sh
 
       - name: API breaking changes (SDK targets, PRs only)
         if: github.event_name == 'pull_request'
@@ -54,3 +61,51 @@ jobs:
           swift package diagnose-api-breaking-changes TerraLlama
           swift package diagnose-api-breaking-changes TerraAccelerate
           swift package diagnose-api-breaking-changes TerraTracedMacro
+
+  native-bindings:
+    name: Zig, Rust, and Python bindings
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        run: |
+          set -euo pipefail
+          brew install zig
+
+      - name: Zig tests
+        run: |
+          set -euo pipefail
+          cd zig-core
+          zig build test --summary all
+
+      - name: Rust tests
+        run: |
+          set -euo pipefail
+          cd terra-rust
+          cargo test -- --test-threads=1
+
+      - name: Python syntax check
+        run: |
+          set -euo pipefail
+          python3 -m py_compile terra-python/terra.py
+
+  android:
+    name: Android bindings
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle tests and release assembly
+        run: |
+          set -euo pipefail
+          cd terra-android
+          ./gradlew test assembleRelease
