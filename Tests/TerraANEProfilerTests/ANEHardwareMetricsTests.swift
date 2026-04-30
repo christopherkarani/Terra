@@ -93,6 +93,49 @@ struct ANEHardwareProfilerTests {
   func resetSafe() {
     ANEHardwareProfiler.reset()
   }
+
+  // P0-7: App Store private-API gating must be safe-by-default.
+  //
+  // Without explicit opt-in (`ENABLE_ANE_PRIVATE_APIS`), the bridge MUST NOT
+  // reach the private `_ANEPerformanceStats` symbol. That keeps app archives
+  // safe regardless of build configuration: TestFlight builds spawned in
+  // DEBUG cannot accidentally ship the private string.
+  @Test("ANE bridge is App Store safe by default")
+  func testANEBridgeIsAppStoreSafeByDefault() {
+    #if ENABLE_ANE_PRIVATE_APIS
+    // Opt-in build: skip — covered by other tests.
+    #else
+    #expect(terra_ane_is_available() == false)
+    #expect(terra_ane_is_collecting() == false)
+    #expect(terra_ane_install_swizzling() == false)
+    #endif
+  }
+
+  // P0-7: install() must report failure on App Store builds.
+  @Test("ANEHardwareProfiler.install returns false in App Store default")
+  func testANEHardwareProfilerInstallReturnsFalseInAppStoreDefault() {
+    #if ENABLE_ANE_PRIVATE_APIS
+    // Opt-in build: install may succeed depending on device/OS — skip.
+    #else
+    ANEHardwareProfiler.reset()
+    let result = ANEHardwareProfiler.install()
+    #expect(result == false)
+    #expect(ANEHardwareProfiler.isInstalled == false)
+    #expect(ANEHardwareProfiler.mode == .unavailable)
+    #endif
+  }
+
+  // P1-10: reset() must clear isInstalled so shutdown can re-prove start state.
+  @Test("ANEHardwareProfiler reset clears install state")
+  func testANEHardwareProfilerResetClearsInstallState() {
+    ANEHardwareProfiler.reset()
+    #expect(ANEHardwareProfiler.isInstalled == false)
+
+    // Even if install succeeded, reset must restore false.
+    _ = ANEHardwareProfiler.install()
+    ANEHardwareProfiler.reset()
+    #expect(ANEHardwareProfiler.isInstalled == false)
+  }
 }
 
 @Suite("ANEProfilerSession", .serialized)
@@ -116,5 +159,34 @@ struct ANEProfilerSessionTests {
     }
     let metrics = ANEProfilerSession.stop()
     _ = metrics.telemetryAttributes
+  }
+
+  // P1-10: stopIfActive() must be a safe no-op when no session is active.
+  @Test("stopIfActive is safe when no session is active")
+  func stopIfActiveNoOp() {
+    // Ensure clean state.
+    _ = ANEProfilerSession.stop()
+    #expect(ANEProfilerSession.isActive == false)
+
+    // No-op call should not crash and should leave state unchanged.
+    ANEProfilerSession.stopIfActive()
+    #expect(ANEProfilerSession.isActive == false)
+  }
+
+  // P1-10: stopIfActive() must gracefully stop a live session.
+  @Test("stopIfActive gracefully stops a live session")
+  func stopIfActiveStopsLiveSession() {
+    _ = ANEProfilerSession.stop()
+
+    let result = ANEProfilerSession.startWithStatus()
+    if result == .startedCollecting {
+      #expect(ANEProfilerSession.isActive == true)
+      ANEProfilerSession.stopIfActive()
+      #expect(ANEProfilerSession.isActive == false)
+    } else {
+      // Cannot start collection on this machine — stopIfActive is still safe.
+      ANEProfilerSession.stopIfActive()
+      #expect(ANEProfilerSession.isActive == false)
+    }
   }
 }

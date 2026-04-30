@@ -245,6 +245,16 @@
       "description": "Prompt length captured when policy allows metadata or redacted content."
     },
     {
+      "key": "terra.service.input_length",
+      "type": "int",
+      "unit": "characters",
+      "owner_module": "Terra",
+      "stability": "experimental",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": [128],
+      "description": "Length of service input content captured for privacy-safe detail views."
+    },
+    {
       "key": "terra.prompt.hmac_sha256",
       "type": "string",
       "unit": "hmac-sha256",
@@ -1035,6 +1045,16 @@
       "description": "Core ML prediction duration emitted by instrumentation."
     },
     {
+      "key": "terra.coreml.prediction.batch_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraCoreML",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": [8],
+      "description": "Number of batch entries processed by a Core ML batch prediction. Emitted by the predictionsFromBatch swizzle path."
+    },
+    {
       "key": "terra.fm.generation.sampling_mode",
       "type": "string",
       "unit": "none",
@@ -1090,7 +1110,7 @@
       "unit": "none",
       "owner_module": "TerraFoundationModels",
       "stability": "experimental",
-      "viewer_behavior": "tool_detail",
+      "viewer_behavior": "privacy_sensitive_detail",
       "examples": ["search"],
       "description": "Foundation Models tool name for tool invocation events."
     },

@@ -58,6 +58,43 @@ final class TraceStoreTests: XCTestCase {
     XCTAssertEqual(traceSnapshot.traces[primarySpans[0].traceID]?.count, primarySpans.count)
   }
 
+  func testTraceStoreEvictionDoesNotOrphanCurrentTrace() async throws {
+    // Build three traces (A, B, C) with two spans each, total 6 spans.
+    // maxSpans = 4 forces eviction. Eviction must remove an entire trace's
+    // spans together rather than orphaning one half of a parent/child pair.
+    let traceA = try XCTUnwrap(TraceID(hex: "11111111111111111111111111111111"))
+    let traceB = try XCTUnwrap(TraceID(hex: "22222222222222222222222222222222"))
+    let traceC = try XCTUnwrap(TraceID(hex: "33333333333333333333333333333333"))
+
+    let aRoot = makeP113Span(traceID: traceA, spanIDHex: "a000000000000001", name: "a-root")
+    let aChild = makeP113Span(traceID: traceA, spanIDHex: "a000000000000002", name: "a-child")
+    let bRoot = makeP113Span(traceID: traceB, spanIDHex: "b000000000000001", name: "b-root")
+    let bChild = makeP113Span(traceID: traceB, spanIDHex: "b000000000000002", name: "b-child")
+    let cRoot = makeP113Span(traceID: traceC, spanIDHex: "c000000000000001", name: "c-root")
+    let cChild = makeP113Span(traceID: traceC, spanIDHex: "c000000000000002", name: "c-child")
+
+    let store = TraceStore(maxSpans: 4)
+    _ = await store.ingest([aRoot, aChild])
+    _ = await store.ingest([bRoot, bChild])
+    _ = await store.ingest([cRoot, cChild])
+
+    let snapshot = await store.snapshot(filter: nil)
+    XCTAssertLessThanOrEqual(snapshot.allSpans.count, 4)
+
+    // Each trace that survives must still have BOTH of its spans (no orphans).
+    for (traceID, spans) in snapshot.traces {
+      XCTAssertEqual(
+        spans.count,
+        2,
+        "Trace \(traceID.hex) was partially evicted (\(spans.count)/2)"
+      )
+    }
+
+    // The most-recent trace (C) must always be retained whole because eviction
+    // prefers older traces.
+    XCTAssertEqual(snapshot.traces[traceC]?.count, 2, "Most recent trace C must survive intact")
+  }
+
   func testIngestReplacesDuplicateSpanWithRicherRecord() async throws {
     let traceID = try XCTUnwrap(TraceID(hex: OTLPTestFixtures.traceIDHex))
     let spanID = try XCTUnwrap(SpanID(hex: OTLPTestFixtures.parentSpanIDHex))
@@ -105,6 +142,26 @@ final class TraceStoreTests: XCTestCase {
 }
 
 private extension TraceStoreTests {
+  func makeP113Span(
+    traceID: TraceID,
+    spanIDHex: String,
+    name: String
+  ) -> SpanRecord {
+    let spanID = SpanID(hex: spanIDHex) ?? SpanID(hex: "0000000000000001")!
+    return SpanRecord(
+      traceID: traceID,
+      spanID: spanID,
+      parentSpanID: nil,
+      name: name,
+      kind: .internal,
+      status: .ok,
+      startTimeUnixNano: 1,
+      endTimeUnixNano: 2,
+      attributes: Attributes([]),
+      resource: Resource(attributes: Attributes([]))
+    )
+  }
+
   func makeSpanRecord(
     traceID: TraceID,
     spanID: SpanID,

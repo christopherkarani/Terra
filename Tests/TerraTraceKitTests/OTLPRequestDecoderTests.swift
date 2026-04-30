@@ -230,6 +230,115 @@ final class OTLPRequestDecoderTests: XCTestCase {
     XCTAssertEqual(decodedRoot.links[0].droppedAttributesCount, 5)
   }
 
+  // MARK: - P1-4 Negative duration / end_time==0 with set status
+
+  func testDecodeRejectsSpanWithEndBeforeStart() throws {
+    var request = OTLPTestFixtures.makeExportRequest()
+    var scope = request.resourceSpans[0].scopeSpans[0]
+    var root = scope.spans[0]
+    root.startTimeUnixNano = 1_000_000_000
+    root.endTimeUnixNano = 999_999_999 // strictly less than start
+    scope.spans[0] = root
+    request.resourceSpans[0].scopeSpans[0] = scope
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(maxBodyBytes: body.count + 64, maxDecompressedBytes: body.count + 64)
+    )
+
+    XCTAssertThrowsError(
+      try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    ) { error in
+      guard let decoded = error as? OTLPRequestDecoderError else {
+        XCTFail("Expected OTLPRequestDecoderError, got \(error)")
+        return
+      }
+      if case .invalidTimestamp = decoded {
+        // expected
+      } else {
+        XCTFail("Expected .invalidTimestamp, got \(decoded)")
+      }
+    }
+  }
+
+  func testDecodeRejectsSpanWithEndZeroButStatusSet() throws {
+    var request = OTLPTestFixtures.makeExportRequest()
+    var scope = request.resourceSpans[0].scopeSpans[0]
+    var root = scope.spans[0]
+    root.endTimeUnixNano = 0
+    var statusMessage = Opentelemetry_Proto_Trace_V1_Status()
+    statusMessage.code = .ok
+    root.status = statusMessage
+    scope.spans[0] = root
+    request.resourceSpans[0].scopeSpans[0] = scope
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(maxBodyBytes: body.count + 64, maxDecompressedBytes: body.count + 64)
+    )
+
+    XCTAssertThrowsError(
+      try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    ) { error in
+      guard let decoded = error as? OTLPRequestDecoderError else {
+        XCTFail("Expected OTLPRequestDecoderError, got \(error)")
+        return
+      }
+      if case .invalidTimestamp = decoded {
+        // expected
+      } else {
+        XCTFail("Expected .invalidTimestamp, got \(decoded)")
+      }
+    }
+  }
+
+  func testDecodeAcceptsInFlightSpanWithEndZeroAndStatusUnset() throws {
+    // end=0, status=unset is the only legal "in-flight" combination.
+    var request = OTLPTestFixtures.makeExportRequest()
+    var scope = request.resourceSpans[0].scopeSpans[0]
+    var root = scope.spans[0]
+    root.endTimeUnixNano = 0
+    var statusMessage = Opentelemetry_Proto_Trace_V1_Status()
+    statusMessage.code = .unset
+    root.status = statusMessage
+    scope.spans = [root]
+    request.resourceSpans[0].scopeSpans[0] = scope
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(maxBodyBytes: body.count + 64, maxDecompressedBytes: body.count + 64)
+    )
+
+    let spans = try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    XCTAssertEqual(spans.count, 1)
+    XCTAssertEqual(spans[0].endTimeUnixNano, 0)
+    XCTAssertEqual(spans[0].status, .unset)
+  }
+
+  // MARK: - P1-6 Zero parent_span_id treated as no-parent
+
+  func testDecodeAcceptsZeroParentSpanIDAsNoParent() throws {
+    var request = OTLPTestFixtures.makeExportRequest()
+    var scope = request.resourceSpans[0].scopeSpans[0]
+    guard let childIndex = scope.spans.firstIndex(where: { $0.name == "child" }) else {
+      XCTFail("Expected child span in fixture")
+      return
+    }
+    var child = scope.spans[childIndex]
+    child.parentSpanID = Data(repeating: 0, count: 8)
+    scope.spans[childIndex] = child
+    request.resourceSpans[0].scopeSpans[0] = scope
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(maxBodyBytes: body.count + 64, maxDecompressedBytes: body.count + 64)
+    )
+
+    let spans = try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    let decodedChild = try XCTUnwrap(spans.first(where: { $0.name == "child" }))
+    XCTAssertNil(decodedChild.parentSpanID, "All-zero parent_span_id must be treated as no parent")
+  }
+
   #if canImport(Compression)
     func testDecodeRejectsGzipWithCorruptCRC() throws {
       let body = try OTLPTestFixtures.serializedRequest()

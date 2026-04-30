@@ -75,4 +75,20 @@ public enum ANEProfilerSession {
     active = false
     return ANEHardwareMetrics(from: terra_ane_get_metrics())
   }
+
+  /// Stops the current profiling session if active, otherwise no-op.
+  ///
+  /// Designed for shutdown paths that need to drain ANE state without caring
+  /// whether a caller previously started collection. Safe to call repeatedly.
+  public static func stopIfActive() {
+    lock.lock()
+    let wasActive = active
+    if wasActive { active = false }
+    lock.unlock()
+
+    if wasActive {
+      // Drop the metrics — the caller did not request them.
+      _ = terra_ane_get_metrics()
+    }
+  }
 }

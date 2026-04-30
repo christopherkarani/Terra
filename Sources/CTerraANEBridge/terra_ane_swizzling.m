@@ -1,7 +1,18 @@
 #import "include/terra_ane_bridge.h"
 #import <Foundation/Foundation.h>
 
-#if !defined(APP_STORE) && !defined(DISABLE_ANE_PRIVATE_APIS)
+// P0-7: Safe-by-default gating.
+//
+// The private-API code path is compiled ONLY when `ENABLE_ANE_PRIVATE_APIS`
+// is explicitly defined by the build system. Package.swift defines this for
+// the Debug configuration only, so App Store and Developer ID release builds
+// MUST NOT reference `_ANEPerformanceStats`, and the symbol never lands in
+// the shipped binary.
+//
+// To enable on a Developer ID notarized release build, pass:
+//   `-Xcc -DENABLE_ANE_PRIVATE_APIS`
+// or edit Package.swift's CTerraANEBridge cSettings stanza.
+#if defined(ENABLE_ANE_PRIVATE_APIS)
 
 #import <objc/runtime.h>
 
@@ -65,7 +76,8 @@ void terra_ane_reset_metrics(void) {
 }
 
 #else
-// APP_STORE build — all functions are stubs
+// App Store / Developer ID release default — all functions are stubs and
+// no private symbol references reach the linker.
 
 bool terra_ane_is_available(void) {
     return false;

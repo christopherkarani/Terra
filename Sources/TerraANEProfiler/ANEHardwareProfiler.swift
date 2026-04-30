@@ -64,9 +64,33 @@ public enum ANEHardwareProfiler {
   ///   is unavailable or the current bridge only supports availability probing.
   @discardableResult
   public static func install() -> Bool {
+    _registerShutdownObserverIfNeeded()
     guard terra_ane_install_swizzling() else { return false }
     state.install()
     return true
+  }
+
+  // P1-10: Register a one-shot Notification observer that drains ANE state
+  // when the umbrella posts the shutdown notification. We register lazily
+  // (on first install) because the umbrella does not depend on
+  // TerraANEProfiler — there is no eager bootstrap point.
+  private static let shutdownObserverLock = NSLock()
+  private nonisolated(unsafe) static var shutdownObserverRegistered = false
+
+  private static func _registerShutdownObserverIfNeeded() {
+    shutdownObserverLock.lock()
+    defer { shutdownObserverLock.unlock() }
+    guard !shutdownObserverRegistered else { return }
+    shutdownObserverRegistered = true
+
+    NotificationCenter.default.addObserver(
+      forName: Notification.Name("TerraDidRequestProfilerShutdown"),
+      object: nil,
+      queue: nil
+    ) { _ in
+      ANEHardwareProfiler.reset()
+      ANEProfilerSession.stopIfActive()
+    }
   }
 
   /// Captures current ANE hardware metrics.
@@ -77,10 +101,13 @@ public enum ANEHardwareProfiler {
     ANEHardwareMetrics(from: terra_ane_get_metrics())
   }
 
-  /// Resets all ANE metrics to zero.
+  /// Resets all ANE metrics to zero and clears the installed-hooks flag.
   ///
-  /// Call this before starting a new profiling session to clear historical data.
+  /// Call this before starting a new profiling session to clear historical
+  /// data, or as part of profiler shutdown to flip ``isInstalled`` back to
+  /// `false` so subsequent ``install()`` calls behave like a fresh start.
   public static func reset() {
     terra_ane_reset_metrics()
+    state.reset()
   }
 }

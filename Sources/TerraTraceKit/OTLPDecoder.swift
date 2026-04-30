@@ -17,6 +17,12 @@ public enum OTLPRequestDecoderError: Error, Sendable, Equatable, CustomStringCon
   case invalidProtobuf(String)
   case malformedData(reason: String)
   case decompressionFailed(reason: String)
+  /// A span carried impossible timestamps. Examples:
+  /// - `endTimeUnixNano > 0 && endTimeUnixNano < startTimeUnixNano` (negative duration).
+  /// - `endTimeUnixNano == 0 && status != .unset` (claimed completion without an end).
+  ///
+  /// `endTimeUnixNano == 0` is interpreted as "in-flight" only when `status == .unset`.
+  case invalidTimestamp(reason: String)
 
   public var description: String {
     switch self {
@@ -32,6 +38,8 @@ public enum OTLPRequestDecoderError: Error, Sendable, Equatable, CustomStringCon
       return "Malformed OTLP data: \(reason)"
     case let .decompressionFailed(reason):
       return "Decompression failed: \(reason)"
+    case let .invalidTimestamp(reason):
+      return "Invalid OTLP span timestamp: \(reason)"
     }
   }
 }
@@ -239,6 +247,11 @@ public struct OTLPRequestDecoder: Sendable {
     let parentSpanID: SpanID?
     if span.parentSpanID.isEmpty {
       parentSpanID = nil
+    } else if span.parentSpanID.count == 8, span.parentSpanID.allSatisfy({ $0 == 0 }) {
+      // Some OTel SDKs zero-fill the parent_span_id field instead of leaving
+      // it empty. Treat an all-zero non-empty parent_span_id as no-parent for
+      // exporter compatibility (P1-6).
+      parentSpanID = nil
     } else {
       guard let parsed = SpanID(data: span.parentSpanID) else {
         throw OTLPRequestDecoderError.malformedData(reason: "Invalid parent_span_id length")
@@ -249,6 +262,20 @@ public struct OTLPRequestDecoder: Sendable {
     let kind = mapSpanKind(span.kind.rawValue)
     let status = mapStatusCode(span.status.code.rawValue)
     let statusDescription = span.status.message.isEmpty ? nil : span.status.message
+
+    // P1-4: validate timestamp invariants.
+    // - endTimeUnixNano > 0 && endTimeUnixNano < startTimeUnixNano => negative duration.
+    // - endTimeUnixNano == 0 && status != .unset => completion claim without an end.
+    if span.endTimeUnixNano > 0, span.endTimeUnixNano < span.startTimeUnixNano {
+      throw OTLPRequestDecoderError.invalidTimestamp(
+        reason: "end_time_unix_nano precedes start_time_unix_nano"
+      )
+    }
+    if span.endTimeUnixNano == 0, status != .unset {
+      throw OTLPRequestDecoderError.invalidTimestamp(
+        reason: "end_time_unix_nano is zero but status is not unset"
+      )
+    }
 
     guard span.attributes.count <= limits.maxAttributesPerSpan else {
       throw OTLPRequestDecoderError.malformedData(

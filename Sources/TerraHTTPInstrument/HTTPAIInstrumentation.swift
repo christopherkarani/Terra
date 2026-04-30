@@ -3,6 +3,9 @@ import TerraCore
 import OpenTelemetryApi
 import OpenTelemetrySdk
 import URLSessionInstrumentation
+import os
+
+private let logger = Logger(subsystem: "io.opentelemetry.terra", category: "HTTPAIInstrumentation")
 
 public enum HTTPAIInstrumentation {
     public static let defaultAIHosts: Set<String> = [
@@ -15,6 +18,12 @@ public enum HTTPAIInstrumentation {
         "api.cohere.com",
         "api.fireworks.ai",
     ]
+
+    /// Cap response-body capture at 1 MiB. Anything larger is dropped before
+    /// JSON parsing to prevent memory blow-up on misconfigured streaming
+    /// endpoints. SSE streams under this cap retain full fidelity for token
+    /// extraction.
+    private static let maxResponseBodyBytes = 1_048_576
 
     public static let defaultOpenClawGatewayHosts: Set<String> = [
         "localhost",
@@ -57,6 +66,22 @@ public enum HTTPAIInstrumentation {
         let resolveConfiguration = configurationProvider ?? { initialConfiguration }
 
         return URLSessionInstrumentationConfiguration(
+            // P0-4 fix: opt the upstream `URLSessionInstrumentation` into
+            // payload buffering for the session-delegate code path. Without
+            // this, the delegate buffers nothing and `receivedResponse`
+            // arrives with `dataOrFile == nil`, so `gen_ai.usage.*` and
+            // `gen_ai.response.model` are never set. The completion-handler
+            // code path in upstream URLSessionInstrumentation already passes
+            // body bytes through `dataOrFile` regardless of this flag, so
+            // returning `true` is purely additive (no behavior change for
+            // completion-handler callers).
+            //
+            // Note: the upstream `shouldRecordPayload` closure receives a
+            // `URLSession`, not a `URLRequest`, so we cannot host-match here.
+            // Returning `true` is safe because `shouldInstrument` already
+            // gates *which* requests trigger any logging at all — payloads
+            // are only buffered for already-instrumented requests.
+            shouldRecordPayload: { _ in true },
             shouldInstrument: { request in
                 let config = resolveConfiguration()
                 guard !config.hosts.isEmpty || !config.openClawGatewayHosts.isEmpty else { return false }
@@ -108,28 +133,58 @@ public enum HTTPAIInstrumentation {
                     }
                 }
 
-                guard let body = request.httpBody,
-                      let parsed = AIRequestParser.parse(body: body) else { return }
+                // Bonus correctness fix: route through cached parser so
+                // `JSONSerialization.jsonObject` runs at most once per body
+                // across spanCustomization → injectCustomHeaders → createdRequest.
+                guard let parsed = parsedRequestBody(for: request) else { return }
 
                 applyRequestAttributes(parsed, to: spanBuilder)
             },
             injectCustomHeaders: { request, span in
-                let parsedRequest = request.httpBody.flatMap(AIRequestParser.parse(body:))
+                let parsedRequest = parsedRequestBody(for: request)
                 if parsedRequest?.stream == true {
                     HTTPAIStreamingObserver.shared.installIfNeeded()
                 }
                 HTTPAIStreamingObserver.shared.attachProperties(to: &request, span: span, parsedRequest: parsedRequest)
             },
             createdRequest: { request, span in
-                let parsedRequest = request.httpBody.flatMap(AIRequestParser.parse(body:))
+                let parsedRequest = parsedRequestBody(for: request)
                 if parsedRequest?.stream == true {
                     HTTPAIStreamingObserver.shared.installIfNeeded()
                 }
                 HTTPAIStreamingObserver.shared.register(request: request, span: span, parsedRequest: parsedRequest)
             },
             receivedResponse: { _, dataOrFile, span in
-                let data = dataOrFile as? Data
-                let parsed = data.flatMap(AIResponseParser.parse(data:))
+                let rawData = dataOrFile as? Data
+                let cappedData: Data?
+                if let rawData {
+                    if rawData.count > maxResponseBodyBytes {
+                        logger.debug(
+                            "Response body exceeds 1 MiB cap (\(rawData.count) bytes); skipping body parse"
+                        )
+                        cappedData = nil
+                    } else {
+                        cappedData = rawData
+                    }
+                } else {
+                    cappedData = nil
+                }
+
+                // P0-3 fix: SUMMARY-ONLY streaming summarization. When the
+                // buffered body belongs to a registered streaming span, derive
+                // SSE-line count + output tokens BEFORE finish so the resulting
+                // span carries both the raw response attributes and the
+                // streaming summary attributes (terra.stream.completed, TTFT,
+                // chunk_count, output tokens).
+                if let cappedData,
+                   let registeredRequest = HTTPAIStreamingObserver.shared.registeredRequest(forSpan: span) {
+                    HTTPAIStreamingObserver.shared.recordCompletedStreamBody(
+                        for: registeredRequest,
+                        data: cappedData
+                    )
+                }
+
+                let parsed = cappedData.flatMap(AIResponseParser.parse(data:))
 
                 if let model = parsed?.model {
                     span.setAttribute(key: Terra.Keys.GenAI.responseModel, value: model)
@@ -138,6 +193,15 @@ public enum HTTPAIInstrumentation {
                     span.setAttribute(key: Terra.Keys.GenAI.usageInputTokens, value: inputTokens)
                 }
                 if let outputTokens = parsed?.outputTokens {
+                    span.setAttribute(key: Terra.Keys.GenAI.usageOutputTokens, value: outputTokens)
+                }
+
+                // Defensive fallback: SSE bodies are not parseable as a single
+                // JSON object, so AIResponseParser returns nil for them. Run
+                // the streaming chunk parser to surface output tokens on
+                // streaming responses where the response model is unknown.
+                if parsed?.outputTokens == nil, let cappedData,
+                   let outputTokens = AIStreamingChunkParser.outputTokens(from: cappedData) {
                     span.setAttribute(key: Terra.Keys.GenAI.usageOutputTokens, value: outputTokens)
                 }
 
@@ -161,10 +225,12 @@ public enum HTTPAIInstrumentation {
             openClawGatewayHosts: openClawGatewayHosts,
             openClawMode: openClawMode
         )
-        let shouldCreate = instance == nil && (!hosts.isEmpty || !openClawGatewayHosts.isEmpty)
+        let existingInstance = instance
+        let hasInstrumentedHosts = !hosts.isEmpty || !openClawGatewayHosts.isEmpty
+        let shouldCreate = existingInstance == nil && hasInstrumentedHosts
         lock.unlock()
 
-        guard shouldCreate else { return }
+        guard hasInstrumentedHosts else { return }
         let config = makeConfiguration(
             hosts: hosts,
             openClawGatewayHosts: openClawGatewayHosts,
@@ -172,16 +238,27 @@ public enum HTTPAIInstrumentation {
             configurationProvider: { loadConfiguration() }
         )
 
+        if let existingInstance {
+            existingInstance.configuration = config
+            return
+        }
+
+        guard shouldCreate else { return }
         lock.lock()
         defer { lock.unlock() }
-        guard instance == nil else { return }
+        if let instance {
+            instance.configuration = config
+            return
+        }
         instance = URLSessionInstrumentation(configuration: config)
     }
 
     static func resetForTesting() {
         lock.lock()
         defer { lock.unlock() }
-        instance = nil
+        // URLSessionInstrumentation installs process-wide hooks that are not
+        // reliably uninstalled/reinstalled inside one test process. Keep the
+        // retained instance alive and reset only Terra-owned mutable state.
         HTTPAIStreamingObserver.shared.reset()
         configuration = Configuration(
             hosts: defaultAIHosts,
@@ -216,6 +293,42 @@ public enum HTTPAIInstrumentation {
         if isHostBoundaryMatch(host: host, target: "api.cohere.com") { return "cohere" }
         if isHostBoundaryMatch(host: host, target: "api.fireworks.ai") { return "fireworks" }
         return host
+    }
+
+    /// Boxed cache entry. `NSCache` requires reference values; we use an
+    /// optional payload so a nil parse result still occupies a slot and
+    /// doesn't trigger redundant re-parsing for malformed bodies.
+    private final class ParsedRequestBox {
+        let parsed: ParsedRequest?
+        init(_ parsed: ParsedRequest?) { self.parsed = parsed }
+    }
+
+    /// Bounded cache so we parse each request body at most once across
+    /// `spanCustomization` → `injectCustomHeaders` → `createdRequest` for
+    /// the same `URLRequest`. Keyed by the body bytes (NSData equality is
+    /// content-based), so identical bodies across retries share an entry.
+    private static let parsedRequestCache: NSCache<NSData, ParsedRequestBox> = {
+        let cache = NSCache<NSData, ParsedRequestBox>()
+        cache.countLimit = 64
+        return cache
+    }()
+
+    /// Returns the parsed AI request body, or nil if the request has no
+    /// inspectable body (streamed bodies are intentionally ignored). The
+    /// result is cached so repeated calls for the same body do at most one
+    /// `JSONSerialization.jsonObject` invocation.
+    static func parsedRequestBody(for request: URLRequest) -> ParsedRequest? {
+        guard request.httpBodyStream == nil else { return nil }
+        guard let body = request.httpBody else { return nil }
+
+        let key = body as NSData
+        if let cached = parsedRequestCache.object(forKey: key) {
+            return cached.parsed
+        }
+
+        let parsed = AIRequestParser.parse(body: body)
+        parsedRequestCache.setObject(ParsedRequestBox(parsed), forKey: key)
+        return parsed
     }
 
     private static func applyRequestAttributes(_ parsed: ParsedRequest, to spanBuilder: SpanBuilder) {

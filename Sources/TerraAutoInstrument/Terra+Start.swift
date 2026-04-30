@@ -551,6 +551,16 @@ extension Terra {
     OpenClawDiagnosticsExporter.configure(configuration: shouldEnableDiagnostics ? config.openClaw : .disabled)
   }
 
+  /// Notification name posted by ``_disableAutoInstrumentationsForShutdown`` so
+  /// opt-in profiler targets (TerraANEProfiler, TerraPowerProfiler) that are
+  /// not linked into the umbrella can drain their state without the umbrella
+  /// taking a hard dependency on them.
+  ///
+  /// Subscribers register via `NotificationCenter.default.addObserver` on
+  /// first use of their public install/start APIs, so an observer only exists
+  /// when the user has actually opted into that profiler.
+  public static let _shutdownNotification = Notification.Name("TerraDidRequestProfilerShutdown")
+
   static func _disableAutoInstrumentationsForShutdown() {
     CoreMLInstrumentation.install(.init(enabled: false, excludedModels: []))
     HTTPAIInstrumentation.install(hosts: [], openClawGatewayHosts: [], openClawMode: "disabled")
@@ -561,6 +571,11 @@ extension Terra {
     #if os(macOS)
     _ = EspressoLogCapture.stop()
     #endif
+    // P1-10: Ask opt-in profilers (ANE / Power) to reset/drain their state.
+    // The umbrella does not depend on TerraANEProfiler or TerraPowerProfiler,
+    // so we use NotificationCenter to fan out a shutdown signal that those
+    // targets observe lazily on first install/start.
+    NotificationCenter.default.post(name: _shutdownNotification, object: nil)
     _setLastProfilingDiagnostics(.none)
   }
 

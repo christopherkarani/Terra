@@ -25,6 +25,35 @@ final class StreamRendererTests: XCTestCase {
     XCTAssertEqual(output, expected)
   }
 
+  func testTelemetryPrivacyReadsSensitiveKeysFromSchemaViewerBehavior() throws {
+    // The schema-driven predicate selects only privacy_sensitive_detail keys —
+    // privacy_audit_detail entries are non-content state flags whose value is
+    // itself the audit signal and must survive redaction (see P0-1).
+    let schema = """
+    {
+      "registry": [
+        {
+          "key": "custom.secret",
+          "viewer_behavior": "privacy_sensitive_detail"
+        },
+        {
+          "key": "custom.audit",
+          "viewer_behavior": "privacy_audit_detail"
+        },
+        {
+          "key": "custom.public",
+          "viewer_behavior": "span_detail"
+        }
+      ]
+    }
+    """
+    let keys = try XCTUnwrap(TelemetryPrivacy.sensitiveKeys(fromSchemaData: Data(schema.utf8)))
+
+    XCTAssertTrue(keys.contains("custom.secret"))
+    XCTAssertFalse(keys.contains("custom.audit"))
+    XCTAssertFalse(keys.contains("custom.public"))
+  }
+
   func testStreamRendererRedactsSchemaSensitiveAttributes() throws {
     let traceID = try XCTUnwrap(TraceID(hex: OTLPTestFixtures.traceIDHex))
     let spanID = try XCTUnwrap(SpanID(hex: OTLPTestFixtures.parentSpanIDHex))

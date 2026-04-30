@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import TerraCore
 @testable import TerraHTTPInstrument
 
 @Suite("HTTPAIInstrumentation Host Matching", .serialized)
@@ -72,5 +73,44 @@ struct HTTPAIInstrumentationTests {
     #expect(config.shouldInstrument?(one) == false)
     #expect(config.shouldInstrument?(two) == true)
     #expect(config.nameSpan?(two) == "chat two.example")
+  }
+
+  @Test("Request parsing intentionally ignores httpBodyStream")
+  func requestParsingIgnoresBodyStreams() {
+    let body = #"{"model":"gpt-4o","messages":[{"role":"user","content":"secret"}]}"#
+      .data(using: .utf8)!
+    var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+    request.httpBodyStream = InputStream(data: body)
+
+    #expect(HTTPAIInstrumentation.parsedRequestBody(for: request) == nil)
+  }
+
+  // P0-4: shouldRecordPayload must be wired so URLSessionInstrumentation buffers
+  // response bodies. Without this, gen_ai.usage.* are never populated for
+  // session-delegate clients.
+  @Test("shouldRecordPayload is wired so URLSessionInstrumentation buffers payloads")
+  func shouldRecordPayloadIsWiredForAIHosts() {
+    let config = HTTPAIInstrumentation.makeConfiguration(
+      hosts: ["api.openai.com"],
+      openClawGatewayHosts: [],
+      openClawMode: "disabled"
+    )
+
+    // Presence of the closure is the primary contract — if nil, payloads
+    // are never recorded for session-delegate callers (the original bug).
+    #expect(config.shouldRecordPayload != nil)
+    #expect(config.shouldRecordPayload?(URLSession.shared) == true)
+  }
+
+  @Test("Streaming chunk parser surfaces output tokens from full SSE body")
+  func streamingChunkParserHandlesFullSSEBody() throws {
+    let body = """
+      data: {"choices":[{"delta":{"content":"hello"}}]}\n\n\
+      data: {"choices":[{"delta":{"content":" world"}}]}\n\n\
+      data: {"usage":{"completion_tokens":17}}\n\n\
+      data: [DONE]\n\n
+      """
+    let data = try #require(body.data(using: .utf8))
+    #expect(AIStreamingChunkParser.outputTokens(from: data) == 17)
   }
 }

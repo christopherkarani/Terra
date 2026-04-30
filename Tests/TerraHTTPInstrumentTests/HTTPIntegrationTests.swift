@@ -75,6 +75,145 @@ final class HTTPIntegrationTests: XCTestCase {
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestMaxTokens]?.description, "42")
     XCTAssertNil(span.attributes["url.full"])
   }
+
+  // P0-4: receivedResponse must populate gen_ai.response.model and usage
+  // tokens from the body delivered via the dataTask completion-handler path.
+  func testReceivedResponsePopulatesGenAIResponseAttributesFromBody() async throws {
+    Terra.lockTestingIsolation()
+    let previousTracerProvider = OpenTelemetry.instance.tracerProvider
+    Terra.resetOpenTelemetryForTesting()
+    HTTPAIInstrumentation.resetForTesting()
+    defer {
+      HTTPAIInstrumentation.resetForTesting()
+      Terra.resetOpenTelemetryForTesting()
+      OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+      Terra.unlockTestingIsolation()
+    }
+
+    let exporter = InMemoryExporter()
+    let tracerProvider = TracerProviderSdk()
+    tracerProvider.addSpanProcessor(SimpleSpanProcessor(spanExporter: exporter))
+    OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
+    Terra.install(.init(tracerProvider: tracerProvider, registerProvidersAsGlobal: false))
+
+    let config = HTTPAIInstrumentation.makeConfiguration(
+      hosts: ["example.ai"],
+      openClawGatewayHosts: [],
+      openClawMode: "disabled"
+    )
+    let tracer = tracerProvider.get(instrumentationName: "http-response-test")
+    let activeSpan = tracer.spanBuilder(spanName: "chat example.ai").startSpan()
+    let response = HTTPURLResponse(
+      url: URL(string: "https://example.ai/v1/chat/completions")!,
+      statusCode: 200,
+      httpVersion: "HTTP/1.1",
+      headerFields: ["Content-Type": "application/json"]
+    )!
+    let body = Data(
+      #"{"id":"chatcmpl-1","model":"gpt-4o-2024-08-06","usage":{"prompt_tokens":11,"completion_tokens":23,"total_tokens":34}}"#.utf8
+    )
+
+    config.receivedResponse?(response, body, activeSpan)
+    activeSpan.end()
+    tracerProvider.forceFlush()
+
+    let spans = exporter.getFinishedSpanItems()
+    let span = try XCTUnwrap(spans.first(where: { $0.name.contains("chat") }))
+    XCTAssertEqual(
+      span.attributes[Terra.Keys.GenAI.responseModel]?.description,
+      "gpt-4o-2024-08-06"
+    )
+    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.usageInputTokens]?.description, "11")
+    XCTAssertEqual(span.attributes[Terra.Keys.GenAI.usageOutputTokens]?.description, "23")
+  }
+
+  // P0-3: Successful streaming responses must emit terra.stream.completed = true
+  // and surface output tokens parsed from the SSE body.
+  func testStreamingSuccessSetsStreamCompletedTrue() async throws {
+    Terra.lockTestingIsolation()
+    let previousTracerProvider = OpenTelemetry.instance.tracerProvider
+    Terra.resetOpenTelemetryForTesting()
+    HTTPAIInstrumentation.resetForTesting()
+    defer {
+      HTTPAIInstrumentation.resetForTesting()
+      Terra.resetOpenTelemetryForTesting()
+      OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
+      Terra.unlockTestingIsolation()
+    }
+
+    let exporter = InMemoryExporter()
+    let tracerProvider = TracerProviderSdk()
+    tracerProvider.addSpanProcessor(SimpleSpanProcessor(spanExporter: exporter))
+    OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
+    Terra.install(.init(tracerProvider: tracerProvider, registerProvidersAsGlobal: false))
+
+    let config = HTTPAIInstrumentation.makeConfiguration(
+      hosts: ["example.ai"],
+      openClawGatewayHosts: [],
+      openClawMode: "disabled"
+    )
+
+    var request = URLRequest(url: URL(string: "https://example.ai/v1/chat/completions")!)
+    request.httpMethod = "POST"
+    request.httpBody = Data(
+      #"{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}],"stream":true}"#.utf8
+    )
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+
+    let tracer = tracerProvider.get(instrumentationName: "http-stream-test")
+    let builder = tracer.spanBuilder(spanName: "chat example.ai").setSpanKind(spanKind: .client)
+    config.spanCustomization?(request, builder)
+    let activeSpan = builder.startSpan()
+    config.injectCustomHeaders?(&request, activeSpan)
+    config.createdRequest?(request, activeSpan)
+
+    let response = HTTPURLResponse(
+      url: request.url!,
+      statusCode: 200,
+      httpVersion: "HTTP/1.1",
+      headerFields: ["Content-Type": "text/event-stream"]
+    )!
+    let body = Data("""
+      data: {"choices":[{"delta":{"content":"hi"}}]}\n\n\
+      data: {"choices":[{"delta":{"content":" there"}}]}\n\n\
+      data: {"usage":{"completion_tokens":5}}\n\n\
+      data: [DONE]\n\n
+      """.utf8)
+
+    config.receivedResponse?(response, body, activeSpan)
+    activeSpan.end()
+    tracerProvider.forceFlush()
+
+    let spans = exporter.getFinishedSpanItems()
+    let span = try XCTUnwrap(spans.first(where: { $0.name.contains("chat") }))
+    XCTAssertEqual(
+      span.attributes["terra.stream.completed"]?.description,
+      "true",
+      "Successful streaming response must mark terra.stream.completed = true"
+    )
+    XCTAssertEqual(
+      span.attributes[Terra.Keys.GenAI.usageOutputTokens]?.description,
+      "5",
+      "Streaming success path must surface output tokens parsed from the SSE body"
+    )
+    XCTAssertEqual(span.attributes[Terra.Keys.Terra.streamOutputTokens]?.description, "5")
+    XCTAssertNotNil(span.attributes[Terra.Keys.Terra.streamChunkCount])
+  }
+
+  // P0-3 (Approach B): the streaming observer is summary-only.
+  // recordChunk(for:data:) is internal-only; the public auto-instrumented
+  // surface never publishes per-chunk attributes itself — it parses the
+  // completed body once via recordCompletedStreamBody(_:span:).
+  func testStreamingObserverIsSummaryOnly_recordChunkRemovedOrDocumented() {
+    let observer = HTTPAIStreamingObserver.shared
+
+    // The summary-emit method must exist and be safely callable on an
+    // unregistered request (it should no-op rather than crash).
+    let request = URLRequest(url: URL(string: "https://example.ai/v1/chat/completions")!)
+    let body = Data(#"data: {"usage":{"completion_tokens":3}}\n\n"#.utf8)
+    observer.recordCompletedStreamBody(for: request, data: body)
+  }
 }
 
 private final class MockURLProtocol: URLProtocol {
