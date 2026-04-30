@@ -319,7 +319,7 @@ class SpanContext:
 
     @property
     def is_valid(self) -> bool:
-        return not (self.trace_id_hi == 0 and self.trace_id_lo == 0 and self.span_id == 0)
+        return (self.trace_id_hi != 0 or self.trace_id_lo != 0) and self.span_id != 0
 
     @property
     def trace_id_hex(self) -> str:
@@ -328,6 +328,12 @@ class SpanContext:
     @property
     def span_id_hex(self) -> str:
         return f"{self.span_id:016x}"
+
+
+def _valid_parent_context(parent: Optional[SpanContext]) -> Optional[CSpanContext]:
+    if parent is None or not parent.is_valid:
+        return None
+    return parent._to_c()
 
 
 @dataclass
@@ -351,7 +357,12 @@ class TerraConfig:
 class TerraSpan:
     """Wrapper around a Terra span handle. Use as a context manager or call end() manually."""
 
-    def __init__(self, lib: ctypes.CDLL, inst_handle: ctypes.c_void_p, span_handle: ctypes.c_void_p) -> None:
+    def __init__(
+        self,
+        lib: ctypes.CDLL,
+        inst_handle: ctypes.c_void_p,
+        span_handle: ctypes.c_void_p,
+    ) -> None:
         self._lib = lib
         self._inst = inst_handle
         self._handle = span_handle
@@ -435,6 +446,10 @@ class TerraSpan:
 class TerraStreamingSpan(TerraSpan):
     """Span wrapper with streaming-specific methods."""
 
+    def __init__(self, lib: ctypes.CDLL, inst_handle: ctypes.c_void_p, span_handle: ctypes.c_void_p) -> None:
+        super().__init__(lib, inst_handle, span_handle)
+        self._stream_finished = False
+
     def record_first_token(self) -> None:
         if not self.is_valid or self._ended:
             return
@@ -446,10 +461,10 @@ class TerraStreamingSpan(TerraSpan):
         self._lib.terra_streaming_record_token(self._handle)
 
     def finish_stream(self) -> None:
-        if not self.is_valid or self._ended:
+        if not self.is_valid or self._ended or self._stream_finished:
             return
         self._lib.terra_streaming_end(self._handle)
-        self._ended = True
+        self._stream_finished = True
 
 
 class Terra:
@@ -563,7 +578,8 @@ class Terra:
         parent: Optional[SpanContext] = None,
         include_content: bool = False,
     ) -> TerraSpan:
-        parent_c = ctypes.byref(parent._to_c()) if parent else None
+        parent_ctx = _valid_parent_context(parent)
+        parent_c = ctypes.byref(parent_ctx) if parent_ctx is not None else None
         h = self._lib.terra_begin_inference_span_ctx(
             self._handle, parent_c, model.encode(), include_content
         )
@@ -575,7 +591,8 @@ class Terra:
         parent: Optional[SpanContext] = None,
         include_content: bool = False,
     ) -> TerraSpan:
-        parent_c = ctypes.byref(parent._to_c()) if parent else None
+        parent_ctx = _valid_parent_context(parent)
+        parent_c = ctypes.byref(parent_ctx) if parent_ctx is not None else None
         h = self._lib.terra_begin_embedding_span_ctx(
             self._handle, parent_c, model.encode(), include_content
         )
@@ -587,7 +604,8 @@ class Terra:
         parent: Optional[SpanContext] = None,
         include_content: bool = False,
     ) -> TerraSpan:
-        parent_c = ctypes.byref(parent._to_c()) if parent else None
+        parent_ctx = _valid_parent_context(parent)
+        parent_c = ctypes.byref(parent_ctx) if parent_ctx is not None else None
         h = self._lib.terra_begin_agent_span_ctx(
             self._handle, parent_c, agent_name.encode(), include_content
         )
@@ -599,7 +617,8 @@ class Terra:
         parent: Optional[SpanContext] = None,
         include_content: bool = False,
     ) -> TerraSpan:
-        parent_c = ctypes.byref(parent._to_c()) if parent else None
+        parent_ctx = _valid_parent_context(parent)
+        parent_c = ctypes.byref(parent_ctx) if parent_ctx is not None else None
         h = self._lib.terra_begin_tool_span_ctx(
             self._handle, parent_c, tool_name.encode(), include_content
         )
@@ -611,7 +630,8 @@ class Terra:
         parent: Optional[SpanContext] = None,
         include_content: bool = False,
     ) -> TerraSpan:
-        parent_c = ctypes.byref(parent._to_c()) if parent else None
+        parent_ctx = _valid_parent_context(parent)
+        parent_c = ctypes.byref(parent_ctx) if parent_ctx is not None else None
         h = self._lib.terra_begin_safety_span_ctx(
             self._handle, parent_c, check_name.encode(), include_content
         )
@@ -623,7 +643,8 @@ class Terra:
         parent: Optional[SpanContext] = None,
         include_content: bool = False,
     ) -> TerraStreamingSpan:
-        parent_c = ctypes.byref(parent._to_c()) if parent else None
+        parent_ctx = _valid_parent_context(parent)
+        parent_c = ctypes.byref(parent_ctx) if parent_ctx is not None else None
         h = self._lib.terra_begin_streaming_span_ctx(
             self._handle, parent_c, model.encode(), include_content
         )

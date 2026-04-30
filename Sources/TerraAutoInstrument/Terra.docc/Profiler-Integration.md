@@ -6,7 +6,7 @@ Terra provides hardware-level profiling for Apple platforms to help optimize Gen
 
 | Profiler | Purpose | Platform |
 |----------|---------|----------|
-| ``TerraANEProfiler`` | Apple Neural Engine metrics | iOS 17+, macOS 14+ |
+| ``TerraANEProfiler`` | Development-only ANE probe/metrics | iOS 17+, macOS 14+ |
 | ``TerraMetalProfiler`` | Metal GPU utilization | All Apple platforms |
 | ``TerraSystemProfiler`` | Memory and thermal state | All Apple platforms |
 | ``TerraPowerProfiler`` | Battery and energy impact | macOS only |
@@ -15,7 +15,8 @@ Terra provides hardware-level profiling for Apple platforms to help optimize Gen
 
 ### TerraANEProfiler
 
-Apple Neural Engine profiling via private APIs. Captures hardware utilization, memory pressure, and compute time for ANE operations.
+Apple Neural Engine profiling via private APIs. This module is opt-in and is
+not installed by ``Terra/start(_:)`` from the umbrella target.
 
 > **Non-App-Store Notice:** ANE profiling uses private APIs and is excluded from App Store builds. Enable only for development/testing builds.
 
@@ -125,7 +126,9 @@ if thermal.state == .critical {
 
 ### TerraPowerProfiler
 
-Power and energy consumption profiling using `powermetrics` (macOS only).
+Power and energy consumption profiling using `powermetrics` (macOS only). This
+module is opt-in and is not installed by ``Terra/start(_:)`` from the umbrella
+target.
 
 #### Power Domains
 
@@ -193,10 +196,10 @@ var config = Terra.Configuration()
 // Standard profilers (App Store safe)
 config.profiling = [.memory, .thermal, .metal]
 
-// Extended profilers (development only)
-config.profiling = [.memory, .thermal, .power, .metal, .ane, .espresso]
+// Extended Terra umbrella profilers
+config.profiling = [.memory, .thermal, .metal, .espresso]
 
-// All profilers
+// Reserved flags for downstream wrappers or direct profiler setup
 config.profiling = .all
 ```
 
@@ -208,9 +211,9 @@ public struct Profiling: OptionSet {
     public static let memory   // TerraSystemProfiler
     public static let metal    // TerraMetalProfiler
     public static let thermal  // ThermalMonitor
-    public static let power    // PowerMetricsCollector
+    public static let power    // Reserved; install TerraPowerProfiler directly
     public static let espresso  // EspressoLogCapture (macOS)
-    public static let ane      // ANEHardwareProfiler
+    public static let ane      // Reserved; install TerraANEProfiler directly
 
     // Presets
     public static let standard: Profiling = [.memory, .thermal]
@@ -219,7 +222,10 @@ public struct Profiling: OptionSet {
 }
 ```
 
-> **Warning:** `.ane` and `.espresso` use private APIs and are excluded from App Store submissions.
+> **Warning:** `.ane` and `.power` are reserved in the umbrella configuration.
+> Import and run `TerraANEProfiler` or `TerraPowerProfiler` directly when those
+> opt-in modules are needed. `.ane` and `.espresso` use private or sensitive
+> system APIs and are excluded from App Store submissions.
 
 ## See Also
 

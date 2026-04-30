@@ -3,6 +3,10 @@ import Testing
 
 @Suite("Manual tracing", .serialized)
 struct TerraManualTracingTests {
+  private enum ExpectedWorkflowError: Error {
+    case failed
+  }
+
   @Test("Current span is nil outside tracing")
   func currentSpanIsNilOutsideTracing() {
     #expect(Terra.currentSpan() == nil)
@@ -127,6 +131,28 @@ struct TerraManualTracingTests {
     #expect(tool.parentSpanId?.hexString == root.spanId.hexString)
     #expect(inference.traceId.hexString == root.traceId.hexString)
     #expect(tool.traceId.hexString == root.traceId.hexString)
+  }
+
+  @Test("Workflow root records errors and rollups when body throws")
+  func workflowRootRecordsErrorsAndRollupsWhenBodyThrows() async throws {
+    let support = TerraTestSupport()
+    Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
+
+    await #expect(throws: ExpectedWorkflowError.self) {
+      try await Terra.workflow(name: "failing-planner", id: "issue-err") { workflow in
+        _ = await workflow.tool("search", callId: "call-err") { "docs" }
+        throw ExpectedWorkflowError.failed
+      }
+    }
+
+    let spans = support.finishedSpans()
+    let root = try #require(spans.first(where: { $0.name == "failing-planner" }))
+
+    #expect(root.status.isError)
+    #expect(root.events.contains(where: { $0.name == "exception" }))
+    #expect(root.attributes["terra.workflow.id"]?.description == "issue-err")
+    #expect(root.attributes["terra.workflow.tool_call_count"]?.description == "1")
+    #expect(root.attributes["terra.workflow.tools_used"]?.description == "search")
   }
 
   @Test("SpanHandle detached helper preserves parent trace context")

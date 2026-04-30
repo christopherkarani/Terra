@@ -72,6 +72,16 @@ struct ANEHardwareProfilerTests {
     }
   }
 
+  @Test("mode makes probe-only status explicit")
+  func modeClassifiesProbeOnlySeparatelyFromCollection() {
+    let mode = ANEHardwareProfiler.mode
+    #expect([.unavailable, .probeOnly, .collecting].contains(mode))
+    if mode == .probeOnly {
+      #expect(ANEHardwareProfiler.isAvailable == true)
+      #expect(ANEHardwareProfiler.isCollecting == false)
+    }
+  }
+
   @Test("captureMetrics returns valid struct")
   func captureMetrics() {
     let metrics = ANEHardwareProfiler.captureMetrics()
@@ -96,7 +106,14 @@ struct ANEProfilerSessionTests {
 
   @Test("start/stop lifecycle")
   func startStopLifecycle() {
-    ANEProfilerSession.start()
+    let result = ANEProfilerSession.startWithStatus()
+    if ANEHardwareProfiler.mode == .collecting {
+      #expect(result == .startedCollecting || result == .alreadyActive)
+      #expect(ANEProfilerSession.isActive == true)
+    } else {
+      #expect(result == .probeOnly || result == .unavailable)
+      #expect(ANEProfilerSession.isActive == false)
+    }
     let metrics = ANEProfilerSession.stop()
     _ = metrics.telemetryAttributes
   }

@@ -70,3 +70,30 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test:runner:1.5.2")
 }
+
+val requiredNativeAbis = listOf("arm64-v8a", "x86_64")
+
+tasks.register("verifyNativeLibs") {
+    group = "verification"
+    description = "Verifies release packaging has Terra JNI libraries for all supported ABIs."
+
+    doLast {
+        val missing = requiredNativeAbis
+            .map { abi -> file("jniLibs/$abi/libtera.so") }
+            .filterNot { it.isFile }
+
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "Missing native Terra JNI libraries: " +
+                    missing.joinToString { it.relativeTo(projectDir).path } +
+                    ". Run `bash ../Scripts/build-libtera-android.sh` before release assembly."
+            )
+        }
+    }
+}
+
+tasks.matching {
+    it.name == "preReleaseBuild" || it.name == "assembleRelease" || it.name == "bundleRelease"
+}.configureEach {
+    dependsOn("verifyNativeLibs")
+}

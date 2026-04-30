@@ -75,14 +75,11 @@ struct TerraAutoInstrumentExample {
 // let response = try await session.respond(to: "What is Swift?")
 // // ^ Automatically creates a gen_ai.inference span
 
-// Structured prompt example:
-// let plan = try await Terra.agentic(name: "planner", id: "example-1") { agent in
-//   try await agent.infer(
+// Structured workflow example:
+// let plan = try await Terra.workflow(name: "planner", id: "example-1") { span in
+//   try await span.infer(
 //     "gpt-4o-mini",
-//     messages: [
-//       .init(role: "system", content: "You are a precise coding assistant."),
-//       .init(role: "user", content: "Summarize the latest build output.")
-//     ]
+//     prompt: "Summarize the latest build output."
 //   ) { "done" }
 // }
 

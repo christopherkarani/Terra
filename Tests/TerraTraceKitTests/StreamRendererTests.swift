@@ -1,6 +1,6 @@
 import Foundation
-import XCTest
 @testable import TerraTraceKit
+import XCTest
 
 final class StreamRendererTests: XCTestCase {
   func testStreamRendererProducesDeterministicLines() throws {
@@ -9,7 +9,8 @@ final class StreamRendererTests: XCTestCase {
     let spans = try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
 
     guard let root = spans.first(where: { $0.name == "root" }),
-          let child = spans.first(where: { $0.name == "child" }) else {
+          let child = spans.first(where: { $0.name == "child" })
+    else {
       XCTFail("Missing expected spans")
       return
     }
@@ -23,6 +24,38 @@ final class StreamRendererTests: XCTestCase {
 
     XCTAssertEqual(output, expected)
   }
+
+  func testStreamRendererRedactsSchemaSensitiveAttributes() throws {
+    let traceID = try XCTUnwrap(TraceID(hex: OTLPTestFixtures.traceIDHex))
+    let spanID = try XCTUnwrap(SpanID(hex: OTLPTestFixtures.parentSpanIDHex))
+    let span = SpanRecord(
+      traceID: traceID,
+      spanID: spanID,
+      parentSpanID: nil,
+      name: "privacy",
+      kind: .internal,
+      status: .ok,
+      startTimeUnixNano: 10,
+      endTimeUnixNano: 20,
+      attributes: Attributes(dictionary: [
+        "gen_ai.prompt.content": .string("secret prompt"),
+        "gen_ai.request.model": .string("gpt-test"),
+        "terra.prompt.sha256": .string("prompt-digest"),
+        "terra.safety.subject.sha256": .string("safety-digest"),
+      ]),
+      resource: Resource(attributes: Attributes([]))
+    )
+
+    let output = StreamRenderer().render(spans: [span]).joined(separator: "\n")
+
+    XCTAssertFalse(output.contains("secret prompt"))
+    XCTAssertFalse(output.contains("prompt-digest"))
+    XCTAssertFalse(output.contains("safety-digest"))
+    XCTAssertTrue(output.contains("gen_ai.prompt.content=[redacted: privacy-sensitive]"))
+    XCTAssertTrue(output.contains("terra.prompt.sha256=[redacted: privacy-sensitive]"))
+    XCTAssertTrue(output.contains("terra.safety.subject.sha256=[redacted: privacy-sensitive]"))
+    XCTAssertTrue(output.contains("gen_ai.request.model=gpt-test"))
+  }
 }
 
 private extension StreamRendererTests {
@@ -33,7 +66,7 @@ private extension StreamRendererTests {
       .map { key, value in (key, String(describing: value)) }
       .sorted { $0.0 < $1.0 }
       .map { "\($0.0)=\($0.1)" }
-    
+
     var parts: [String] = [timestamp, duration, span.name, span.traceID.short, span.spanID.short]
     parts.append(contentsOf: attributes)
     return parts.joined(separator: " ")

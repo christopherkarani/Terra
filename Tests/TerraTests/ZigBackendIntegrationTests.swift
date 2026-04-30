@@ -2,6 +2,8 @@
 
 import Testing
 import CTerraBridge
+import Foundation
+import OpenTelemetryApi
 @testable import TerraCore
 
 @Suite("Zig Backend Integration", .serialized)
@@ -222,6 +224,41 @@ struct ZigBackendIntegrationTests {
         terra_streaming_end(span)
 
         terra_span_end(inst, span)
+    }
+
+    @Test func zigOTelSpanMutationAndEndAreSerialized() async {
+        let inst = terra_init(nil)!
+        defer { _ = terra_shutdown(inst) }
+
+        let rawSpan = terra_begin_inference_span_ctx(inst, nil, "serialized-span", false)!
+        let span = TerraZigOTelSpan(
+            zigSpan: rawSpan,
+            instance: inst,
+            name: "serialized-span",
+            kind: .client,
+            startTime: Date()
+        )
+
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<32 {
+                group.addTask {
+                    span.setAttribute(key: "terra.concurrent.\(index)", value: .int(index))
+                    span.addEvent(name: "terra.concurrent.event.\(index)")
+                    span.status = .ok
+                }
+            }
+            group.addTask {
+                span.end()
+            }
+        }
+
+        #expect(!span.isRecording)
+
+        // Late mutations after end should be ignored, not forwarded to Zig.
+        span.setAttribute(key: "terra.concurrent.after_end", value: .string("ignored"))
+        span.addEvent(name: "terra.concurrent.after_end")
+        span.status = .error(description: "ignored")
+        span.end()
     }
 
     @Test func runtimeConfigurationAfterDefaultInit() {

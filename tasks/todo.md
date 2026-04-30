@@ -1,5 +1,152 @@
 # Terra Codebase Audit And DX Review
 
+## Packaging And Native Validation Fixes - 2026-04-30
+
+- [x] Preserve current dirty worktree and avoid reverting unrelated edits
+- [x] Fix C++ and ROS2 default native library paths to match Zig's `libterra.a`
+- [x] Verify Rust packaging from Cargo's packaged crate copy with an explicit native library path
+- [x] Run Python unit tests and C++ CMake smoke tests from validate/CI
+- [x] Route quick SwiftPM manifest validation through the timeout wrapper
+- [x] Make the AutoInstrument example buildable through SwiftPM or archive it
+- [x] Run focused validation and record exact residual blockers
+
+### Plan
+
+1. Patch only packaging/native validation files in the requested ownership list.
+2. Prefer real package/build checks over metadata-only validation.
+3. Keep local validation resilient to this dirty checkout while preserving stricter behavior for clean CI.
+4. Document any external native-library requirement directly in the Rust crate.
+
+### Review
+
+- C++ and ROS2 CMake defaults now point at Zig's `zig-core/zig-out/lib/libterra.a` and fail with the correct override guidance.
+- C++ validation now configures/builds through CMake and runs the existing `string_view_smoke` source through CTest.
+- Rust packaging now verifies Cargo's packaged crate copy with `TERRA_LIB_DIR` pointing at the built Zig library; packaged builds without sibling `../zig-core` fail with an explicit native-library requirement.
+- `Scripts/validate.sh --quick` now runs Python unit tests, Zig tests, C++ CMake smoke, Rust tests, real `cargo package --allow-dirty`, timeout-wrapped SwiftPM manifest validation, and skips Android in quick mode.
+- CI now runs timeout-wrapped SwiftPM manifest validation, Python unit tests, C++ CMake smoke, and real Rust package verification.
+- `TerraAutoInstrumentExample` is now a SwiftPM executable product/target and is included in full SwiftPM executable validation.
+- Verification passed for script syntax, Python unit tests, Zig tests, C++ CMake/CTest, Rust tests, Rust packaged-crate verification, and integrated quick validation.
+- Residual blocker: targeted `swift build --scratch-path /tmp/terra-codex-packaging-swiftpm --product TerraAutoInstrumentExample` did not reach compilation before being stopped; it was still cloning `swift-protobuf`'s nested `Sources/protobuf/protobuf` submodule after roughly three minutes.
+
+## Audit Finding Remediation - 2026-04-30
+
+- [x] Preserve current dirty worktree and avoid reverting user-owned edits
+- [x] Fix native packaging/linking blockers across C++, ROS2, and Rust crate packaging
+- [x] Harden validation and CI for Python tests, C++ smoke tests, Rust package verification, SwiftPM quick timeouts, telemetry schema, binding contracts, and executable examples
+- [x] Fix TraceKit privacy redaction and live duplicate-span ingestion behavior
+- [x] Fix runtime lifecycle issues: OpenTelemetry partial install, profiler reset/reconfigure, stale metric instruments, workflow/agent error rollups
+- [x] Fix CoreML compute-plan timeout cancellation
+- [x] Clean stale docs/examples for profiler presets, legacy APIs, internal TerraLlama surface, and SpanContext binding semantics
+- [x] Run focused validation and record exact residual blockers
+
+### Plan
+
+1. Make packaging and validation failures reproducible and machine-checked before broad runtime work.
+2. Patch privacy/telemetry-contract defects next because they affect captured data and viewer trust.
+3. Patch lifecycle and integration correctness with focused tests where the existing seams allow it.
+4. Update docs/examples only where they are stale relative to current source behavior.
+5. Run practical local validation; record environmental blockers instead of forcing destructive cleanup.
+
+### Review
+
+- Preserved the dirty worktree and did not stage, commit, revert, or overwrite unrelated changes.
+- Native packaging and validation are now machine-checkable through `Scripts/validate.sh --quick`: Python unit tests, Zig tests, C++ CMake/CTest smoke, Rust tests, packaged-crate verification, binding conformance, telemetry schema, docs hygiene, and SwiftPM manifest validation all pass.
+- TraceKit now redacts schema-protected hash attributes, keeps richer duplicate live span records, and validates unknown protected keys and fixtures through the schema validator.
+- Runtime lifecycle handling now avoids partially installed OpenTelemetry state, installs privacy before providers, resets profiler install state on shutdown, clears metric instruments, records workflow/agent rollups on thrown bodies, and cancels timed-out CoreML compute-plan probes.
+- Streaming/profiler/model integration fixes are covered for MLX active-span metrics, FoundationModels chunk estimation, Power/Espresso pipe draining, CoreML timeout cancellation, profiler reset, and stale metric cleanup.
+- Cross-language `SpanContext` validity is now consistent across Zig, C++, Rust, Python, and Android: a valid context requires a non-zero trace ID and non-zero span ID, and invalid parent contexts are ignored before propagation.
+- Updated binding docs and validation so the stricter context contract is checked by source validators and binding smoke tests.
+- Verification passed:
+  - `swift build`
+  - `swift test --filter 'TerraSystemProfilerTests|TerraCoreMLTests|TerraTests.TerraManualTracingTests|TerraTests.TerraAgentContextTests|TerraTests.TerraMetricsTests|TerraAutoInstrumentTests.TerraLifecycleAPITests|TerraAutoInstrumentTests.TerraLifecycleErrorMappingTests|TraceStoreTests|StreamRendererTests|SpanDetailViewModelTests|TelemetrySchemaValidatorTests|TerraMLXTests'`
+  - `zig build test --summary all`
+  - `python3 -m unittest discover -s terra-python -p 'test*.py'`
+  - `TERRA_LIB_DIR=/Users/chriskarani/CodingProjects/RYNO/Terra/zig-core/zig-out/lib cargo test --manifest-path terra-rust/Cargo.toml -- --test-threads=1`
+  - `cmake -S terra-cpp -B /tmp/terra-codex-cpp-context-smoke -DTERRA_LIB_PATH=/Users/chriskarani/CodingProjects/RYNO/Terra/zig-core/zig-out/lib/libterra.a`, `cmake --build /tmp/terra-codex-cpp-context-smoke --target string_view_smoke`, and `ctest --test-dir /tmp/terra-codex-cpp-context-smoke --output-on-failure`
+  - `python3 Scripts/validate-telemetry-schema.py`
+  - `python3 Scripts/validate-bindings.py` and `python3 Scripts/validate-bindings.py --matrix`
+  - `TERRA_SWIFTPM_TIMEOUT_SECONDS=60 Scripts/validate.sh --quick`
+  - `git diff --check`
+- Residual local blocker: `cd terra-android && ./gradlew test --no-daemon` cannot run on this machine because no Java runtime is installed. Quick validation intentionally skips Android Gradle checks.
+
+## Profiler/API Honesty And Model Integration Fixes - 2026-04-30
+
+- [x] Preserve existing dirty task-note change and narrow this pass to owned source/test paths only
+- [x] Add focused regression tests for profiler startup diagnostics, CoreML redaction/budgeting, power status semantics, ANE probe-only reporting, Llama surface expectations, FoundationModels unavailable stubs, MLX semantics, and TerraAccelerate hooks
+- [x] Make `.power` and `.ane` profiler flags observable as installed, unavailable, or probe-only without silently promising collected data
+- [x] Redact/cap CoreML input summaries and compute-plan operation detail, and separate estimated GPU route timing from measured Metal timing
+- [x] Improve Power profiler status reporting for launch, permission, and no-sample outcomes
+- [x] Make ANE probe-only behavior explicit in source and tests
+- [x] Decide and encode the Llama API surface expectation
+- [x] Align FoundationModels unavailable stubs with the real source surface
+- [x] Add TerraAccelerate focused tests/schema-adjacent hooks where practical without editing docs/schema
+- [x] Run focused verification and record exact blockers
+
+### Plan
+
+1. Re-read only the owned modules and tests listed in the request, plus `Package.swift` for product/test-target truth.
+2. Add narrow failing tests first where test seams exist; if SwiftPM cannot run, keep them compile-oriented and verify with source inspection plus targeted commands.
+3. Implement compatibility-preserving source changes inside the owned paths only.
+4. Run focused SwiftPM filters and module-specific tests; if dependency resolution stalls, record the exact blocker.
+5. Update this section with review notes before final response.
+
+### Review
+
+- Implemented profiler/API honesty and model-integration fixes in the requested owned source/test areas.
+- `Terra.Configuration.Profiling.extended` and `.all` no longer include `.power` or `.ane`; explicit requests now show `requiresOptInTarget` through `Terra.profilingDiagnostics(for:)` / `lastProfilingDiagnostics`.
+- CoreML session input summaries now hash feature names and cap serialized payload size; compute-plan operation detail now hashes identifiers, caps serialized operations, and reports truncation/count.
+- CoreML auto-instrumentation now emits estimated CoreML GPU route timing under `terra.coreml.prediction.estimated_*` keys instead of measured `metal.compute_time_ms`.
+- Power summaries now expose collection status and diagnostics for not-started, permission-denied, no-sample, failed, and completed outcomes.
+- ANE profiler source/tests now distinguish unavailable, probe-only, and collecting modes; sessions only become active when collection hooks exist.
+- Llama remains an internal package target by explicit source/test expectation; MLX adds a public streaming wrapper that finalizes Terra stream metrics.
+- FoundationModels unavailable stub now exposes top-level `TerraTracedSession` plus `Terra.TracedSession` alias matching the real surface.
+- Added `TerraAccelerate.Keys` and a focused test target.
+- Verification:
+  - `swift package --scratch-path /tmp/terra-codex-profiler-api-swiftpm dump-package` passed.
+  - `git diff --check` passed for the files touched by this pass.
+  - Focused `swift test --scratch-path /tmp/terra-codex-profiler-api-swiftpm --filter ...` and `swift build --scratch-path /tmp/terra-codex-profiler-api-swiftpm --skip-update --target TerraAccelerate` both stalled while creating `swift-protobuf`'s nested `Sources/protobuf/protobuf` checkout; only the Codex-started SwiftPM processes were stopped.
+
+## Fix All Identified Issues - 2026-04-30
+
+- [x] Record current clean baseline and implementation plan
+- [x] Fix P0 native binding string ownership / lifetime contract
+- [x] Fix P0 HTTP auto-instrumentation raw prompt privacy leak
+- [x] Fix TraceKit live OTLP event/link/status preservation and privacy-aware rendering
+- [x] Fix schema, fixture, and binding conformance drift checks
+- [x] Fix CI/release validation gaps: API break command, Android native build, DocC links, Rust package metadata, executable builds, vendor header parity
+- [x] Fix language binding issues: Python streaming end, C++ string_view bounds, default drift, runtime export lifecycle where feasible
+- [x] Fix profiler/API honesty gaps: power/ANE status, measured vs estimated Metal/CoreML semantics, Llama public-surface decision, FoundationModels stub drift
+- [x] Add focused tests for every behavior change before or with implementation
+- [x] Run available verification and document exact blockers
+
+### Implementation Plan
+
+1. Start with privacy and native ABI defects because they can corrupt or leak telemetry.
+2. Harden TraceKit and telemetry contracts next so fixes become machine-checkable.
+3. Patch CI, docs, package, and release validation so regressions are caught.
+4. Finish profiler/API honesty and public surface cleanup with narrow compatibility-preserving changes where possible.
+5. Treat any impossible full-scope item as a documented blocker with exact source evidence and a focused follow-up test.
+
+### Baseline
+
+- `git status --short --branch` reports `## swiftformat`; there are no current dirty tracked files at the start of this implementation pass.
+- Prior audit verification showed Zig and Rust tests pass locally, Java is unavailable for Android, and SwiftPM can still time out during `swift-protobuf` nested protobuf checkout before Terra compilation.
+
+### Review
+
+- Fixed the native string lifetime contract by making Zig span/record storage own copied string data, with C ABI lifetime tests and binding smoke coverage.
+- Fixed HTTP prompt privacy by replacing raw auto-instrumented prompt export with Terra redacted prompt attributes; streaming errors now preserve metrics and record sanitized error type.
+- Extended TraceKit live OTLP records to preserve events, links, status descriptions, dropped counts, and privacy-aware renderer/detail output.
+- Hardened telemetry/schema/binding validation for event-name drift, fixture timestamps, bool-as-number typed values, and source/vendor header parity.
+- Updated CI/docs/release validation for API break checks, Android native library checks, DocC/example linting, Rust package metadata, executable builds, and C++/ROS2 clean-checkout prerequisites.
+- Fixed Python streaming span finalization, C++ `string_view` handling, Rust defaults, vendor header parity, profiler honesty/status APIs, CoreML redaction/budgeting, FoundationModels unavailable stubs, MLX streaming helpers, Llama internal-surface expectations, and TerraAccelerate tests.
+- Verification completed for Python syntax/tests, docs/schema/binding validators, Zig tests, Rust tests/package listing, C++ smoke test, shell/YAML syntax, header parity, and manifest parsing.
+- SwiftPM compile/test validation remains blocked before Terra compilation by the recurring `swift-protobuf` nested protobuf checkout timeout; Android Gradle remains blocked locally by missing Java.
+
+## Archived Historical Notes
+
+The sections below are retained for history only. Use the dated 2026-04-30 sections above for current baseline, completed fixes, and verification status.
+
 - [x] Record baseline worktree state and preserve existing uncommitted user changes
 - [x] Check project memory availability and document the limitation if unavailable
 - [x] Verify SwiftPM/package bootstrap and capture any dependency or binary-target blockers

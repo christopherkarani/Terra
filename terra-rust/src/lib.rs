@@ -39,6 +39,21 @@ pub struct SpanContext {
 }
 
 impl SpanContext {
+    /// Returns true when both the trace ID and span ID are populated.
+    pub fn is_valid(&self) -> bool {
+        (self.trace_id_hi != 0 || self.trace_id_lo != 0) && self.span_id != 0
+    }
+
+    /// Format the trace ID as a 32-character lower-case hex string.
+    pub fn trace_id_hex(&self) -> String {
+        format!("{:016x}{:016x}", self.trace_id_hi, self.trace_id_lo)
+    }
+
+    /// Format the span ID as a 16-character lower-case hex string.
+    pub fn span_id_hex(&self) -> String {
+        format!("{:016x}", self.span_id)
+    }
+
     fn to_raw(&self) -> ffi::terra_span_context_t {
         ffi::terra_span_context_t {
             trace_id_hi: self.trace_id_hi,
@@ -129,7 +144,7 @@ impl TerraConfig {
             batch_size: 0,
             flush_interval_ms: 0,
             content_policy: ContentPolicy::Never,
-            redaction_strategy: RedactionStrategy::Drop,
+            redaction_strategy: RedactionStrategy::HmacSha256,
             emit_legacy_sha256: false,
         }
     }
@@ -263,7 +278,8 @@ impl Default for TerraConfig {
 /// A running Terra observability instance.
 ///
 /// Owns the underlying Zig core handle and shuts it down on drop.
-/// Not `Send` or `Sync` — the Zig core manages its own thread safety.
+/// The handle is `Send + Sync`; live spans borrow the instance and should be
+/// ended explicitly before sharing ownership-sensitive work across threads.
 pub struct Terra {
     handle: *mut ffi::terra_t,
 }
@@ -371,7 +387,7 @@ impl Terra {
         include_content: bool,
     ) -> Option<TerraSpan<'_>> {
         let c_model = CString::new(model).ok()?;
-        let parent_raw = parent.map(SpanContext::to_raw);
+        let parent_raw = parent.filter(|ctx| ctx.is_valid()).map(SpanContext::to_raw);
         let parent_ptr = parent_raw
             .as_ref()
             .map_or(ptr::null(), |p| p as *const _);
@@ -394,7 +410,7 @@ impl Terra {
         include_content: bool,
     ) -> Option<TerraSpan<'_>> {
         let c_model = CString::new(model).ok()?;
-        let parent_raw = parent.map(SpanContext::to_raw);
+        let parent_raw = parent.filter(|ctx| ctx.is_valid()).map(SpanContext::to_raw);
         let parent_ptr = parent_raw
             .as_ref()
             .map_or(ptr::null(), |p| p as *const _);
@@ -417,7 +433,7 @@ impl Terra {
         include_content: bool,
     ) -> Option<TerraSpan<'_>> {
         let c_name = CString::new(name).ok()?;
-        let parent_raw = parent.map(SpanContext::to_raw);
+        let parent_raw = parent.filter(|ctx| ctx.is_valid()).map(SpanContext::to_raw);
         let parent_ptr = parent_raw
             .as_ref()
             .map_or(ptr::null(), |p| p as *const _);
@@ -440,7 +456,7 @@ impl Terra {
         include_content: bool,
     ) -> Option<TerraSpan<'_>> {
         let c_name = CString::new(name).ok()?;
-        let parent_raw = parent.map(SpanContext::to_raw);
+        let parent_raw = parent.filter(|ctx| ctx.is_valid()).map(SpanContext::to_raw);
         let parent_ptr = parent_raw
             .as_ref()
             .map_or(ptr::null(), |p| p as *const _);
@@ -463,7 +479,7 @@ impl Terra {
         include_content: bool,
     ) -> Option<TerraSpan<'_>> {
         let c_name = CString::new(name).ok()?;
-        let parent_raw = parent.map(SpanContext::to_raw);
+        let parent_raw = parent.filter(|ctx| ctx.is_valid()).map(SpanContext::to_raw);
         let parent_ptr = parent_raw
             .as_ref()
             .map_or(ptr::null(), |p| p as *const _);
@@ -486,7 +502,7 @@ impl Terra {
         include_content: bool,
     ) -> Option<TerraSpan<'_>> {
         let c_model = CString::new(model).ok()?;
-        let parent_raw = parent.map(SpanContext::to_raw);
+        let parent_raw = parent.filter(|ctx| ctx.is_valid()).map(SpanContext::to_raw);
         let parent_ptr = parent_raw
             .as_ref()
             .map_or(ptr::null(), |p| p as *const _);
@@ -742,6 +758,54 @@ mod tests {
         let raw = ctx.to_raw();
         let back = SpanContext::from_raw(raw);
         assert_eq!(ctx, back);
+    }
+
+    #[test]
+    fn span_context_validity_requires_trace_id_and_span_id() {
+        assert!(
+            !(SpanContext {
+                trace_id_hi: 0,
+                trace_id_lo: 0,
+                span_id: 0,
+            }
+            .is_valid())
+        );
+        assert!(
+            !(SpanContext {
+                trace_id_hi: 1,
+                trace_id_lo: 0,
+                span_id: 0,
+            }
+            .is_valid())
+        );
+        assert!(
+            !(SpanContext {
+                trace_id_hi: 0,
+                trace_id_lo: 0,
+                span_id: 1,
+            }
+            .is_valid())
+        );
+        assert!(
+            (SpanContext {
+                trace_id_hi: 0,
+                trace_id_lo: 1,
+                span_id: 1,
+            }
+            .is_valid())
+        );
+    }
+
+    #[test]
+    fn span_context_hex_formatting() {
+        let ctx = SpanContext {
+            trace_id_hi: 0x0123_4567_89AB_CDEF,
+            trace_id_lo: 0x0FED_CBA9_8765_4321,
+            span_id: 0x0011_2233_4455_6677,
+        };
+
+        assert_eq!(ctx.trace_id_hex(), "0123456789abcdef0fedcba987654321");
+        assert_eq!(ctx.span_id_hex(), "0011223344556677");
     }
 
     #[test]

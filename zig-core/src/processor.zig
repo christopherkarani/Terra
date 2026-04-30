@@ -61,7 +61,7 @@ pub const Processor = struct {
         var added: u32 = 0;
         var i: u32 = 0;
         while (i < count and self.batch_count < self.config.batch_size) : (i += 1) {
-            self.batch_buf[self.batch_count] = spans[i];
+            self.batch_buf[self.batch_count].copyFrom(&spans[i]);
             self.batch_count += 1;
             added += 1;
         }
@@ -111,7 +111,7 @@ pub const Processor = struct {
             var rec = &self.batch_buf[i];
             // Inject session.id if set
             if (self.config.session_id) |sid| {
-                _ = rec.attributes.append(.{
+                _ = rec.appendAttributeOwned(.{
                     .key = constants.keys.session_key.id,
                     .value = .{ .string = sid },
                 });

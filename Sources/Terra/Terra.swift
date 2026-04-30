@@ -13,8 +13,22 @@ public enum Terra {
     Runtime.shared.install(installation)
   }
 
-  package static func shouldCaptureAutoInstrumentedPromptContent() -> Bool {
-    Runtime.shared.privacy.shouldCapture(includeContent: false)
+  package static func autoInstrumentedPromptAttributes(
+    for prompt: String
+  ) -> [String: AttributeValue] {
+    let privacy = Runtime.shared.privacy
+    guard privacy.shouldCapture(includeContent: false) else { return [:] }
+    return redactedStringAttributes(
+      original: prompt,
+      lengthKey: Keys.Terra.promptLength,
+      hmacKey: Keys.Terra.promptHMACSHA256,
+      legacySHA256Key: Keys.Terra.promptSHA256,
+      using: privacy
+    )
+  }
+
+  package static func sanitizedErrorType(_ error: any Error) -> String {
+    String(reflecting: Swift.type(of: error))
   }
 
   // MARK: - Public API (Phase 2)

@@ -2,6 +2,8 @@ import Foundation
 import Testing
 @testable import Terra
 @testable import TerraCore
+@testable import TerraMetalProfiler
+@testable import TerraSystemProfiler
 
 @Suite("Terra lifecycle public API", .serialized)
 final class TerraLifecycleAPITests {
@@ -34,6 +36,28 @@ final class TerraLifecycleAPITests {
 
     #expect(Terra.lifecycleState == .stopped)
     #expect(!Terra.isRunning)
+  }
+
+  @Test("shutdown resets profiler install state")
+  func shutdownResetsProfilerInstallState() async throws {
+    Terra.resetOpenTelemetryForTesting()
+    await Terra.reset()
+
+    var config = Terra.Configuration(preset: .quickstart)
+    config.features = []
+    config.profiling = [.memory, .metal, .thermal]
+    try await Terra.start(config)
+
+    #expect(TerraSystemProfiler.isInstalled)
+    #expect(TerraMetalProfiler.isInstalled)
+    #expect(ThermalMonitor.isInstalled)
+
+    await Terra.shutdown()
+
+    #expect(!TerraSystemProfiler.isInstalled)
+    #expect(!TerraMetalProfiler.isInstalled)
+    #expect(!ThermalMonitor.isInstalled)
+    #expect(Terra.lastProfilingDiagnostics == .none)
   }
 
   @Test("reset is idempotent and leaves Terra uninitialized")

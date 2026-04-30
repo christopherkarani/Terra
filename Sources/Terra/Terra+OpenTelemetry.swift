@@ -216,6 +216,23 @@ extension Terra {
   private static var installedLogProcessor: (any LogRecordProcessor)?
   private static var ownsInstalledTracerProvider: Bool = false
 
+  private struct PreparedTracingInstallation {
+    let tracerProvider: TracerProviderSdk
+    let ownsProvider: Bool
+    let install: () -> Void
+  }
+
+  private struct PreparedMetricsInstallation {
+    let meterProvider: MeterProviderSdk
+    let install: () -> Void
+  }
+
+  private struct PreparedLogsInstallation {
+    let loggerProvider: LoggerProviderSdk
+    let logProcessor: any LogRecordProcessor
+    let install: () -> Void
+  }
+
   package static var _installedOpenTelemetryConfiguration: OpenTelemetryConfiguration? {
     openTelemetryInstallLock.lock()
     let value = installedOpenTelemetryConfiguration
@@ -250,25 +267,32 @@ extension Terra {
       throw InstallOpenTelemetryError.alreadyInstalled
     }
 
-    installedOpenTelemetryConfiguration = configuration
-
     do {
       Runtime.shared.markStarting()
       if let persistence = configuration.persistence {
         try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
       }
 
-      let (tracerProviderSdk, ownsTracer) = try installTracing(configuration: configuration)
+      let preparedTracing = try prepareTracingInstallation(configuration: configuration)
+      let preparedLogs = configuration.enableLogs
+        ? try prepareLogsInstallation(configuration: configuration)
+        : nil
+      let preparedMetrics = configuration.enableMetrics
+        ? try prepareMetricsInstallation(configuration: configuration)
+        : nil
+
+      preparedTracing.install()
+      let tracerProviderSdk = preparedTracing.tracerProvider
       installedTracerProvider = tracerProviderSdk
-      ownsInstalledTracerProvider = ownsTracer
+      ownsInstalledTracerProvider = preparedTracing.ownsProvider
 
       if configuration.enableSignposts {
         installSignposts(tracerProviderSdk: tracerProviderSdk)
       }
 
-      if configuration.enableLogs {
-        let (_, logProcessor) = try installLogs(configuration: configuration)
-        installedLogProcessor = logProcessor
+      if let preparedLogs {
+        preparedLogs.install()
+        installedLogProcessor = preparedLogs.logProcessor
       }
 
       if configuration.enableSessions {
@@ -276,11 +300,14 @@ extension Terra {
         SessionEventInstrumentation.install()
       }
 
-      if configuration.enableMetrics {
-        let meterProvider = try installMetrics(configuration: configuration)
+      if let preparedMetrics {
+        preparedMetrics.install()
+        let meterProvider = preparedMetrics.meterProvider
         installedMeterProvider = meterProvider
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
+
+      installedOpenTelemetryConfiguration = configuration
     } catch {
       installedOpenTelemetryConfiguration = nil
       installedTracerProvider = nil
@@ -307,7 +334,7 @@ extension Terra {
     return Resource(attributes: attributes)
   }
 
-  private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> (TracerProviderSdk, Bool) {
+  private static func prepareTracingInstallation(configuration: OpenTelemetryConfiguration) throws -> PreparedTracingInstallation {
     func makeExporter() throws -> any SpanExporter {
       let networkExporter = SimulatorAwareSpanExporter(
         spanExporter: OtlpHttpTraceExporter(
@@ -348,15 +375,16 @@ extension Terra {
     switch configuration.tracerProviderStrategy {
     case .augmentExisting:
       if let existing = OpenTelemetry.instance.tracerProvider as? TracerProviderSdk {
-        existing.updateActiveResource(existing.getActiveResource().merging(other: resource))
-        if let sampler {
-          existing.updateActiveSampler(sampler)
+        return PreparedTracingInstallation(tracerProvider: existing, ownsProvider: false) {
+          existing.updateActiveResource(existing.getActiveResource().merging(other: resource))
+          if let sampler {
+            existing.updateActiveSampler(sampler)
+          }
+          existing.addSpanProcessor(TerraSpanEnrichmentProcessor())
+          if let spanProcessor {
+            existing.addSpanProcessor(spanProcessor)
+          }
         }
-        existing.addSpanProcessor(TerraSpanEnrichmentProcessor())
-        if let spanProcessor {
-          existing.addSpanProcessor(spanProcessor)
-        }
-        return (existing, false)
       }
       fallthrough
     case .registerNew:
@@ -370,8 +398,9 @@ extension Terra {
         builder = builder.add(spanProcessor: spanProcessor)
       }
       let provider = builder.build()
-      OpenTelemetry.registerTracerProvider(tracerProvider: provider)
-      return (provider, true)
+      return PreparedTracingInstallation(tracerProvider: provider, ownsProvider: true) {
+        OpenTelemetry.registerTracerProvider(tracerProvider: provider)
+      }
     }
   }
 
@@ -391,7 +420,7 @@ extension Terra {
 
   // MARK: - Metrics
 
-  private static func installMetrics(configuration: OpenTelemetryConfiguration) throws -> MeterProviderSdk {
+  private static func prepareMetricsInstallation(configuration: OpenTelemetryConfiguration) throws -> PreparedMetricsInstallation {
     func makeExporter() throws -> any MetricExporter {
       let networkExporter = SimulatorAwareMetricExporter(
         metricExporter: OtlpHttpMetricExporter(
@@ -425,13 +454,14 @@ extension Terra {
       .registerView(selector: InstrumentSelectorBuilder().build(), view: View.builder().build())
       .build()
 
-    OpenTelemetry.registerMeterProvider(meterProvider: provider)
-    return provider
+    return PreparedMetricsInstallation(meterProvider: provider) {
+      OpenTelemetry.registerMeterProvider(meterProvider: provider)
+    }
   }
 
   // MARK: - Logs
 
-  private static func installLogs(configuration: OpenTelemetryConfiguration) throws -> (LoggerProviderSdk, any LogRecordProcessor) {
+  private static func prepareLogsInstallation(configuration: OpenTelemetryConfiguration) throws -> PreparedLogsInstallation {
     func makeExporter() throws -> any LogRecordExporter {
       let networkExporter = SimulatorAwareLogExporter(
         logExporter: OtlpHttpLogExporter(
@@ -462,8 +492,9 @@ extension Terra {
       .with(processors: [processor])
       .build()
 
-    OpenTelemetry.registerLoggerProvider(loggerProvider: provider)
-    return (provider, processor)
+    return PreparedLogsInstallation(loggerProvider: provider, logProcessor: processor) {
+      OpenTelemetry.registerLoggerProvider(loggerProvider: provider)
+    }
   }
 
   // MARK: - Lifecycle Queries

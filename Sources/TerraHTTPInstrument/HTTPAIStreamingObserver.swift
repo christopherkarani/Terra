@@ -100,6 +100,11 @@ final class HTTPAIStreamingObserver: @unchecked Sendable {
     finish(spanID: spanID, parsedResponse: parsedResponse, error: nil)
   }
 
+  func finishWithError(span: any Span, error: Error? = nil) {
+    let spanID = span.context.spanId.hexString
+    finish(spanID: spanID, parsedResponse: nil, error: error)
+  }
+
   func finishWithError(request: URLRequest?, error: Error? = nil) {
     guard let request, let spanID = spanID(for: request) else { return }
     finish(spanID: spanID, parsedResponse: nil, error: error)
@@ -119,9 +124,10 @@ final class HTTPAIStreamingObserver: @unchecked Sendable {
       Terra.Keys.Terra.streamChunkCount: .int(state.chunkCount),
     ]
     if let error {
+      let errorType = Terra.sanitizedErrorType(error)
       attributes["terra.stream.completed"] = .bool(false)
-      attributes["error.type"] = .string(String(reflecting: Swift.type(of: error)))
-      state.span.status = .error(description: String(describing: error))
+      attributes["error.type"] = .string(errorType)
+      state.span.status = .error(description: errorType)
     }
 
     let resolvedOutputTokens = parsedResponse?.outputTokens ?? state.outputTokens
@@ -144,7 +150,7 @@ final class HTTPAIStreamingObserver: @unchecked Sendable {
       state.span.addEvent(
         name: "stream.error",
         attributes: [
-          "error.message": .string(String(describing: error))
+          "error.type": .string(Terra.sanitizedErrorType(error))
         ]
       )
     }

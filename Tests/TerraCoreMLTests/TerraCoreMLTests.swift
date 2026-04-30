@@ -1,5 +1,6 @@
 #if canImport(CoreML)
 import CoreML
+import Foundation
 import OpenTelemetryApi
 import Testing
 @testable import TerraCoreML
@@ -9,6 +10,22 @@ import Testing
 
 @Suite("TerraCoreML top-level", .serialized)
 struct TerraCoreMLTopLevelTests {
+private final class CancellationProbe: @unchecked Sendable {
+  private let lock = NSLock()
+  private var cancelled = false
+
+  func markCancelled() {
+    lock.lock()
+    cancelled = true
+    lock.unlock()
+  }
+
+  var wasCancelled: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return cancelled
+  }
+}
 
 @Test("Keys.runtime has expected value")
 func keysRuntimeValue() {
@@ -129,6 +146,47 @@ func synchronousComputePlanCaptureTimesOut() {
   #expect(summary.captureStatus == .loadFailed)
   #expect(summary.errorType == "terra.coreml.compute_plan.capture_timeout")
   #expect(summary.probeSource == "mlcomputeplan")
+}
+
+@Test("synchronous compute-plan capture cancels underlying task on timeout")
+func synchronousComputePlanCaptureCancelsUnderlyingTaskOnTimeout() async throws {
+  let previousCapture = CoreMLInstrumentation.computePlanSummaryCapture
+  let previousTimeout = CoreMLInstrumentation.synchronousCaptureTimeoutNanoseconds
+  defer {
+    CoreMLInstrumentation.computePlanSummaryCapture = previousCapture
+    CoreMLInstrumentation.synchronousCaptureTimeoutNanoseconds = previousTimeout
+  }
+
+  let probe = CancellationProbe()
+  CoreMLInstrumentation.computePlanSummaryCapture = { _, _ in
+    while !Task.isCancelled {
+      try? await Task.sleep(nanoseconds: 5_000_000)
+    }
+    probe.markCancelled()
+    return TerraCoreMLComputePlanSummary(
+      captureStatus: .captured,
+      modelStructure: "program",
+      estimatedPrimaryDevice: "ane",
+      supportedDevices: ["ane"],
+      nodeCount: 1,
+      captureDurationMS: 200,
+      operationEstimates: [],
+      errorType: nil,
+      probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.captured.rawValue,
+      probeSource: "test"
+    )
+  }
+  CoreMLInstrumentation.synchronousCaptureTimeoutNanoseconds = 5_000_000
+
+  _ = CoreMLInstrumentation.captureSummarySynchronously(
+    contentsOf: URL(fileURLWithPath: "/tmp/model.mlmodelc"),
+    configuration: MLModelConfiguration()
+  )
+  for _ in 0..<100 where !probe.wasCancelled {
+    try await Task.sleep(nanoseconds: 10_000_000)
+  }
+
+  #expect(probe.wasCancelled)
 }
 }
 #endif

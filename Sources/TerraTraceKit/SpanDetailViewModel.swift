@@ -89,7 +89,12 @@ final class SpanDetailViewModel {
     selectedSpan = span
     attributeItems = span.attributes
       .sorted(by: { $0.key < $1.key })
-      .map { AttributeItem(key: $0.key, value: $0.value.description) }
+      .map {
+        AttributeItem(
+          key: $0.key,
+          value: TelemetryPrivacy.displayValue(forKey: $0.key, value: $0.value.description)
+        )
+      }
 
     let allEvents = span.events.sorted(by: { $0.timestamp < $1.timestamp })
     let preparedEvents = allEvents.map { event in
@@ -159,7 +164,7 @@ final class SpanDetailViewModel {
 
   private func normalizedAttributes(_ values: [String: OpenTelemetryApi.AttributeValue]) -> [(String, String)] {
     values.map { key, value in
-      (key, value.description)
+      (key, TelemetryPrivacy.displayValue(forKey: key, value: value.description))
     }.sorted { lhs, rhs in
       lhs.0 == rhs.0 ? lhs.1 < rhs.1 : lhs.0 < rhs.0
     }

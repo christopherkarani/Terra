@@ -164,10 +164,9 @@ fn test_parent_child_context() {
 
     // Verify context has non-zero IDs (the Zig core assigns real trace/span IDs)
     assert!(
-        ctx.trace_id_hi != 0 || ctx.trace_id_lo != 0,
-        "trace ID should be non-zero"
+        ctx.is_valid(),
+        "context should have non-zero trace and span IDs"
     );
-    assert!(ctx.span_id != 0, "span ID should be non-zero");
 
     // Create a child span using the parent context
     let mut child = terra
@@ -208,6 +207,33 @@ fn test_error_recording_without_status() {
     span.record_error("ValidationError", "invalid input shape", false);
     // Manually set OK status (perhaps the error was recovered)
     span.set_status(StatusCode::Ok, "recovered");
+    span.end();
+}
+
+#[test]
+fn test_temporary_string_lifetimes_are_owned_by_native_core() {
+    let terra = Terra::init().expect("init failed");
+    let mut model = String::from("native-owned-model");
+    let mut key = String::from("dynamic.key");
+    let mut value = String::from("dynamic-value");
+    let mut event = String::from("dynamic.event");
+    let mut error_type = String::from("DynamicError");
+    let mut error_message = String::from("temporary error message");
+
+    let mut span = terra
+        .begin_inference_span(&model, None, false)
+        .expect("span failed");
+    span.set_string(&key, &value);
+    span.add_event(&event);
+    span.record_error(&error_type, &error_message, true);
+
+    model.clear();
+    key.clear();
+    value.clear();
+    event.clear();
+    error_type.clear();
+    error_message.clear();
+
     span.end();
 }
 
@@ -366,6 +392,9 @@ fn test_span_context_values() {
     assert_eq!(ctx.trace_id_hi, 0xDEAD_BEEF_CAFE_BABE);
     assert_eq!(ctx.trace_id_lo, 0x0123_4567_89AB_CDEF);
     assert_eq!(ctx.span_id, 0xFEED_FACE_1234_5678);
+    assert!(ctx.is_valid());
+    assert_eq!(ctx.trace_id_hex(), "deadbeefcafebabe0123456789abcdef");
+    assert_eq!(ctx.span_id_hex(), "feedface12345678");
 
     let copy = ctx;
     assert_eq!(ctx, copy);

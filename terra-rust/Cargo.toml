@@ -8,6 +8,14 @@ readme = "README.md"
 repository = "https://github.com/christopherkarani/Terra"
 keywords = ["observability", "telemetry", "genai", "opentelemetry"]
 categories = ["development-tools::profiling", "api-bindings"]
+include = [
+  "Cargo.toml",
+  "README.md",
+  "build.rs",
+  "examples/**",
+  "src/**",
+  "tests/**",
+]
 
 [build-dependencies]
 bindgen = { version = "0.70", optional = true }

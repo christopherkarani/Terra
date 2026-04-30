@@ -5,6 +5,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 TIMEOUT_SECONDS="${TERRA_SWIFTPM_TIMEOUT_SECONDS:-180}"
+MANIFEST_ONLY="false"
+
+if [[ "${1:-}" == "--manifest-only" || "${1:-}" == "--quick" ]]; then
+  MANIFEST_ONLY="true"
+  shift
+fi
 
 terminate_tree() {
   local pid="$1"
@@ -52,6 +58,14 @@ run_with_timeout() {
   wait "$pid"
 }
 
-run_with_timeout "SwiftPM manifest" swift package describe
+run_with_timeout "SwiftPM manifest" bash -c 'swift package describe --type json >/dev/null'
+
+if [[ "$MANIFEST_ONLY" == "true" ]]; then
+  exit 0
+fi
+
 run_with_timeout "SwiftPM dependency resolution" swift package resolve
+run_with_timeout "TerraSample executable" swift build --product TerraSample
+run_with_timeout "TerraAutoInstrumentExample executable" swift build --product TerraAutoInstrumentExample
+run_with_timeout "TerraSDKBenchmarks executable" swift build --product TerraSDKBenchmarks
 run_with_timeout "Swift tests" swift test "$@"

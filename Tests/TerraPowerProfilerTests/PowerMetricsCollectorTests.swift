@@ -17,6 +17,32 @@ struct PowerMetricsCollectorTests {
   func stopWithoutStart() {
     let summary = PowerMetricsCollector.stop()
     #expect(summary.sampleCount == 0)
+    #expect(summary.status == .notStarted)
+  }
+
+  @Test("permission stderr is visible in stop summary")
+  func permissionFailureSummary() {
+    let summary = PowerMetricsCollector.summaryForTesting(
+      stdout: "",
+      stderr: "powermetrics must be run as root",
+      terminationStatus: 1
+    )
+
+    #expect(summary.sampleCount == 0)
+    #expect(summary.status == .permissionDenied)
+    #expect(summary.diagnosticMessage?.contains("root") == true)
+  }
+
+  @Test("empty successful output reports no samples")
+  func noSamplesSummary() {
+    let summary = PowerMetricsCollector.summaryForTesting(
+      stdout: "",
+      stderr: "",
+      terminationStatus: 0
+    )
+
+    #expect(summary.sampleCount == 0)
+    #expect(summary.status == .noSamples)
   }
 }
 #endif

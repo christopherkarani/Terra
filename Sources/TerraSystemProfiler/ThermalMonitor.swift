@@ -91,6 +91,10 @@ public enum ThermalMonitor {
     state.isInstalled
   }
 
+  package static func reset() {
+    state.reset()
+  }
+
   /// Captures the current thermal state as a ``ThermalSample``.
   ///
   /// - Returns: A new `ThermalSample` with the current `ProcessInfo.thermalState`

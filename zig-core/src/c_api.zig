@@ -12,6 +12,7 @@ const transport_mod = @import("transport.zig");
 const scheduler_mod = @import("scheduler.zig");
 const storage_mod = @import("storage.zig");
 const clock = @import("clock.zig");
+const constants = @import("constants.zig");
 
 const TerraInstance = terra_mod.TerraInstance;
 const TerraConfig = config_mod.TerraConfig;
@@ -544,6 +545,66 @@ test "terra_span lifecycle via C API" {
     terra_span_record_error(span, "RuntimeError", "test error", false);
 
     terra_span_end(inst, span);
+}
+
+fn cStringBuffer(comptime size: usize, value: []const u8) [size:0]u8 {
+    var buf: [size:0]u8 = undefined;
+    @memset(buf[0..], 0);
+    @memcpy(buf[0..value.len], value);
+    return buf;
+}
+
+fn poisonCStringBuffer(buf: []u8, value_len: usize) void {
+    @memset(buf[0..value_len], 'x');
+}
+
+fn findStringAttr(rec: *const SpanRecord, key: []const u8) ?[]const u8 {
+    for (rec.attributes.slice()) |attr| {
+        if (std.mem.eql(u8, attr.key, key)) {
+            return switch (attr.value) {
+                .string => |s| s,
+                else => null,
+            };
+        }
+    }
+    return null;
+}
+
+test "C API span strings survive temporary caller buffers" {
+    const inst = terra_init(null).?;
+    defer _ = terra_shutdown(inst);
+
+    var model = cStringBuffer(64, "borrowed-model");
+    const span = terra_begin_inference_span_ctx(inst, null, &model, false).?;
+    poisonCStringBuffer(model[0..], "borrowed-model".len);
+
+    var key = cStringBuffer(64, "dynamic.key");
+    var value = cStringBuffer(64, "dynamic-value");
+    terra_span_set_string(span, &key, &value);
+    poisonCStringBuffer(key[0..], "dynamic.key".len);
+    poisonCStringBuffer(value[0..], "dynamic-value".len);
+
+    var event = cStringBuffer(64, "dynamic.event");
+    terra_span_add_event(span, &event);
+    poisonCStringBuffer(event[0..], "dynamic.event".len);
+
+    var error_type = cStringBuffer(64, "DynamicError");
+    var error_message = cStringBuffer(64, "temporary error message");
+    terra_span_record_error(span, &error_type, &error_message, true);
+    poisonCStringBuffer(error_type[0..], "DynamicError".len);
+    poisonCStringBuffer(error_message[0..], "temporary error message".len);
+
+    terra_span_end(inst, span);
+
+    var buf: [4]SpanRecord = undefined;
+    const count = terra_test_drain_spans(inst, &buf, 4);
+    try std.testing.expectEqual(@as(u32, 1), count);
+
+    try std.testing.expectEqualStrings("borrowed-model", findStringAttr(&buf[0], constants.keys.gen_ai.request_model).?);
+    try std.testing.expectEqualStrings("dynamic-value", findStringAttr(&buf[0], "dynamic.key").?);
+    try std.testing.expectEqualStrings("dynamic.event", buf[0].events[0].name);
+    try std.testing.expectEqualStrings("DynamicError", buf[0].events[1].attributes.slice()[0].value.string);
+    try std.testing.expectEqualStrings("temporary error message", buf[0].events[1].attributes.slice()[1].value.string);
 }
 
 test "terra_span_context extraction" {

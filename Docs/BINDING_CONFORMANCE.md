@@ -26,9 +26,18 @@ The script validates:
 | Redact drop | 0 | `TERRA_REDACT_DROP` | `drop` | `TERRA_REDACT_DROP` | `DROP` | `DROP` | `Drop` |
 | Redact length only | 1 | `TERRA_REDACT_LENGTH_ONLY` | `length_only` | `TERRA_REDACT_LENGTH_ONLY` | `LENGTH_ONLY` | `LENGTH_ONLY` | `LengthOnly` |
 | Redact HMAC-SHA256 | 2 | `TERRA_REDACT_HMAC_SHA256` | `hmac_sha256` | `TERRA_REDACT_HMAC_SHA256` | `HMAC_SHA256` | `HMAC_SHA256` | `HmacSha256` |
-| Redact SHA256 legacy | 3 | `TERRA_REDACT_SHA256` | `sha256` | `TERRA_REDACT_SHA256` | `SHA256` | `SHA256` | Not exposed |
+| Redact SHA256 legacy | 3 | `TERRA_REDACT_SHA256` | `sha256` | `TERRA_REDACT_SHA256` | `SHA256` | `SHA256` | `Sha256` |
 
-The validator fails on numeric drift. The C++ legacy SHA256 redaction row is recorded as not exposed in the current header rather than requiring a runtime-source change.
+The validator fails on numeric drift and on missing binding symbols for these constants.
+
+## Span Context Contract
+
+All bindings treat `SpanContext` as valid only when it contains both:
+
+- a non-zero trace ID (`trace_id_hi != 0 || trace_id_lo != 0`)
+- a non-zero span ID (`span_id != 0`)
+
+Invalid parent contexts are ignored at binding boundaries where practical and in the Zig core, so a partial context starts a new root span instead of propagating a broken trace.
 
 ## Binding Feature Matrix
 

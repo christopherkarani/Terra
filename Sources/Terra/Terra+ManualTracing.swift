@@ -1224,15 +1224,24 @@ extension Terra {
     let context = AgentContext()
     return try await Terra.$agentContext.withValue(context) {
       try await _withActiveSpan(span) {
+        var thrownError: (any Error)?
         defer {
           let snapshot = context.snapshot()
           span.attribute("terra.workflow.tools_used", snapshot.toolsUsed.sorted().joined(separator: ","))
           span.attribute("terra.workflow.models_used", snapshot.modelsUsed.sorted().joined(separator: ","))
           span.attribute("terra.workflow.inference_count", snapshot.inferenceCount)
           span.attribute("terra.workflow.tool_call_count", snapshot.toolCallCount)
+          if let thrownError, !(thrownError is CancellationError) {
+            span.recordError(thrownError)
+          }
           span.end()
         }
-        return try await body(span, context)
+        do {
+          return try await body(span, context)
+        } catch {
+          thrownError = error
+          throw error
+        }
       }
     }
   }

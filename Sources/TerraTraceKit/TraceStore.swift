@@ -23,14 +23,24 @@ public actor TraceStore {
     var accepted: [SpanRecord] = []
     accepted.reserveCapacity(spans.count)
 
+    var didChange = false
     for span in spans {
       let key = SpanKey(traceID: span.traceID, spanID: span.spanID)
-      if spansByKey[key] != nil { continue }
-      spansByKey[key] = span
-      insertionOrder.append(key)
-      accepted.append(span)
+      if let existing = spansByKey[key] {
+        let preferred = preferredSpan(existing: existing, candidate: span)
+        guard preferred != existing else { continue }
+        spansByKey[key] = preferred
+        accepted.append(preferred)
+        didChange = true
+      } else {
+        spansByKey[key] = span
+        insertionOrder.append(key)
+        accepted.append(span)
+        didChange = true
+      }
     }
 
+    guard didChange else { return [] }
     enforceMaxSpans()
     snapshotDirty = true
     return accepted
@@ -65,6 +75,31 @@ public actor TraceStore {
       insertionHead = 0
     }
   }
+}
+
+private func preferredSpan(existing: SpanRecord, candidate: SpanRecord) -> SpanRecord {
+  let existingScore = spanCompletenessScore(existing)
+  let candidateScore = spanCompletenessScore(candidate)
+  if candidateScore != existingScore {
+    return candidateScore > existingScore ? candidate : existing
+  }
+  if candidate.endTimeUnixNano != existing.endTimeUnixNano {
+    return candidate.endTimeUnixNano > existing.endTimeUnixNano ? candidate : existing
+  }
+  return existing
+}
+
+private func spanCompletenessScore(_ span: SpanRecord) -> Int {
+  var score = 0
+  if span.endTimeUnixNano > 0 { score += 1_000_000 }
+  if span.parentSpanID != nil { score += 1_000 }
+  if span.status != .unset { score += 100 }
+  if span.statusDescription != nil { score += 10 }
+  score += span.attributes.items.count
+  score += span.resource.attributes.items.count
+  score += span.events.count
+  score += span.links.count
+  return score
 }
 
 private func spanStreamSort(_ lhs: SpanRecord, _ rhs: SpanRecord) -> Bool {

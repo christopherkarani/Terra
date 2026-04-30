@@ -1,7 +1,18 @@
 import Foundation
 import TerraCore
 
+package enum TerraLlamaAPISurface: Sendable, Equatable {
+  case internalPackageTarget
+}
+
+/// Internal package target for Terra's llama.cpp telemetry helpers.
+///
+/// This target is intentionally not exported as a SwiftPM product yet. Keeping
+/// the APIs package-scoped prevents external consumers from depending on a
+/// wrapper surface before the runtime contract is ready.
 package enum TerraLlama {
+  package static let apiSurface: TerraLlamaAPISurface = .internalPackageTarget
+
   package struct DecodeStats: Sendable {
     package var tokensPerSecond: Double?
     package var timeToFirstTokenMS: Double?

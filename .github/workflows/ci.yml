@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Toolchain
         run: |
@@ -42,6 +44,9 @@ jobs:
           if [ -f Scripts/validate-telemetry-schema.py ]; then python3 Scripts/validate-telemetry-schema.py; fi
           if [ -f Scripts/validate-bindings.py ]; then python3 Scripts/validate-bindings.py; fi
 
+      - name: SwiftPM manifest
+        run: Scripts/validate-swiftpm.sh --manifest-only
+
       - name: SwiftPM tests
         run: Scripts/validate-swiftpm.sh
 
@@ -49,18 +54,24 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
-          swift package diagnose-api-breaking-changes Terra
-          swift package diagnose-api-breaking-changes TerraCore
-          swift package diagnose-api-breaking-changes TerraCoreML
-          swift package diagnose-api-breaking-changes TerraTraceKit
-          swift package diagnose-api-breaking-changes TerraHTTPInstrument
-          swift package diagnose-api-breaking-changes TerraFoundationModels
-          swift package diagnose-api-breaking-changes TerraMLX
-          swift package diagnose-api-breaking-changes TerraMetalProfiler
-          swift package diagnose-api-breaking-changes TerraSystemProfiler
-          swift package diagnose-api-breaking-changes TerraLlama
-          swift package diagnose-api-breaking-changes TerraAccelerate
-          swift package diagnose-api-breaking-changes TerraTracedMacro
+          BASE_REF="${GITHUB_BASE_REF:-main}"
+          git fetch --no-tags --depth=1 origin "${BASE_REF}"
+          PRODUCTS=(
+            Terra
+            TerraCore
+            TerraCoreML
+            TerraTraceKit
+            TerraHTTPInstrument
+            TerraFoundationModels
+            TerraMLX
+            TerraMetalProfiler
+            TerraSystemProfiler
+            TerraAccelerate
+            TerraPowerProfiler
+            TerraANEProfiler
+            TerraTracedMacro
+          )
+          swift package diagnose-api-breaking-changes "origin/${BASE_REF}" --products "${PRODUCTS[@]}"
 
   native-bindings:
     name: Zig, Rust, and Python bindings
@@ -84,12 +95,31 @@ jobs:
         run: |
           set -euo pipefail
           cd terra-rust
-          cargo test -- --test-threads=1
+          TERRA_LIB_DIR="$GITHUB_WORKSPACE/zig-core/zig-out/lib" cargo test -- --test-threads=1
+
+      - name: Rust package verification
+        run: |
+          set -euo pipefail
+          cd terra-rust
+          TERRA_LIB_DIR="$GITHUB_WORKSPACE/zig-core/zig-out/lib" cargo package
 
       - name: Python syntax check
         run: |
           set -euo pipefail
           python3 -m py_compile terra-python/terra.py
+
+      - name: Python unit tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s terra-python -p 'test*.py'
+
+      - name: C++ CMake smoke
+        run: |
+          set -euo pipefail
+          cmake -S terra-cpp -B .build/terra-cpp \
+            -DTERRA_LIB_PATH="$GITHUB_WORKSPACE/zig-core/zig-out/lib/libterra.a"
+          cmake --build .build/terra-cpp
+          ctest --test-dir .build/terra-cpp --output-on-failure
 
   android:
     name: Android bindings
@@ -103,6 +133,18 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Android native toolchain
+        run: |
+          set -euo pipefail
+          brew install zig
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;26.3.11579264"
+
+      - name: Build Android native libraries
+        run: |
+          set -euo pipefail
+          bash Scripts/build-libtera-android.sh
 
       - name: Gradle tests and release assembly
         run: |

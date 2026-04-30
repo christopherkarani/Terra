@@ -4,6 +4,11 @@ import TerraLlama
 
 @Suite("TerraLlama wrapper", .serialized)
 struct TerraLlamaWrapperTests {
+  @Test("TerraLlama is intentionally an internal package target")
+  func internalSurfaceExpectation() {
+    #expect(TerraLlama.apiSurface == .internalPackageTarget)
+  }
+
   @Test("TerraLlama traced sets provider metadata")
   func providerMetadata() async throws {
     let support = TerraTestSupport()

@@ -326,12 +326,23 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
   private let instance: OpaquePointer  // terra_t*
   private let lock = NSLock()
   private var ended = false
+  private var currentStatus: Status = .unset
 
   let kind: SpanKind
   private(set) var context: SpanContext
-  var isRecording: Bool { !ended }
-  var status: Status = .unset {
-    didSet { applyStatus() }
+  var isRecording: Bool {
+    withLockedState { !ended }
+  }
+  var status: Status {
+    get {
+      withLockedState { currentStatus }
+    }
+    set {
+      withRecordingSpan {
+        currentStatus = newValue
+        applyStatusLocked(newValue)
+      }
+    }
   }
   var name: String
 
@@ -370,7 +381,13 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
   // MARK: - Attributes
 
   func setAttribute(key: String, value: AttributeValue?) {
-    guard !ended, let value else { return }
+    guard let value else { return }
+    withRecordingSpan {
+      setAttributeLocked(key: key, value: value)
+    }
+  }
+
+  private func setAttributeLocked(key: String, value: AttributeValue) {
     switch value {
     case .string(let s):
       key.withCString { cKey in
@@ -402,55 +419,66 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
   }
 
   func setAttributes(_ attributes: [String: AttributeValue]) {
-    for (key, value) in attributes {
-      setAttribute(key: key, value: value)
+    withRecordingSpan {
+      for (key, value) in attributes {
+        setAttributeLocked(key: key, value: value)
+      }
     }
   }
 
   // MARK: - Events
 
   func addEvent(name: String) {
-    guard !ended else { return }
-    name.withCString { cName in
-      terra_span_add_event(zigSpan, cName)
+    withRecordingSpan {
+      name.withCString { cName in
+        terra_span_add_event(zigSpan, cName)
+      }
     }
   }
 
   func addEvent(name: String, timestamp: Date) {
-    guard !ended else { return }
-    let nanos = UInt64(timestamp.timeIntervalSince1970 * 1_000_000_000)
-    name.withCString { cName in
-      terra_span_add_event_ts(zigSpan, cName, nanos)
+    withRecordingSpan {
+      let nanos = UInt64(timestamp.timeIntervalSince1970 * 1_000_000_000)
+      name.withCString { cName in
+        terra_span_add_event_ts(zigSpan, cName, nanos)
+      }
     }
   }
 
   func addEvent(name: String, attributes: [String: AttributeValue]) {
-    guard !ended else { return }
-    // Zig C ABI does not support event attributes directly;
-    // set them as span attributes with event-prefixed keys, then add the event.
-    for (key, value) in attributes {
-      setAttribute(key: "terra.event.\(name).\(key)", value: value)
-    }
-    name.withCString { cName in
-      terra_span_add_event(zigSpan, cName)
+    withRecordingSpan {
+      // Zig C ABI does not support event attributes directly;
+      // set them as span attributes with event-prefixed keys, then add the event.
+      for (key, value) in attributes {
+        setAttributeLocked(key: "terra.event.\(name).\(key)", value: value)
+      }
+      name.withCString { cName in
+        terra_span_add_event(zigSpan, cName)
+      }
     }
   }
 
   func addEvent(name: String, attributes: [String: AttributeValue], timestamp: Date) {
-    guard !ended else { return }
-    for (key, value) in attributes {
-      setAttribute(key: "terra.event.\(name).\(key)", value: value)
-    }
-    let nanos = UInt64(timestamp.timeIntervalSince1970 * 1_000_000_000)
-    name.withCString { cName in
-      terra_span_add_event_ts(zigSpan, cName, nanos)
+    withRecordingSpan {
+      for (key, value) in attributes {
+        setAttributeLocked(key: "terra.event.\(name).\(key)", value: value)
+      }
+      let nanos = UInt64(timestamp.timeIntervalSince1970 * 1_000_000_000)
+      name.withCString { cName in
+        terra_span_add_event_ts(zigSpan, cName, nanos)
+      }
     }
   }
 
   // MARK: - Exceptions
 
   func recordException(_ exception: SpanException) {
-    guard !ended else { return }
+    withRecordingSpan {
+      recordExceptionLocked(exception)
+    }
+  }
+
+  private func recordExceptionLocked(_ exception: SpanException) {
     exception.type.withCString { cType in
       (exception.message ?? "").withCString { cMsg in
         terra_span_record_error(zigSpan, cType, cMsg, true)
@@ -466,8 +494,12 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
   }
 
   func recordException(_ exception: SpanException, attributes: [String: AttributeValue]) {
-    recordException(exception)
-    setAttributes(attributes)
+    withRecordingSpan {
+      recordExceptionLocked(exception)
+      for (key, value) in attributes {
+        setAttributeLocked(key: key, value: value)
+      }
+    }
   }
 
   // NOTE: The Zig C ABI (terra_span_record_error) does not accept a custom timestamp.
@@ -480,15 +512,16 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
   // MARK: - End
 
   func end() {
-    lock.lock()
-    guard !ended else {
-      lock.unlock()
-      return
+    let shouldEnd = withLockedState {
+      guard !ended else {
+        return false
+      }
+      ended = true
+      return true
     }
-    ended = true
-    lock.unlock()
-
-    terra_span_end(instance, zigSpan)
+    if shouldEnd {
+      terra_span_end(instance, zigSpan)
+    }
   }
 
   // NOTE: The Zig C ABI (terra_span_end) does not accept a custom end timestamp.
@@ -500,8 +533,7 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
 
   // MARK: - Private
 
-  private func applyStatus() {
-    guard !ended else { return }
+  private func applyStatusLocked(_ status: Status) {
     switch status {
     case .ok:
       terra_span_set_status(zigSpan, UInt8(TERRA_STATUS_OK.rawValue), nil)
@@ -512,6 +544,19 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
         terra_span_set_status(zigSpan, UInt8(TERRA_STATUS_ERROR.rawValue), cDesc)
       }
     }
+  }
+
+  private func withLockedState<T>(_ body: () -> T) -> T {
+    lock.lock()
+    defer { lock.unlock() }
+    return body()
+  }
+
+  private func withRecordingSpan(_ body: () -> Void) {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !ended else { return }
+    body()
   }
 }
 

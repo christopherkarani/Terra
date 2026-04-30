@@ -114,7 +114,10 @@ class SpanContextCoroutineTest {
         assertFalse("Zero context should not be valid", zero.isValid)
 
         val partial = SpanContext(0L, 1L, 0L)
-        assertTrue("Non-zero trace ID should be valid", partial.isValid)
+        assertFalse("Trace ID without span ID should not be valid", partial.isValid)
+
+        val valid = SpanContext(0L, 1L, 1L)
+        assertTrue("Trace ID and span ID should be valid", valid.isValid)
     }
 
     @Test

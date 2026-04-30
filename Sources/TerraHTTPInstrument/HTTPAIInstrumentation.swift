@@ -143,8 +143,8 @@ public enum HTTPAIInstrumentation {
 
                 HTTPAIStreamingObserver.shared.finish(span: span, parsedResponse: parsed)
             },
-            receivedError: { _, _, _, span in
-                HTTPAIStreamingObserver.shared.finish(span: span, parsedResponse: nil)
+            receivedError: { error, _, _, span in
+                HTTPAIStreamingObserver.shared.finishWithError(span: span, error: error)
             },
             semanticConvention: .old
         )
@@ -234,8 +234,10 @@ public enum HTTPAIInstrumentation {
         if !parsed.messages.isEmpty {
             spanBuilder.setAttribute(key: Terra.Keys.GenAI.promptMessageCount, value: parsed.messages.count)
             spanBuilder.setAttribute(key: Terra.Keys.GenAI.promptRole0, value: parsed.messages[0].role)
-            if Terra.shouldCaptureAutoInstrumentedPromptContent() {
-                spanBuilder.setAttribute(key: Terra.Keys.GenAI.promptContent, value: parsed.messages[0].content)
+            for (key, value) in Terra.autoInstrumentedPromptAttributes(
+                for: parsed.messages[0].content
+            ) {
+                spanBuilder.setAttribute(key: key, value: value)
             }
         }
     }

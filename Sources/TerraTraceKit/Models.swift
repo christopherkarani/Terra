@@ -10,8 +10,8 @@ public struct TraceID: Hashable, Sendable, Comparable, CustomStringConvertible {
     guard data.count == 16 else { return nil }
     var hiValue: UInt64 = 0
     var loValue: UInt64 = 0
-    _ = withUnsafeMutableBytes(of: &hiValue) { data.copyBytes(to: $0, from: 0..<8) }
-    _ = withUnsafeMutableBytes(of: &loValue) { data.copyBytes(to: $0, from: 8..<16) }
+    _ = withUnsafeMutableBytes(of: &hiValue) { data.copyBytes(to: $0, from: 0 ..< 8) }
+    _ = withUnsafeMutableBytes(of: &loValue) { data.copyBytes(to: $0, from: 8 ..< 16) }
     hi = UInt64(bigEndian: hiValue)
     lo = UInt64(bigEndian: loValue)
   }
@@ -20,8 +20,8 @@ public struct TraceID: Hashable, Sendable, Comparable, CustomStringConvertible {
     let cleaned = hex.trimmingCharacters(in: .whitespacesAndNewlines)
     guard cleaned.count == 32 else { return nil }
     let midIndex = cleaned.index(cleaned.startIndex, offsetBy: 16)
-    let hiHex = String(cleaned[cleaned.startIndex..<midIndex])
-    let loHex = String(cleaned[midIndex..<cleaned.endIndex])
+    let hiHex = String(cleaned[cleaned.startIndex ..< midIndex])
+    let loHex = String(cleaned[midIndex ..< cleaned.endIndex])
     guard let hiValue = UInt64(hiHex, radix: 16),
           let loValue = UInt64(loHex, radix: 16) else { return nil }
     hi = hiValue
@@ -39,10 +39,14 @@ public struct TraceID: Hashable, Sendable, Comparable, CustomStringConvertible {
     let hiBE = hi.bigEndian
     let loBE = lo.bigEndian
     withUnsafeBytes(of: hiBE) { buf in
-      for i in 0..<8 { result[i] = buf[i] }
+      for i in 0 ..< 8 {
+        result[i] = buf[i]
+      }
     }
     withUnsafeBytes(of: loBE) { buf in
-      for i in 0..<8 { result[8 + i] = buf[i] }
+      for i in 0 ..< 8 {
+        result[8 + i] = buf[i]
+      }
     }
     return result
   }
@@ -71,7 +75,7 @@ public struct SpanID: Hashable, Sendable, Comparable, CustomStringConvertible {
   public init?(data: Data) {
     guard data.count == 8 else { return nil }
     var value: UInt64 = 0
-    _ = withUnsafeMutableBytes(of: &value) { data.copyBytes(to: $0, from: 0..<8) }
+    _ = withUnsafeMutableBytes(of: &value) { data.copyBytes(to: $0, from: 0 ..< 8) }
     rawValue = UInt64(bigEndian: value)
   }
 
@@ -92,7 +96,9 @@ public struct SpanID: Hashable, Sendable, Comparable, CustomStringConvertible {
     var result = [UInt8](repeating: 0, count: 8)
     let be = rawValue.bigEndian
     withUnsafeBytes(of: be) { buf in
-      for i in 0..<8 { result[i] = buf[i] }
+      for i in 0 ..< 8 {
+        result[i] = buf[i]
+      }
     }
     return result
   }
@@ -115,7 +121,7 @@ public struct SpanID: Hashable, Sendable, Comparable, CustomStringConvertible {
 
 public enum SpanKind: String, Sendable, Hashable {
   case unspecified
-  case `internal` = "internal"
+  case `internal`
   case server
   case client
   case producer
@@ -139,7 +145,7 @@ public enum AttributeValue: Hashable, Sendable {
   case null
 
   public var stringValue: String? {
-    if case .string(let value) = self {
+    if case let .string(value) = self {
       return value
     }
     return nil
@@ -149,19 +155,19 @@ public enum AttributeValue: Hashable, Sendable {
 extension AttributeValue: CustomStringConvertible {
   public var description: String {
     switch self {
-    case .string(let value):
+    case let .string(value):
       return value
-    case .bool(let value):
+    case let .bool(value):
       return value ? "true" : "false"
-    case .int(let value):
+    case let .int(value):
       return String(value)
-    case .double(let value):
+    case let .double(value):
       return String(value)
-    case .bytes(let value):
+    case let .bytes(value):
       return value.map { String(format: "%02x", $0) }.joined()
-    case .array(let values):
+    case let .array(values):
       return "[" + values.map { $0.description }.joined(separator: ",") + "]"
-    case .kvlist(let values):
+    case let .kvlist(values):
       let rendered = values.map { "\($0.key)=\($0.value)" }.joined(separator: ",")
       return "{\(rendered)}"
     case .null:
@@ -247,6 +253,47 @@ public struct Resource: Hashable, Sendable {
   }
 }
 
+public struct SpanEventRecord: Hashable, Sendable {
+  public let name: String
+  public let timeUnixNano: UInt64
+  public let attributes: Attributes
+  public let droppedAttributesCount: UInt32
+
+  public init(
+    name: String,
+    timeUnixNano: UInt64,
+    attributes: Attributes = Attributes([]),
+    droppedAttributesCount: UInt32 = 0
+  ) {
+    self.name = name
+    self.timeUnixNano = timeUnixNano
+    self.attributes = attributes
+    self.droppedAttributesCount = droppedAttributesCount
+  }
+}
+
+public struct SpanLinkRecord: Hashable, Sendable {
+  public let traceID: TraceID
+  public let spanID: SpanID
+  public let traceState: String
+  public let attributes: Attributes
+  public let droppedAttributesCount: UInt32
+
+  public init(
+    traceID: TraceID,
+    spanID: SpanID,
+    traceState: String = "",
+    attributes: Attributes = Attributes([]),
+    droppedAttributesCount: UInt32 = 0
+  ) {
+    self.traceID = traceID
+    self.spanID = spanID
+    self.traceState = traceState
+    self.attributes = attributes
+    self.droppedAttributesCount = droppedAttributesCount
+  }
+}
+
 public struct SpanRecord: Hashable, Sendable {
   public let traceID: TraceID
   public let spanID: SpanID
@@ -254,10 +301,16 @@ public struct SpanRecord: Hashable, Sendable {
   public let name: String
   public let kind: SpanKind
   public let status: StatusCode
+  public let statusDescription: String?
   public let startTimeUnixNano: UInt64
   public let endTimeUnixNano: UInt64
   public let attributes: Attributes
   public let resource: Resource
+  public let events: [SpanEventRecord]
+  public let links: [SpanLinkRecord]
+  public let droppedAttributesCount: UInt32
+  public let droppedEventsCount: UInt32
+  public let droppedLinksCount: UInt32
 
   public init(
     traceID: TraceID,
@@ -269,7 +322,13 @@ public struct SpanRecord: Hashable, Sendable {
     startTimeUnixNano: UInt64,
     endTimeUnixNano: UInt64,
     attributes: Attributes,
-    resource: Resource
+    resource: Resource,
+    statusDescription: String? = nil,
+    events: [SpanEventRecord] = [],
+    links: [SpanLinkRecord] = [],
+    droppedAttributesCount: UInt32 = 0,
+    droppedEventsCount: UInt32 = 0,
+    droppedLinksCount: UInt32 = 0
   ) {
     self.traceID = traceID
     self.spanID = spanID
@@ -277,10 +336,16 @@ public struct SpanRecord: Hashable, Sendable {
     self.name = name
     self.kind = kind
     self.status = status
+    self.statusDescription = statusDescription
     self.startTimeUnixNano = startTimeUnixNano
     self.endTimeUnixNano = endTimeUnixNano
     self.attributes = attributes
     self.resource = resource
+    self.events = events
+    self.links = links
+    self.droppedAttributesCount = droppedAttributesCount
+    self.droppedEventsCount = droppedEventsCount
+    self.droppedLinksCount = droppedLinksCount
   }
 
   public var durationNanoseconds: UInt64 {
@@ -321,20 +386,20 @@ public struct TraceSnapshot: Sendable {
 private extension AttributeValue {
   var stableSortKey: String {
     switch self {
-    case .string(let value):
+    case let .string(value):
       return "s:\(value)"
-    case .bool(let value):
+    case let .bool(value):
       return "b:\(value)"
-    case .int(let value):
+    case let .int(value):
       return "i:\(value)"
-    case .double(let value):
+    case let .double(value):
       return "d:\(value)"
-    case .bytes(let value):
+    case let .bytes(value):
       let hex = value.map { String(format: "%02x", $0) }.joined()
       return "x:\(hex)"
-    case .array(let values):
+    case let .array(values):
       return "a:[" + values.map { $0.stableSortKey }.joined(separator: ",") + "]"
-    case .kvlist(let values):
+    case let .kvlist(values):
       return "k:[" + values.map { $0.key }.joined(separator: ",") + "]"
     case .null:
       return "n:"

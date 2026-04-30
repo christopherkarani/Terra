@@ -103,7 +103,7 @@ pub const SpanStore = struct {
         var i: u32 = 0;
         while (i < self.capacity and drained < max) : (i += 1) {
             if (self.slots[i].ended) {
-                batch[drained] = self.slots[i].toRecord();
+                self.slots[i].writeRecord(&batch[drained]);
                 // Mark slot as reusable
                 self.slots[i] = Span{};
                 self.count -|= 1;

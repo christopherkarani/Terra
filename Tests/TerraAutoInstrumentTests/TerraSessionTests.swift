@@ -597,8 +597,12 @@ struct TerraSessionTests {
     }))
     #expect(span.attributes[Terra.Keys.Terra.thermalState]?.description == "critical")
     #expect(span.attributes["terra.coreml.error_type"]?.description == String(reflecting: InferenceFailure.self))
-    #expect(span.attributes["terra.coreml.input_summary"]?.description.contains("\"tokens\"") == true)
-    #expect(span.attributes["terra.coreml.input_summary"]?.description.contains("[1,16]") == true)
+    let inputSummary = span.attributes["terra.coreml.input_summary"]?.description ?? ""
+    #expect(!inputSummary.contains("\"tokens\""))
+    #expect(!inputSummary.contains("\"mask\""))
+    #expect(inputSummary.contains("sha256:"))
+    #expect(inputSummary.contains("[1,16]"))
+    #expect(inputSummary.count <= 2048)
   }
 
   @Test("TerraSession spans persist and reload as a complete session trace")

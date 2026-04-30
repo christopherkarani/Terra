@@ -92,5 +92,8 @@ class TerraHostContractTest {
     @Test
     fun `zero span context is invalid`() {
         assertFalse(SpanContext(0L, 0L, 0L).isValid)
+        assertFalse(SpanContext(0L, 1L, 0L).isValid)
+        assertFalse(SpanContext(0L, 0L, 1L).isValid)
+        assertTrue(SpanContext(0L, 1L, 1L).isValid)
     }
 }

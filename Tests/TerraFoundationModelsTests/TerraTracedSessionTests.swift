@@ -243,8 +243,15 @@ func foundationModelsProviderMetadata() async throws {
 @Suite("TerraFoundationModels stub", .serialized)
 struct TerraFoundationModelsStubTests {
 @Test("TerraFoundationModels stub compiles without FoundationModels framework")
-func foundationModelsNotAvailable() {
-  #expect(true)
+func foundationModelsNotAvailable() async {
+  let session = TerraTracedSession(modelIdentifier: "apple/stub-model")
+  let alias = Terra.TracedSession(modelIdentifier: "apple/alias-model")
+  #expect(session.modelIdentifier == "apple/stub-model")
+  #expect(alias.modelIdentifier == "apple/alias-model")
+
+  await #expect(throws: TerraFoundationModelsUnavailableError.self) {
+    _ = try await session.respond(to: "hello")
+  }
 }
 }
 

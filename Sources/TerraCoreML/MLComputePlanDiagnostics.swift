@@ -5,6 +5,10 @@ import OpenTelemetryApi
 import TerraCore
 import TerraSystemProfiler
 
+#if canImport(CryptoKit)
+import CryptoKit
+#endif
+
 package struct TerraCoreMLComputePlanOperationEstimate: Codable, Hashable, Sendable {
   package let identifier: String
   package let kind: String
@@ -13,6 +17,9 @@ package struct TerraCoreMLComputePlanOperationEstimate: Codable, Hashable, Senda
 }
 
 package struct TerraCoreMLComputePlanSummary: Codable, Hashable, Sendable, TelemetryAttributeConvertible {
+  package static let maxOperationTelemetryEntries = 64
+  package static let maxEstimatedOperationsTelemetryCharacters = 4_096
+
   package enum CaptureStatus: String, Codable, Hashable, Sendable {
     case captured
     case unsupportedOS = "unsupported_os"
@@ -39,6 +46,7 @@ package struct TerraCoreMLComputePlanSummary: Codable, Hashable, Sendable, Telem
       TerraCoreML.Keys.computePlanSupportedDevices: .string(supportedDevices.joined(separator: ",")),
       TerraCoreML.Keys.computePlanNodeCount: .int(nodeCount),
       TerraCoreML.Keys.computePlanCaptureDurationMs: .double(captureDurationMS),
+      TerraCoreML.Keys.computePlanOperationCount: .int(operationEstimates.count),
       Terra.Keys.Terra.canonicalANEProbeStatus: .string(probeStatus),
       Terra.Keys.Terra.canonicalANEProbeSource: .string(probeSource),
     ]
@@ -51,18 +59,69 @@ package struct TerraCoreMLComputePlanSummary: Codable, Hashable, Sendable, Telem
       ).telemetryAttributes
     ) { _, newValue in newValue }
 
-    if !operationEstimates.isEmpty,
-       let data = try? JSONEncoder().encode(operationEstimates),
-       let serialized = String(data: data, encoding: .utf8)
-    {
+    let operationTelemetry = Self.estimatedOperationsTelemetry(from: operationEstimates)
+    if let serialized = operationTelemetry.serialized {
       attributes[TerraCoreML.Keys.computePlanEstimatedOperations] = .string(serialized)
     }
+    attributes[TerraCoreML.Keys.computePlanEstimatedOperationsTruncated] = .bool(operationTelemetry.wasTruncated)
 
     if let errorType {
       attributes[TerraCoreML.Keys.computePlanErrorType] = .string(errorType)
     }
 
     return attributes
+  }
+
+  private struct OperationTelemetryEstimate: Codable {
+    let identifier: String
+    let kind: String
+    let preferredDevice: String
+    let supportedDevices: [String]
+  }
+
+  private static func estimatedOperationsTelemetry(
+    from estimates: [TerraCoreMLComputePlanOperationEstimate]
+  ) -> (serialized: String?, wasTruncated: Bool) {
+    guard !estimates.isEmpty else { return (nil, false) }
+
+    var telemetryEstimates = estimates
+      .prefix(maxOperationTelemetryEntries)
+      .map { estimate in
+        OperationTelemetryEstimate(
+          identifier: "sha256:\(stableHash(estimate.identifier).prefix(16))",
+          kind: String(estimate.kind.prefix(64)),
+          preferredDevice: estimate.preferredDevice,
+          supportedDevices: Array(estimate.supportedDevices.prefix(8))
+        )
+      }
+    var wasTruncated = estimates.count > telemetryEstimates.count
+
+    while !telemetryEstimates.isEmpty {
+      if let data = try? JSONEncoder().encode(telemetryEstimates),
+         let serialized = String(data: data, encoding: .utf8),
+         serialized.count <= maxEstimatedOperationsTelemetryCharacters
+      {
+        return (serialized, wasTruncated)
+      }
+      telemetryEstimates.removeLast()
+      wasTruncated = true
+    }
+
+    return (nil, true)
+  }
+
+  private static func stableHash(_ value: String) -> String {
+    #if canImport(CryptoKit)
+    let digest = SHA256.hash(data: Data(value.utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
+    #else
+    var hash: UInt64 = 0xcbf29ce484222325
+    for byte in value.utf8 {
+      hash ^= UInt64(byte)
+      hash &*= 0x100000001b3
+    }
+    return String(format: "%016llx", hash)
+    #endif
   }
 }
 

@@ -54,9 +54,9 @@ Terra's public surface is workflow-first:
 
 ### Platform Integrations
 
-- <doc:Integrations>
 - <doc:FoundationModels>
 - <doc:CoreML-Integration>
+- <doc:Profiler-Integration>
 
 ### Advanced
 

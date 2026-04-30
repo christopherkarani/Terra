@@ -444,8 +444,18 @@ def validate_constants(findings: list[Finding]) -> None:
         ),
         REDACTION_CONSTANTS,
         findings,
-        allow_missing={"sha256"},
     )
+
+
+def validate_header_parity(findings: list[Finding]) -> None:
+    canonical = read_text("zig-core/include/terra.h")
+    candidates = [
+        "Sources/CTerraBridge/include/terra.h",
+        "Vendor/libtera.xcframework/macos-arm64_x86_64/Headers/terra.h",
+    ]
+    for candidate in candidates:
+        if read_text(candidate) != canonical:
+            findings.append(Finding(f"{candidate}: header does not match zig-core/include/terra.h"))
 
 
 def feature_matrix() -> dict[str, dict[str, bool]]:
@@ -469,9 +479,49 @@ def validate_feature_matrix(findings: list[Finding]) -> dict[str, dict[str, bool
     return matrix
 
 
+def compact_source(text: str) -> str:
+    return re.sub(r"\s+", "", text)
+
+
+def validate_span_context_contract(findings: list[Finding]) -> None:
+    checks = [
+        ("Zig SpanContext validity", "zig-core/src/models.zig", "(self.trace_id_hi!=0orself.trace_id_lo!=0)andself.span_id!=0"),
+        ("Zig parent filtering", "zig-core/src/terra.zig", "if(ctx.isValid())ctxelsenull"),
+        ("Rust SpanContext validity", "terra-rust/src/lib.rs", "(self.trace_id_hi!=0||self.trace_id_lo!=0)&&self.span_id!=0"),
+        ("Rust parent filtering", "terra-rust/src/lib.rs", "parent.filter(|ctx|ctx.is_valid())"),
+        ("Python SpanContext validity", "terra-python/terra.py", "(self.trace_id_hi!=0orself.trace_id_lo!=0)andself.span_id!=0"),
+        ("Python parent filtering", "terra-python/terra.py", "parentisNoneornotparent.is_valid"),
+        ("Kotlin SpanContext validity", "terra-android/kotlin/dev/terra/SpanContext.kt", "(traceIdHi!=0L||traceIdLo!=0L)&&spanId!=0L"),
+        ("Kotlin parent filtering", "terra-android/kotlin/dev/terra/Terra.kt", "this?.takeIf{it.isValid}"),
+        ("C++ SpanContext validity", "terra-cpp/include/terra.hpp", "(trace_id_hi|trace_id_lo)!=0&&span_id!=0"),
+        ("C++ parent filtering", "terra-cpp/include/terra.hpp", "parent_ctx&&parent_ctx->is_valid()"),
+    ]
+    for label, relative_path, needle in checks:
+        if needle not in compact_source(read_text(relative_path)):
+            findings.append(Finding(f"{label}: expected strict trace+span validity contract in {relative_path}"))
+
+
 def require(condition: bool, findings: list[Finding], message: str) -> None:
     if not condition:
         findings.append(Finding(message))
+
+
+def schema_event_keys() -> set[str]:
+    path = ROOT / "Docs" / "telemetry-schema.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    registry = payload.get("registry", [])
+    if not isinstance(registry, list):
+        return set()
+    return {
+        entry["key"]
+        for entry in registry
+        if isinstance(entry, dict)
+        and isinstance(entry.get("key"), str)
+        and entry.get("type") == "event"
+    }
 
 
 def validate_attribute_map(path: Path, span_id: str, attributes: Any, findings: list[Finding]) -> None:
@@ -497,6 +547,8 @@ def validate_attribute_map(path: Path, span_id: str, attributes: Any, findings: 
             require(isinstance(value, expected_type), findings, f"{path}: attribute {key} value does not match {attr_type}")
             if attr_type == "int":
                 require(not isinstance(value, bool), findings, f"{path}: attribute {key} int value must not be bool")
+            if attr_type == "double":
+                require(not isinstance(value, bool), findings, f"{path}: attribute {key} double value must not be bool")
 
 
 def validate_golden_fixtures(findings: list[Finding]) -> None:
@@ -505,6 +557,7 @@ def validate_golden_fixtures(findings: list[Finding]) -> None:
     paths = sorted(fixture_dir.glob("*.json")) if fixture_dir.is_dir() else []
     require(bool(paths), findings, "Fixtures/trace-golden must contain at least one JSON fixture")
     required_kinds = {"workflow", "inference", "tool", "streaming"}
+    registered_event_keys = schema_event_keys()
 
     for path in paths:
         try:
@@ -559,6 +612,14 @@ def validate_golden_fixtures(findings: list[Finding]) -> None:
                     require(isinstance(event, dict), findings, f"{path}: span {span_id} event must be object")
                     if isinstance(event, dict):
                         require(isinstance(event.get("name"), str) and event.get("name"), findings, f"{path}: span {span_id} event needs a name")
+                        event_name = event.get("name")
+                        require(
+                            isinstance(event.get("time_unix_nano"), int) and not isinstance(event.get("time_unix_nano"), bool),
+                            findings,
+                            f"{path}: span {span_id} event {event_name!r} needs integer time_unix_nano",
+                        )
+                        if isinstance(event_name, str) and event_name.startswith("terra."):
+                            require(event_name in registered_event_keys, findings, f"{path}: event {event_name!r} is not registered in telemetry schema")
                         validate_attribute_map(path, str(span_id), event.get("attributes", {}), findings)
 
         for span in spans:
@@ -594,7 +655,9 @@ def print_matrix(matrix: dict[str, dict[str, bool]]) -> None:
 def main() -> int:
     findings: list[Finding] = []
     validate_constants(findings)
+    validate_header_parity(findings)
     matrix = validate_feature_matrix(findings)
+    validate_span_context_contract(findings)
     validate_golden_fixtures(findings)
 
     if "--matrix" in sys.argv:

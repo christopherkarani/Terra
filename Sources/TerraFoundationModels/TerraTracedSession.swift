@@ -280,7 +280,7 @@ public final class TerraTracedSession {
               let stream = self.backend.streamResponse(to: prompt)
               for try await chunk in stream {
                 try Task.checkCancellation()
-                streamScope.chunk(tokens: 0)
+                streamScope.chunk(tokens: Self.estimatedChunkTokenCount(chunk.content))
                 if let explicitCount = chunk.outputTokenCount {
                   streamScope.outputTokens(explicitCount)
                 }
@@ -308,6 +308,12 @@ public final class TerraTracedSession {
       call = call.includeContent()
     }
     return call
+  }
+
+  private static func estimatedChunkTokenCount(_ content: String) -> Int {
+    let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return 0 }
+    return max(1, trimmed.split(whereSeparator: \.isWhitespace).count)
   }
 
   private func emitGuardrailSpan(

@@ -211,7 +211,7 @@
       "owner_module": "Terra",
       "stability": "stable",
       "viewer_behavior": "privacy_badge",
-      "examples": ["metadata_only"],
+      "examples": ["never", "opt_in", "always"],
       "description": "Configured content capture policy for the span."
     },
     {
@@ -223,6 +223,16 @@
       "viewer_behavior": "privacy_badge",
       "examples": ["hash_hmac_sha256"],
       "description": "Effective redaction mode applied to privacy-sensitive content."
+    },
+    {
+      "key": "terra.redaction.applied",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "privacy_audit_detail",
+      "examples": [true],
+      "description": "Whether content redaction was applied to the span or event payload."
     },
     {
       "key": "terra.prompt.length",
@@ -1143,6 +1153,16 @@
       "viewer_behavior": "runtime_detail",
       "examples": [74.2],
       "description": "Llama KV cache usage percentage."
+    },
+    {
+      "key": "terra.workflow.name",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "workflow_summary",
+      "examples": ["assistant.turn"],
+      "description": "Human-readable workflow name used for root workflow spans."
     },
     {
       "key": "terra.workflow.id",

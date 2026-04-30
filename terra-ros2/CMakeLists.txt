@@ -6,9 +6,24 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(CURL REQUIRED)
 
-# Link libtera
+set(
+  TERRA_LIB_PATH
+  "${CMAKE_CURRENT_SOURCE_DIR}/../zig-core/zig-out/lib/libterra.a"
+  CACHE FILEPATH "Path to libterra.a produced by `cd ../zig-core && zig build`"
+)
+
+if(NOT EXISTS "${TERRA_LIB_PATH}")
+  message(
+    FATAL_ERROR
+    "Missing libterra.a at ${TERRA_LIB_PATH}. "
+    "From a clean checkout, run `cd ../zig-core && zig build` before configuring terra-ros2, "
+    "or pass -DTERRA_LIB_PATH=/absolute/path/to/libterra.a."
+  )
+endif()
+
+# Link libterra
 add_library(terra STATIC IMPORTED)
-set_target_properties(terra PROPERTIES IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/../zig-core/zig-out/lib/libtera.a")
+set_target_properties(terra PROPERTIES IMPORTED_LOCATION "${TERRA_LIB_PATH}")
 target_include_directories(terra INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/../zig-core/include")
 
 add_library(terra_ros2_bridge_core src/terra_ros2_bridge_core.cpp)

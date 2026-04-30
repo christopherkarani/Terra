@@ -33,7 +33,7 @@ run_if_present() {
 
 section "Repository hygiene"
 bash Scripts/validate_no_legacy_refs.sh
-bash -n Scripts/validate.sh Scripts/validate-swiftpm.sh Scripts/validate_no_legacy_refs.sh
+bash -n Scripts/validate.sh Scripts/validate-swiftpm.sh Scripts/validate_no_legacy_refs.sh Scripts/build-libtera-android.sh
 python3 Scripts/validate-doc-snippets.py
 
 run_if_present "Telemetry schema" "Scripts/validate-telemetry-schema.py"
@@ -41,6 +41,7 @@ run_if_present "Binding conformance" "Scripts/validate-bindings.py"
 
 section "Python bindings"
 python3 -m py_compile terra-python/terra.py
+python3 -m unittest discover -s terra-python -p 'test*.py'
 
 section "Zig core"
 (
@@ -48,10 +49,20 @@ section "Zig core"
   zig build test --summary all
 )
 
+section "C++ bindings"
+cmake -S terra-cpp -B .build/terra-cpp \
+  -DTERRA_LIB_PATH="$ROOT/zig-core/zig-out/lib/libterra.a"
+cmake --build .build/terra-cpp
+(
+  cd .build/terra-cpp
+  ctest --output-on-failure
+)
+
 section "Rust bindings"
 (
   cd terra-rust
-  cargo test -- --test-threads=1
+  TERRA_LIB_DIR="$ROOT/zig-core/zig-out/lib" cargo test -- --test-threads=1
+  TERRA_LIB_DIR="$ROOT/zig-core/zig-out/lib" cargo package --allow-dirty
 )
 
 if [[ "$MODE" != "quick" ]]; then
@@ -59,11 +70,15 @@ if [[ "$MODE" != "quick" ]]; then
   Scripts/validate-swiftpm.sh "$@"
 else
   section "SwiftPM manifest"
-  swift package describe >/dev/null
+  Scripts/validate-swiftpm.sh --manifest-only
 fi
 
 section "Android bindings"
-if command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then
+if [[ "$MODE" == "quick" ]]; then
+  skip "Android Gradle checks are skipped in quick mode"
+elif command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then
+  section "Android native libraries"
+  bash Scripts/build-libtera-android.sh
   (
     cd terra-android
     ./gradlew test assembleRelease

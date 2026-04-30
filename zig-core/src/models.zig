@@ -6,6 +6,30 @@ const Allocator = std.mem.Allocator;
 const build_options = @import("build_options");
 
 pub const MAX_SPAN_NAME = build_options.TERRA_MAX_SPAN_NAME;
+pub const MAX_SPAN_STRING_STORAGE = 8192;
+
+// Fixed storage used by Span and SpanRecord to keep string slices self-owned.
+// Mutation APIs are void-returning, so exhausted storage drops the whole field
+// instead of retaining a caller-owned temporary buffer.
+pub const StringStorage = struct {
+    buf: [MAX_SPAN_STRING_STORAGE]u8 = [_]u8{0} ** MAX_SPAN_STRING_STORAGE,
+    len: usize = 0,
+
+    pub fn reset(self: *StringStorage) void {
+        self.len = 0;
+    }
+
+    pub fn copy(self: *StringStorage, value: []const u8) ?[]const u8 {
+        if (self.len + value.len > self.buf.len) return null;
+        const start = self.len;
+        const end = start + value.len;
+        if (value.len > 0) {
+            @memcpy(self.buf[start..end], value);
+        }
+        self.len = end;
+        return self.buf[start..end];
+    }
+};
 
 // ── TraceID ─────────────────────────────────────────────────────────────
 pub const TraceID = struct {
@@ -78,7 +102,7 @@ pub const SpanContext = extern struct {
     pub const invalid = SpanContext{};
 
     pub fn isValid(self: SpanContext) bool {
-        return !(self.trace_id_hi == 0 and self.trace_id_lo == 0 and self.span_id == 0);
+        return (self.trace_id_hi != 0 or self.trace_id_lo != 0) and self.span_id != 0;
     }
 
     pub fn fromIDs(trace_id: TraceID, span_id: SpanID) SpanContext {
@@ -201,6 +225,8 @@ pub const SpanRecord = struct {
     events: [8]SpanEvent = undefined,
     event_count: u8 = 0,
 
+    string_storage: StringStorage = .{},
+
     pub fn nameSlice(self: *const SpanRecord) []const u8 {
         return self.name[0..self.name_len];
     }
@@ -209,6 +235,56 @@ pub const SpanRecord = struct {
         const copy_len = @min(n.len, MAX_SPAN_NAME);
         @memcpy(self.name[0..copy_len], n[0..copy_len]);
         self.name_len = @intCast(copy_len);
+    }
+
+    pub fn appendAttributeOwned(self: *SpanRecord, attr: Attribute) bool {
+        const owned = self.ownAttribute(attr) orelse return false;
+        return self.attributes.append(owned);
+    }
+
+    pub fn appendEventOwned(self: *SpanRecord, event: SpanEvent) bool {
+        if (self.event_count >= self.events.len) return false;
+        const owned_name = self.string_storage.copy(event.name) orelse return false;
+        var owned_event = SpanEvent{
+            .name = owned_name,
+            .timestamp_ns = event.timestamp_ns,
+            .attributes = .{},
+        };
+        for (event.attributes.slice()) |attr| {
+            const owned_attr = self.ownAttribute(attr) orelse return false;
+            _ = owned_event.attributes.append(owned_attr);
+        }
+        self.events[self.event_count] = owned_event;
+        self.event_count += 1;
+        return true;
+    }
+
+    pub fn copyFrom(self: *SpanRecord, source: *const SpanRecord) void {
+        self.* = SpanRecord{};
+        self.trace_id = source.trace_id;
+        self.span_id = source.span_id;
+        self.parent_span_id = source.parent_span_id;
+        self.setName(source.nameSlice());
+        self.kind = source.kind;
+        self.status = source.status;
+        self.start_time_ns = source.start_time_ns;
+        self.end_time_ns = source.end_time_ns;
+        self.include_content = source.include_content;
+        self.content_policy_at_creation = source.content_policy_at_creation;
+        if (source.status_description_len > 0) {
+            @memcpy(
+                self.status_description_buf[0..source.status_description_len],
+                source.status_description_buf[0..source.status_description_len],
+            );
+            self.status_description_len = source.status_description_len;
+        }
+        for (source.attributes.slice()) |attr| {
+            _ = self.appendAttributeOwned(attr);
+        }
+        var i: usize = 0;
+        while (i < source.event_count) : (i += 1) {
+            _ = self.appendEventOwned(source.events[i]);
+        }
     }
 
     pub fn statusDescriptionSlice(self: *const SpanRecord) ?[]const u8 {
@@ -222,7 +298,26 @@ pub const SpanRecord = struct {
         }
         return 0;
     }
+
+    fn ownAttribute(self: *SpanRecord, attr: Attribute) ?Attribute {
+        const owned_key = self.string_storage.copy(attr.key) orelse return null;
+        return .{
+            .key = owned_key,
+            .value = tryOwnValue(&self.string_storage, attr.value) orelse return null,
+        };
+    }
 };
+
+pub fn tryOwnValue(storage: *StringStorage, value: AttributeValue) ?AttributeValue {
+    return switch (value) {
+        .string => |s| .{ .string = storage.copy(s) orelse return null },
+        .bytes => |b| .{ .bytes = storage.copy(b) orelse return null },
+        .bool_val => |v| .{ .bool_val = v },
+        .int_val => |v| .{ .int_val = v },
+        .double_val => |v| .{ .double_val = v },
+        .null_val => .{ .null_val = {} },
+    };
+}
 
 // ── Tests ───────────────────────────────────────────────────────────────
 test "TraceID.generate produces unique non-zero IDs" {
@@ -255,6 +350,8 @@ test "SpanID.generate produces unique non-zero IDs" {
 test "SpanContext flat layout and isValid" {
     const ctx = SpanContext.invalid;
     try std.testing.expect(!ctx.isValid());
+    try std.testing.expect(!(SpanContext{ .trace_id_hi = 1, .trace_id_lo = 0, .span_id = 0 }).isValid());
+    try std.testing.expect(!(SpanContext{ .trace_id_hi = 0, .trace_id_lo = 0, .span_id = 7 }).isValid());
 
     const valid = SpanContext.fromIDs(
         TraceID{ .hi = 1, .lo = 2 },

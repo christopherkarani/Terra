@@ -15,6 +15,12 @@ import CTerraANEBridge
 /// Use ``ANEProfilerSession`` to capture metrics over a specific time window, or
 /// ``captureMetrics()`` for one-shot metric collection.
 public enum ANEHardwareProfiler {
+  public enum Mode: String, Sendable, Equatable {
+    case unavailable
+    case probeOnly = "probe_only"
+    case collecting
+  }
+
   private static let state = ProfilerInstallState<ANEHardwareProfiler>()
 
   /// Returns `true` if ANE hardware is available on this device.
@@ -36,6 +42,17 @@ public enum ANEHardwareProfiler {
   /// it remains false until concrete metric-collection swizzling is installed.
   public static var isCollecting: Bool {
     terra_ane_is_collecting()
+  }
+
+  /// The current ANE profiler capability mode.
+  ///
+  /// `probeOnly` means Terra can detect the private ANE probe surface but does
+  /// not have metric-collection hooks installed. Treat this as availability
+  /// evidence, not measured hardware telemetry.
+  public static var mode: Mode {
+    if isCollecting { return .collecting }
+    if isAvailable { return .probeOnly }
+    return .unavailable
   }
 
   /// Installs the ANE profiling hooks.

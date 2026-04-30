@@ -38,6 +38,10 @@ public enum TerraMetalProfiler {
     state.isInstalled
   }
 
+  package static func reset() {
+    state.reset()
+  }
+
   /// Creates a dictionary of Metal-related telemetry attributes.
   ///
   /// - Parameters:
@@ -63,5 +67,21 @@ public enum TerraMetalProfiler {
       attributes["metal.compute_time_ms"] = .double(computeTimeMS)
     }
     return attributes
+  }
+
+  /// Creates telemetry for Core ML GPU route estimates.
+  ///
+  /// These attributes deliberately do not populate `metal.compute_time_ms`,
+  /// because Core ML prediction wall time is route evidence, not measured Metal
+  /// kernel time.
+  public static func estimatedCoreMLRouteAttributes(
+    predictionDurationMS: Double,
+    route: String
+  ) -> [String: AttributeValue] {
+    [
+      "terra.coreml.prediction.estimated_gpu_wall_time_ms": .double(predictionDurationMS),
+      "terra.coreml.prediction.estimated_gpu_wall_time_source": .string("coreml_prediction_wall_time"),
+      "terra.coreml.prediction.estimated_gpu_route": .string(route),
+    ]
   }
 }

@@ -7,6 +7,7 @@ public enum EspressoLogCapture {
   private static let lock = NSLock()
   private static var process: Process?
   private static var pipe: Pipe?
+  private static var outputBuffer: EspressoPipeOutputBuffer?
 
   public static func start() {
     lock.lock()
@@ -25,6 +26,15 @@ public enum EspressoLogCapture {
     ]
 
     let outputPipe = Pipe()
+    let buffer = EspressoPipeOutputBuffer()
+    outputPipe.fileHandleForReading.readabilityHandler = { handle in
+      let data = handle.availableData
+      guard !data.isEmpty else {
+        handle.readabilityHandler = nil
+        return
+      }
+      buffer.append(data)
+    }
     proc.standardOutput = outputPipe
     proc.standardError = FileHandle.nullDevice
 
@@ -32,7 +42,9 @@ public enum EspressoLogCapture {
       try proc.run()
       process = proc
       pipe = outputPipe
+      outputBuffer = buffer
     } catch {
+      outputPipe.fileHandleForReading.readabilityHandler = nil
       // Failed to start — ignore, capture will return empty summary
     }
   }
@@ -41,21 +53,43 @@ public enum EspressoLogCapture {
     lock.lock()
     let proc = process
     let outputPipe = pipe
+    let buffer = outputBuffer
     process = nil
     pipe = nil
+    outputBuffer = nil
     lock.unlock()
 
-    guard let proc, let outputPipe else {
+    guard let proc, let outputPipe, let buffer else {
       return EspressoLogParser.summarize([])
     }
 
     proc.terminate()
     proc.waitUntilExit()
 
-    let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-    let output = String(data: data, encoding: .utf8) ?? ""
+    outputPipe.fileHandleForReading.readabilityHandler = nil
+    buffer.append(outputPipe.fileHandleForReading.readDataToEndOfFile())
+    let output = buffer.string()
     let entries = EspressoLogParser.parse(output)
     return EspressoLogParser.summarize(entries)
+  }
+}
+
+private final class EspressoPipeOutputBuffer: @unchecked Sendable {
+  private let lock = NSLock()
+  private var data = Data()
+
+  func append(_ chunk: Data) {
+    guard !chunk.isEmpty else { return }
+    lock.lock()
+    data.append(chunk)
+    lock.unlock()
+  }
+
+  func string() -> String {
+    lock.lock()
+    let snapshot = data
+    lock.unlock()
+    return String(data: snapshot, encoding: .utf8) ?? ""
   }
 }
 #endif

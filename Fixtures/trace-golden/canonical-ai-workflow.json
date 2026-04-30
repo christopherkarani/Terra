@@ -204,7 +204,7 @@
       },
       "events": [
         {
-          "name": "terra.stream.first_token",
+          "name": "terra.first_token",
           "time_unix_nano": 1700000000518500000,
           "attributes": {}
         },

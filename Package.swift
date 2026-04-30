@@ -26,6 +26,7 @@ let package = Package(
     .library(name: "TerraANEProfiler", targets: ["TerraANEProfiler"]),
     .library(name: "TerraTracedMacro", targets: ["TerraTracedMacro"]),
     .executable(name: "TerraSample", targets: ["TerraSample"]),
+    .executable(name: "TerraAutoInstrumentExample", targets: ["TerraAutoInstrumentExample"]),
     .executable(name: "TerraSDKBenchmarks", targets: ["TerraSDKBenchmarks"])
   ],
   dependencies: [
@@ -336,6 +337,14 @@ let package = Package(
       path: "Tests/TerraFoundationModelsTests",
     ),
     .testTarget(
+      name: "TerraAccelerateTests",
+      dependencies: [
+        "TerraAccelerate",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+      ],
+      path: "Tests/TerraAccelerateTests",
+    ),
+    .testTarget(
       name: "TerraTracedMacroTests",
       dependencies: [
         "TerraTracedMacroPlugin",
@@ -355,6 +364,11 @@ let package = Package(
       name: "TerraSample",
       dependencies: ["Terra"],
       path: "Examples/Terra Sample"
+    ),
+    .executableTarget(
+      name: "TerraAutoInstrumentExample",
+      dependencies: ["Terra"],
+      path: "Examples/Terra AutoInstrument"
     )
   ]
 )

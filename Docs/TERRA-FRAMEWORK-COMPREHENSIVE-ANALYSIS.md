@@ -151,7 +151,7 @@ enum RedactionStrategy: Sendable, Hashable {
 
 **Unique Privacy Features**:
 - Per-request privacy override via `.capture(.includeContent)`
-- HMAC-SHA256 provides reversible anonymization (key stored)
+- HMAC-SHA256 provides keyed pseudonymous hashing; it is not reversible
 - Legacy SHA256 for compatibility with existing systems
 - Content dropped by default - explicit opt-in required
 
@@ -300,7 +300,7 @@ public actor TraceStore {
 
 **Key Features**:
 - Deduplication by (traceID, spanID)
-- LRU eviction when exceeding `maxSpans`
+- Oldest-inserted span eviction when exceeding `maxSpans`
 - Cached snapshots with dirty tracking
 - Efficient grouping by traceID
 
@@ -682,7 +682,7 @@ TerraTraceKit
 ## Unique Innovations
 
 ### 1. Privacy-First Observability
-Content is dropped by default. Users must explicitly opt-in. Even when capturing, HMAC-SHA256 provides reversible anonymization.
+Content is dropped by default. Users must explicitly opt in. Even when capturing, HMAC-SHA256 provides keyed pseudonymous hashing, not reversible anonymization.
 
 ### 2. Streaming Telemetry
 First-token time, tokens-per-second, chunk counts tracked automatically for streaming responses.

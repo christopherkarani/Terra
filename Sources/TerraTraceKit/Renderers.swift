@@ -64,7 +64,8 @@ public struct TreeRenderer: Sendable {
     for span in spans {
       if let parentID = span.parentSpanID,
          parentID != span.spanID,
-         spansByID[parentID] != nil {
+         spansByID[parentID] != nil
+      {
         childrenByParent[parentID, default: []].append(span)
       } else {
         roots.append(span)
@@ -74,10 +75,21 @@ public struct TreeRenderer: Sendable {
     let orderedRoots = roots.sorted(by: spanTreeSort)
     var lines: [String] = []
     lines.reserveCapacity(orderedRoots.count)
+    var visited = Set<SpanID>()
 
     for (index, root) in orderedRoots.enumerated() {
+      guard !visited.contains(root.spanID) else { continue }
       let isLast = index == orderedRoots.count - 1
-      lines.append(contentsOf: renderNode(root, prefix: "", isLast: isLast, childrenByParent: childrenByParent))
+      lines.append(contentsOf: renderNode(root, prefix: "", isLast: isLast, childrenByParent: childrenByParent, visited: &visited))
+    }
+
+    if lines.isEmpty {
+      let fallbackRoots = spans.sorted(by: spanTreeSort)
+      for (index, root) in fallbackRoots.enumerated() {
+        guard !visited.contains(root.spanID) else { continue }
+        let isLast = index == fallbackRoots.count - 1
+        lines.append(contentsOf: renderNode(root, prefix: "", isLast: isLast, childrenByParent: childrenByParent, visited: &visited))
+      }
     }
 
     return lines
@@ -87,19 +99,26 @@ public struct TreeRenderer: Sendable {
     _ span: SpanRecord,
     prefix: String,
     isLast: Bool,
-    childrenByParent: [SpanID: [SpanRecord]]
+    childrenByParent: [SpanID: [SpanRecord]],
+    visited: inout Set<SpanID>
   ) -> [String] {
     let branch = isLast ? "\\-- " : "|-- "
     let line = prefix + branch + treeLine(span)
 
     var lines: [String] = [line]
+    visited.insert(span.spanID)
 
     let childPrefix = prefix + (isLast ? "    " : "|   ")
     let children = (childrenByParent[span.spanID] ?? []).sorted(by: spanTreeSort)
 
     for (index, child) in children.enumerated() {
       let childIsLast = index == children.count - 1
-      lines.append(contentsOf: renderNode(child, prefix: childPrefix, isLast: childIsLast, childrenByParent: childrenByParent))
+      if visited.contains(child.spanID) {
+        let branch = childIsLast ? "\\-- " : "|-- "
+        lines.append(childPrefix + branch + treeLine(child) + " terra.trace.cycle=true")
+        continue
+      }
+      lines.append(contentsOf: renderNode(child, prefix: childPrefix, isLast: childIsLast, childrenByParent: childrenByParent, visited: &visited))
     }
 
     return lines
@@ -148,7 +167,13 @@ private func renderAttributes(_ span: SpanRecord) -> [String] {
 
 private func sortedAttributePairs(_ attributes: Attributes) -> [(String, String)] {
   // Attributes is already sorted on init — no need to re-sort
-  attributes.items.map { ($0.key, String(describing: $0.value)) }
+  attributes.items.map { attribute in
+    let value = TelemetryPrivacy.displayValue(
+      forKey: attribute.key,
+      value: String(describing: attribute.value)
+    )
+    return (attribute.key, value)
+  }
 }
 
 private func shortID<T>(_ id: T, length: Int = 8) -> String {

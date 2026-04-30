@@ -218,7 +218,10 @@ public enum CoreMLInstrumentation {
       let durationMS = CoreMLInstrumentation.elapsedMs(since: startedAt)
       span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMS))
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
-        span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
+        span.setAttributes(TerraMetalProfiler.estimatedCoreMLRouteAttributes(
+          predictionDurationMS: durationMS,
+          route: "gpu"
+        ))
       }
       CoreMLInstrumentation.attachAssociatedDiagnostics(to: span, model: model)
       let endMemory = TerraSystemProfiler.isInstalled
@@ -279,7 +282,10 @@ public enum CoreMLInstrumentation {
       let durationMS = CoreMLInstrumentation.elapsedMs(since: startedAt)
       span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMS))
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
-        span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
+        span.setAttributes(TerraMetalProfiler.estimatedCoreMLRouteAttributes(
+          predictionDurationMS: durationMS,
+          route: "gpu"
+        ))
       }
       CoreMLInstrumentation.attachAssociatedDiagnostics(to: span, model: model)
       let endMemory = TerraSystemProfiler.isInstalled
@@ -399,7 +405,7 @@ public enum CoreMLInstrumentation {
     let semaphore = DispatchSemaphore(value: 0)
     let summaryBox = LockedSummaryBox()
 
-    Task.detached(priority: .utility) {
+    let task = Task.detached(priority: .utility) {
       let captured = await computePlanSummaryCapture(url, configuration)
       summaryBox.store(captured)
       semaphore.signal()
@@ -409,6 +415,7 @@ public enum CoreMLInstrumentation {
       timeout: .now() + .nanoseconds(Int(synchronousCaptureTimeoutNanoseconds))
     )
     guard waitResult == .success, let summary = summaryBox.load() else {
+      task.cancel()
       return makeTimedOutSummary()
     }
     return summary

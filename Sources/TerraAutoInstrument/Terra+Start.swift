@@ -146,15 +146,71 @@ extension Terra {
       /// Good balance of insight with minimal overhead. Suitable for most diagnostic scenarios.
       public static let standard: Profiling = [.memory, .thermal]
 
-      /// Extended profiling: memory, thermal, Metal, and power.
+      /// Extended profiling: memory, thermal, and Metal.
       ///
-      /// Provides comprehensive hardware visibility for detailed performance investigations.
-      public static let extended: Profiling = [.memory, .thermal, .metal, .power]
+      /// Provides broad hardware visibility without enabling profilers that require
+      /// separate opt-in targets or elevated privileges.
+      public static let extended: Profiling = [.memory, .thermal, .metal]
 
-      /// All profiling features enabled.
+      /// All profiling features that the Terra umbrella can install automatically.
       ///
-      /// Maximum data collection. May have meaningful performance overhead.
-      public static let all: Profiling      = [.memory, .thermal, .metal, .power, .espresso, .ane]
+      /// `.power` and `.ane` remain explicit opt-in flags because they require
+      /// importing `TerraPowerProfiler` or `TerraANEProfiler` directly.
+      public static let all: Profiling      = [.memory, .thermal, .metal, .espresso]
+    }
+
+    /// Startup status for an individual profiler request.
+    public enum ProfilerStatus: String, Sendable, Equatable {
+      case notRequested = "not_requested"
+      case installed
+      case unavailable
+      case requiresOptInTarget = "requires_opt_in_target"
+    }
+
+    /// Diagnostics for an individual profiler request.
+    public struct ProfilerDiagnostic: Sendable, Equatable {
+      public let status: ProfilerStatus
+      public let message: String?
+
+      public init(status: ProfilerStatus, message: String? = nil) {
+        self.status = status
+        self.message = message
+      }
+    }
+
+    /// Diagnostics for profiler installation intent resolved by `Terra.start`.
+    public struct ProfilingDiagnostics: Sendable, Equatable {
+      public let memory: ProfilerDiagnostic
+      public let metal: ProfilerDiagnostic
+      public let thermal: ProfilerDiagnostic
+      public let power: ProfilerDiagnostic
+      public let espresso: ProfilerDiagnostic
+      public let ane: ProfilerDiagnostic
+
+      public init(
+        memory: ProfilerDiagnostic,
+        metal: ProfilerDiagnostic,
+        thermal: ProfilerDiagnostic,
+        power: ProfilerDiagnostic,
+        espresso: ProfilerDiagnostic,
+        ane: ProfilerDiagnostic
+      ) {
+        self.memory = memory
+        self.metal = metal
+        self.thermal = thermal
+        self.power = power
+        self.espresso = espresso
+        self.ane = ane
+      }
+
+      public static let none = ProfilingDiagnostics(
+        memory: .init(status: .notRequested),
+        metal: .init(status: .notRequested),
+        thermal: .init(status: .notRequested),
+        power: .init(status: .notRequested),
+        espresso: .init(status: .notRequested),
+        ane: .init(status: .notRequested)
+      )
     }
 
     /// Feature flags enabling specific Terra instrumentation modules.
@@ -379,6 +435,22 @@ extension Terra {
     try await start(config)
   }
 
+  /// Returns the profiler startup diagnostics Terra would report for a configuration.
+  ///
+  /// This is useful before calling `start` when a UI or command-line tool wants to
+  /// explain why `.power` or `.ane` requests require direct installation of their
+  /// opt-in profiler targets.
+  public static func profilingDiagnostics(for config: Configuration) -> Configuration.ProfilingDiagnostics {
+    _profilingDiagnostics(for: config.asAutoInstrumentConfiguration().profiling)
+  }
+
+  /// Diagnostics from the most recent `Terra.start` profiler resolution.
+  public static var lastProfilingDiagnostics: Configuration.ProfilingDiagnostics {
+    _profilingDiagnosticsLock.lock()
+    defer { _profilingDiagnosticsLock.unlock() }
+    return _lastProfilingDiagnostics
+  }
+
   static func _performStart(_ config: _ResolvedStartConfiguration) throws {
     let bundleInfo = Bundle.main.infoDictionary ?? [:]
     let bundleIdentifier = Bundle.main.bundleIdentifier
@@ -394,7 +466,10 @@ extension Terra {
     let serviceName = openTelemetryConfig.serviceName
     let serviceVersion = openTelemetryConfig.serviceVersion
 
-    // 1. Set up telemetry providers.
+    // 1. Install privacy before any provider setup can emit Terra telemetry.
+    install(.init(privacy: config.privacy, registerProvidersAsGlobal: false))
+
+    // 2. Set up telemetry providers.
     // Use the Zig tracer path only when the resolved configuration can be
     // honored there without silently dropping lifecycle or persistence behavior.
     #if canImport(CTerraBridge)
@@ -412,9 +487,6 @@ extension Terra {
     #else
     try installOpenTelemetry(openTelemetryConfig)
     #endif
-
-    // 2. Install Terra runtime (privacy, providers)
-    install(.init(privacy: config.privacy))
 
     // 3. Enable CoreML auto-instrumentation
     CoreMLInstrumentation.install(.init(
@@ -441,6 +513,7 @@ extension Terra {
       EspressoLogCapture.start()
     }
     #endif
+    _setLastProfilingDiagnostics(_profilingDiagnostics(for: config.profiling))
 
     // 4. Enable HTTP AI API auto-instrumentation (and optional OpenClaw gateway coverage)
     var monitoredHosts = config.aiAPIHosts
@@ -482,6 +555,60 @@ extension Terra {
     CoreMLInstrumentation.install(.init(enabled: false, excludedModels: []))
     HTTPAIInstrumentation.install(hosts: [], openClawGatewayHosts: [], openClawMode: "disabled")
     OpenClawDiagnosticsExporter.configure(configuration: .disabled)
+    TerraSystemProfiler.reset()
+    TerraMetalProfiler.reset()
+    ThermalMonitor.reset()
+    #if os(macOS)
+    _ = EspressoLogCapture.stop()
+    #endif
+    _setLastProfilingDiagnostics(.none)
+  }
+
+  private static let _profilingDiagnosticsLock = NSLock()
+  private static var _lastProfilingDiagnostics = Configuration.ProfilingDiagnostics.none
+
+  private static func _setLastProfilingDiagnostics(_ diagnostics: Configuration.ProfilingDiagnostics) {
+    _profilingDiagnosticsLock.lock()
+    _lastProfilingDiagnostics = diagnostics
+    _profilingDiagnosticsLock.unlock()
+  }
+
+  private static func _profilingDiagnostics(
+    for settings: _ProfilingSettings
+  ) -> Configuration.ProfilingDiagnostics {
+    Configuration.ProfilingDiagnostics(
+      memory: settings.enableMemoryProfiler
+        ? .init(status: .installed, message: "TerraSystemProfiler memory hooks installed.")
+        : .init(status: .notRequested),
+      metal: settings.enableMetalProfiler
+        ? .init(status: .installed, message: "TerraMetalProfiler hooks installed.")
+        : .init(status: .notRequested),
+      thermal: settings.enableThermalMonitor
+        ? .init(status: .installed, message: "ThermalMonitor hooks installed.")
+        : .init(status: .notRequested),
+      power: settings.enablePowerProfiler
+        ? .init(
+          status: .requiresOptInTarget,
+          message: "Import TerraPowerProfiler and call PowerMetricsCollector.startWithStatus(...) directly; Terra.start does not launch elevated powermetrics collection."
+        )
+        : .init(status: .notRequested),
+      espresso: _espressoDiagnostic(requested: settings.enableEspressoCapture),
+      ane: settings.enableANEProfiler
+        ? .init(
+          status: .requiresOptInTarget,
+          message: "Import TerraANEProfiler and inspect ANEHardwareProfiler.mode; Terra.start does not install private ANE probe hooks from the umbrella target."
+        )
+        : .init(status: .notRequested)
+    )
+  }
+
+  private static func _espressoDiagnostic(requested: Bool) -> Configuration.ProfilerDiagnostic {
+    guard requested else { return .init(status: .notRequested) }
+    #if os(macOS)
+    return .init(status: .installed, message: "Espresso log capture requested on macOS.")
+    #else
+    return .init(status: .unavailable, message: "Espresso log capture is only available on macOS.")
+    #endif
   }
 
   /// Returns the minimal `Features` set used by TerraSession for auto-start.

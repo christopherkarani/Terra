@@ -39,6 +39,9 @@ public enum PowerMetricsCollector {
   private static let lock = NSLock()
   private static var process: Process?
   private static var pipe: Pipe?
+  private static var errorPipe: Pipe?
+  private static var outputBuffer: PipeOutputBuffer?
+  private static var errorBuffer: PipeOutputBuffer?
   private static var lastStartResultValue: StartResult?
 
   private static let _isAvailable: Bool = FileManager.default.isExecutableFile(atPath: "/usr/bin/powermetrics")
@@ -103,16 +106,40 @@ public enum PowerMetricsCollector {
     ]
 
     let outputPipe = Pipe()
+    let stderrPipe = Pipe()
+    let stdoutBuffer = PipeOutputBuffer()
+    let stderrBuffer = PipeOutputBuffer()
+    outputPipe.fileHandleForReading.readabilityHandler = { handle in
+      let data = handle.availableData
+      guard !data.isEmpty else {
+        handle.readabilityHandler = nil
+        return
+      }
+      stdoutBuffer.append(data)
+    }
+    stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+      let data = handle.availableData
+      guard !data.isEmpty else {
+        handle.readabilityHandler = nil
+        return
+      }
+      stderrBuffer.append(data)
+    }
     proc.standardOutput = outputPipe
-    proc.standardError = FileHandle.nullDevice
+    proc.standardError = stderrPipe
 
     do {
       try proc.run()
       process = proc
       pipe = outputPipe
+      errorPipe = stderrPipe
+      outputBuffer = stdoutBuffer
+      errorBuffer = stderrBuffer
       lastStartResultValue = .started
       return .started
     } catch {
+      outputPipe.fileHandleForReading.readabilityHandler = nil
+      stderrPipe.fileHandleForReading.readabilityHandler = nil
       let result = StartResult.failed(error.localizedDescription)
       lastStartResultValue = result
       return result
@@ -130,30 +157,104 @@ public enum PowerMetricsCollector {
     lock.lock()
     let proc = process
     let outputPipe = pipe
+    let stderrPipe = errorPipe
+    let stdoutBuffer = outputBuffer
+    let stderrBuffer = errorBuffer
     process = nil
     pipe = nil
+    errorPipe = nil
+    outputBuffer = nil
+    errorBuffer = nil
     lock.unlock()
 
-    guard let proc, let outputPipe else {
-      return PowerSummary.from([])
+    guard let proc, let outputPipe, let stderrPipe, let stdoutBuffer, let stderrBuffer else {
+      return PowerSummary.from([], status: .notStarted)
     }
 
     proc.terminate()
     proc.waitUntilExit()
 
-    let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-    let output = String(data: data, encoding: .utf8) ?? ""
+    outputPipe.fileHandleForReading.readabilityHandler = nil
+    stderrPipe.fileHandleForReading.readabilityHandler = nil
+    stdoutBuffer.append(outputPipe.fileHandleForReading.readDataToEndOfFile())
+    stderrBuffer.append(stderrPipe.fileHandleForReading.readDataToEndOfFile())
+    let output = stdoutBuffer.string()
+    let stderr = stderrBuffer.string()
 
+    return summaryForTesting(
+      stdout: output,
+      stderr: stderr,
+      terminationStatus: proc.terminationStatus
+    )
+  }
+
+  package static func summaryForTesting(
+    stdout: String,
+    stderr: String,
+    terminationStatus: Int32
+  ) -> PowerSummary {
     // powermetrics outputs multiple samples separated by "***"
     var samples: [PowerSample] = []
-    let sections = output.components(separatedBy: "***")
+    let sections = stdout.components(separatedBy: "***")
     for section in sections {
       if let sample = PowerMetricsParser.parse(section) {
         samples.append(sample)
       }
     }
 
-    return PowerSummary.from(samples)
+    guard samples.isEmpty else {
+      return PowerSummary.from(samples, status: .completed)
+    }
+
+    let diagnostic = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+    if looksLikePermissionFailure(diagnostic) {
+      return PowerSummary.from(
+        [],
+        status: .permissionDenied,
+        diagnosticMessage: diagnostic.isEmpty ? nil : diagnostic
+      )
+    }
+
+    if terminationStatus != 0 {
+      return PowerSummary.from(
+        [],
+        status: .failed,
+        diagnosticMessage: diagnostic.isEmpty ? "powermetrics exited with status \(terminationStatus)" : diagnostic
+      )
+    }
+
+    return PowerSummary.from(
+      [],
+      status: .noSamples,
+      diagnosticMessage: diagnostic.isEmpty ? nil : diagnostic
+    )
+  }
+
+  private static func looksLikePermissionFailure(_ stderr: String) -> Bool {
+    let lowercased = stderr.lowercased()
+    return lowercased.contains("permission")
+      || lowercased.contains("operation not permitted")
+      || lowercased.contains("must be run as root")
+      || lowercased.contains("sudo")
+  }
+}
+
+private final class PipeOutputBuffer: @unchecked Sendable {
+  private let lock = NSLock()
+  private var data = Data()
+
+  func append(_ chunk: Data) {
+    guard !chunk.isEmpty else { return }
+    lock.lock()
+    data.append(chunk)
+    lock.unlock()
+  }
+
+  func string() -> String {
+    lock.lock()
+    let snapshot = data
+    lock.unlock()
+    return String(data: snapshot, encoding: .utf8) ?? ""
   }
 }
 #endif
