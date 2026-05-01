@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Validate Docs/telemetry-schema.json shape and duplicate telemetry keys."""
+"""Validate Docs/telemetry-schema.json shape and duplicate telemetry keys.
+
+Also performs source-key drift detection: walks Sources/ for emitted
+telemetry keys (terra.* and gen_ai.*) and verifies they're registered in
+the schema. Surfaces unregistered keys with the first-seen source path.
+"""
 
 from __future__ import annotations
 
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -13,6 +19,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = ROOT / "Docs" / "telemetry-schema.json"
 DEFAULT_FIXTURE_DIR = ROOT / "Fixtures" / "trace-golden"
+DEFAULT_SOURCE_DIR = ROOT / "Sources"
 REQUIRED_FIELDS = {
     "key",
     "type",
@@ -32,6 +39,159 @@ FIXTURE_KEYS_REQUIRING_SCHEMA = (
     "resource.",
     "event.",
 )
+
+# Patterns that match telemetry-key-shaped strings inside Swift source files.
+# Each pattern captures one group: the literal key name.
+SOURCE_EMIT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    # `setAttribute(key: "terra.foo")` — span attribute setter, literal key.
+    ("setAttribute", re.compile(r'setAttribute\s*\(\s*key:\s*"([^"]+)"')),
+    # `attributes["terra.foo"] = ...` — dict-style attribute assignment.
+    ("attributes-subscript", re.compile(r'attributes\s*\[\s*"([^"]+)"\s*\]\s*=')),
+    # `.attribute("terra.foo", ...)` — call-style attribute helper.
+    ("attribute-call", re.compile(r'\.attribute\s*\(\s*"([^"]+)"')),
+    # `.event("terra.foo")` — event name helper. Tracked separately so the
+    # caller can decide if event-shaped names should round-trip through the
+    # registry as `type: "event"` entries.
+    ("event-call", re.compile(r'\.event\s*\(\s*"([^"]+)"')),
+    # `static let foo = "terra.bar"` and similar string-literal constants
+    # whose value matches the terra.*/gen_ai.* shape. The pattern captures
+    # any quoted "terra.foo" / "gen_ai.foo" string, which lets us catch
+    # constants declared in *+Constants.swift files even when they're never
+    # directly referenced via the call-site patterns above.
+    ("string-literal-constant", re.compile(r'"((?:terra|gen_ai)\.[a-z][^"]*)"')),
+)
+
+# Keys we deliberately treat as NOT attribute keys, even though they look
+# like one. These are usually span names, event names, dispatch queue
+# labels, or test-only identifiers that share the `terra.` / `gen_ai.`
+# prefix without participating in the attribute registry. Each entry
+# documents *why* it's excluded so future maintainers can reverse the
+# call if the key starts being emitted as a real span attribute.
+EXCLUDED_SOURCE_KEY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    # ----- Span names (SpanNames in Terra+Constants.swift) -----
+    # `gen_ai.inference`, `gen_ai.embeddings`, `gen_ai.agent`, `gen_ai.tool`
+    # are OpenTelemetry GenAI semantic-convention span names, not attribute
+    # keys.
+    ("gen-ai-span-name-inference", re.compile(r"^gen_ai\.inference$")),
+    ("gen-ai-span-name-embeddings", re.compile(r"^gen_ai\.embeddings$")),
+    ("gen-ai-span-name-agent", re.compile(r"^gen_ai\.agent$")),
+    ("gen-ai-span-name-tool", re.compile(r"^gen_ai\.tool$")),
+    # `terra.coreml.model_load`, `terra.session`, `terra.safety_check` are
+    # Terra span names from `SpanNames` — not attribute keys.
+    ("coreml-model-load-span-name", re.compile(r"^terra\.coreml\.model_load$")),
+    ("session-span-name", re.compile(r"^terra\.session$")),
+    ("safety-check-span-name", re.compile(r"^terra\.safety_check$")),
+    # `terra.test.span` and `terra.invalid.span` are synthetic span names
+    # used by package-internal test seams (`Terra._testSpanHandle`,
+    # `Terra._invalidSpanHandle`).
+    ("test-span-name", re.compile(r"^terra\.test\.span$")),
+    ("invalid-test-span-name", re.compile(r"^terra\.invalid\.span$")),
+    # ----- Metric instrument names (MetricNames in Terra+Constants.swift) -----
+    # Emitted via the metrics API, not as span attributes.
+    ("metric-name-inference-count", re.compile(r"^terra\.inference\.count$")),
+    ("metric-name-inference-duration", re.compile(r"^terra\.inference\.duration_ms$")),
+    # ----- Event names (emitted via span.addEvent / TerraEvent.name) -----
+    # Privacy-classifier and lifecycle event names whose lifecycle uses
+    # the event API, not span-attribute API. Their attached attributes
+    # are registered separately.
+    ("event-name-thermal-transition", re.compile(r"^terra\.thermal\.transition$")),
+    ("event-name-warning", re.compile(r"^terra\.warning$")),
+    ("event-name-memory-sample", re.compile(r"^terra\.memory\.sample$")),
+    ("event-name-memory-warning", re.compile(r"^terra\.memory\.warning$")),
+    ("event-name-token-lifecycle", re.compile(r"^terra\.token\.lifecycle$")),
+    ("event-name-stream-lifecycle", re.compile(r"^terra\.stream\.lifecycle$")),
+    ("event-name-anomaly", re.compile(r"^terra\.anomaly$")),
+    ("event-name-policy", re.compile(r"^terra\.policy$")),
+    ("event-name-audit", re.compile(r"^terra\.audit$")),
+    ("event-name-recommendation", re.compile(r"^terra\.recommendation$")),
+    ("event-name-llama-layer-profile", re.compile(r"^terra\.llama\.layer\.profile$")),
+    # ----- Internal infrastructure identifiers -----
+    # Dispatch queue label declared in OTLPHTTPServer.swift; not a span
+    # attribute or event name.
+    ("dispatch-queue-label-otlp", re.compile(r"^terra\.trace\.otlp\.httpserver$")),
+    # ErrorType marker string used by CoreMLInstrumentation when the
+    # compute-plan capture exceeds its timeout budget. Surfaces as a
+    # value, not as a key, on the `compute_plan.error_type` attribute.
+    ("error-type-value-capture-timeout", re.compile(r"^terra\.coreml\.compute_plan\.capture_timeout$")),
+)
+
+
+def is_excluded_source_key(key: str) -> bool:
+  """Return True when a literal key from Sources should not be required in the registry."""
+  for _label, pattern in EXCLUDED_SOURCE_KEY_PATTERNS:
+    if pattern.search(key):
+      return True
+  return False
+
+
+def collect_emitted_keys(source_dir: Path) -> dict[str, Path]:
+  """Walk source_dir and return a mapping of emitted telemetry key -> first-seen file.
+
+  Only keys matching `terra.*` or `gen_ai.*` are returned. The mapping
+  preserves the first source file in which each key was observed so the
+  validator can produce actionable error messages.
+
+  Strings that end with `.` are skipped — those are documented prefix
+  matchers used for runtime classification (e.g. `key.hasPrefix("terra.hw.")`),
+  not literal attribute keys. Strings that contain Swift interpolation
+  syntax (`\\(...)`) are likewise skipped since they're templates rather
+  than concrete keys.
+  """
+  emitted: dict[str, Path] = {}
+  if not source_dir.is_dir():
+    return emitted
+
+  for swift_path in sorted(source_dir.rglob("*.swift")):
+    try:
+      text = swift_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+      continue
+    for _label, pattern in SOURCE_EMIT_PATTERNS:
+      for match in pattern.finditer(text):
+        key = match.group(1)
+        if not (key.startswith("terra.") or key.startswith("gen_ai.")):
+          continue
+        if key.endswith("."):
+          # Prefix matcher (e.g. "terra.hw." used with hasPrefix), not a key.
+          continue
+        if "\\(" in key:
+          # Swift string interpolation template, not a concrete key.
+          continue
+        if key not in emitted:
+          emitted[key] = swift_path
+  return emitted
+
+
+def validate_source_drift(
+  registry_by_key: dict[str, dict[str, Any]],
+  errors: list[str],
+  source_dir: Path = DEFAULT_SOURCE_DIR,
+) -> None:
+  """Surface telemetry keys emitted from Sources/ that aren't registered."""
+  emitted = collect_emitted_keys(source_dir)
+  if not emitted:
+    return
+
+  unregistered: list[tuple[str, Path]] = []
+  for key, first_seen in emitted.items():
+    if key in registry_by_key:
+      continue
+    if is_excluded_source_key(key):
+      continue
+    unregistered.append((key, first_seen))
+
+  if not unregistered:
+    return
+
+  for key, first_seen in sorted(unregistered):
+    try:
+      relative = first_seen.relative_to(ROOT)
+    except ValueError:
+      relative = first_seen
+    errors.append(
+      f"telemetry key {key!r} is emitted from Sources/ but not registered in the schema "
+      f"(first seen: {relative})"
+    )
 
 
 class DuplicateTrackingDict(dict[str, Any]):
@@ -315,6 +475,7 @@ def validate(path: Path, fixture_dir: Path = DEFAULT_FIXTURE_DIR) -> int:
     errors.append(f"duplicate telemetry registry key: {key}")
 
   validate_golden_fixtures(registry_by_key, errors, fixture_dir=fixture_dir)
+  validate_source_drift(registry_by_key, errors)
 
   return report(errors, checked_count=len(registry))
 

@@ -105,3 +105,12 @@ _ = try await Terra.tool("search", callId: "manual-1").under(parent).run { "ok" 
 - `Terra.examples()`
 - `Terra.guides()`
 - `Terra.playground()`
+
+## Platforms
+
+Terra targets macOS 14+, iOS 13+, tvOS 13+, watchOS 6+, and visionOS 1+. The
+Swift-native APIs run on every supported platform; the optional Zig-backed C
+ABI core (`TERRA_USE_ZIG_CORE`) is currently packaged only for macOS via
+`Vendor/libtera.xcframework`. See [Docs/PLATFORM-COMPATIBILITY.md](Docs/PLATFORM-COMPATIBILITY.md)
+for the full support matrix, the `libtera` vs `libterra` artifact naming
+story, and instructions for enabling additional Apple platform slices.

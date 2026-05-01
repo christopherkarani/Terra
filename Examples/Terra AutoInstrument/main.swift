@@ -33,8 +33,9 @@ struct TerraAutoInstrumentExample {
     //
     // Or customize:
     // var config = Terra.Configuration()
-    // config.enableLogs = true
-    // config.profiling.enableMemoryProfiler = true
+    // config.features.insert(.logs)        // OpenClaw diagnostics export
+    // config.profiling.insert(.memory)     // System memory profiler
+    // config.profiling.insert(.thermal)    // Thermal state monitor
     // try await Terra.start(config)
 
 // ──────────────────────────────────────────────
@@ -71,7 +72,7 @@ struct TerraAutoInstrumentExample {
 // Foundation Models (import TerraFoundationModels, macOS 26+)
 // ──────────────────────────────────────────────
 
-// let session = Terra.TracedSession()
+// let session = Terra.TracedSession(modelIdentifier: "apple/foundation-model")
 // let response = try await session.respond(to: "What is Swift?")
 // // ^ Automatically creates a gen_ai.inference span
 

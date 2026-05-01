@@ -17,6 +17,26 @@ public enum HTTPAIInstrumentation {
         "api.groq.com",
         "api.cohere.com",
         "api.fireworks.ai",
+        // P1-8: provider drift fixes — match by suffix so subdomains resolve.
+        // `openai.azure.com` covers `<resource>.openai.azure.com`.
+        "openai.azure.com",
+        // Bedrock regional runtime — matched by the prefix-aware pattern set
+        // below, NOT by suffix-only `amazonaws.com` (which would match every
+        // AWS service). Sentinel value retained here so configurations that
+        // round-trip through `Set<String>` see Bedrock present.
+        "bedrock-runtime.amazonaws.com",
+        "api.deepseek.com",
+        "api.x.ai",
+        "openrouter.ai",
+        "api.perplexity.ai",
+    ]
+
+    /// Hosts that require `bedrock-runtime.<region>.amazonaws.com` style
+    /// region-wildcard matching. Kept separate from `defaultAIHosts` so the
+    /// suffix-based matcher in `isHostBoundaryMatch` does not accidentally
+    /// promote unrelated AWS services.
+    private static let regionalAWSAIHostPrefixes: [String] = [
+        "bedrock-runtime.",
     ]
 
     /// Cap response-body capture at 1 MiB. Anything larger is dropped before
@@ -268,14 +288,32 @@ public enum HTTPAIInstrumentation {
     }
 
     private static func isHostMatched(_ host: String, hosts: Set<String>) -> Bool {
-        hosts.contains { isHostBoundaryMatch(host: host, target: $0) }
+        if hosts.contains(where: { isHostBoundaryMatch(host: host, target: $0) }) { return true }
+        return matchesRegionalAWSHostPrefix(host) && hosts.contains("bedrock-runtime.amazonaws.com")
     }
 
     internal static func isHostBoundaryMatch(host: String, target: String) -> Bool {
         let normalizedHost = normalizeHost(host)
         let normalizedTarget = normalizeHost(target)
         guard !normalizedHost.isEmpty, !normalizedTarget.isEmpty else { return false }
-        return normalizedHost == normalizedTarget || normalizedHost.hasSuffix(".\(normalizedTarget)")
+        if normalizedHost == normalizedTarget || normalizedHost.hasSuffix(".\(normalizedTarget)") {
+            return true
+        }
+        // Bedrock regional hosts: `bedrock-runtime.<region>.amazonaws.com`
+        // matches the canonical sentinel `bedrock-runtime.amazonaws.com`.
+        if normalizedTarget == "bedrock-runtime.amazonaws.com",
+           matchesRegionalAWSHostPrefix(normalizedHost) {
+            return true
+        }
+        return false
+    }
+
+    private static func matchesRegionalAWSHostPrefix(_ host: String) -> Bool {
+        let normalized = normalizeHost(host)
+        guard normalized.hasSuffix(".amazonaws.com") else { return false }
+        return regionalAWSAIHostPrefixes.contains { prefix in
+            normalized.hasPrefix(prefix)
+        }
     }
 
     private static func normalizeHost(_ host: String) -> String {
@@ -292,6 +330,12 @@ public enum HTTPAIInstrumentation {
         if isHostBoundaryMatch(host: host, target: "api.groq.com") { return "groq" }
         if isHostBoundaryMatch(host: host, target: "api.cohere.com") { return "cohere" }
         if isHostBoundaryMatch(host: host, target: "api.fireworks.ai") { return "fireworks" }
+        if isHostBoundaryMatch(host: host, target: "openai.azure.com") { return "azure_openai" }
+        if matchesRegionalAWSHostPrefix(host) { return "bedrock" }
+        if isHostBoundaryMatch(host: host, target: "api.deepseek.com") { return "deepseek" }
+        if isHostBoundaryMatch(host: host, target: "api.x.ai") { return "x_ai" }
+        if isHostBoundaryMatch(host: host, target: "openrouter.ai") { return "openrouter" }
+        if isHostBoundaryMatch(host: host, target: "api.perplexity.ai") { return "perplexity" }
         return host
     }
 
@@ -305,8 +349,10 @@ public enum HTTPAIInstrumentation {
 
     /// Bounded cache so we parse each request body at most once across
     /// `spanCustomization` → `injectCustomHeaders` → `createdRequest` for
-    /// the same `URLRequest`. Keyed by the body bytes (NSData equality is
-    /// content-based), so identical bodies across retries share an entry.
+    /// the same `URLRequest`. Keyed by the absolute URL prefixed-and-joined
+    /// with the body bytes so identical bodies on different URLs (Azure
+    /// deployment vs. Gemini vs. Bedrock model variant) keep distinct entries
+    /// while retries on the same URL remain hot.
     private static let parsedRequestCache: NSCache<NSData, ParsedRequestBox> = {
         let cache = NSCache<NSData, ParsedRequestBox>()
         cache.countLimit = 64
@@ -317,16 +363,31 @@ public enum HTTPAIInstrumentation {
     /// inspectable body (streamed bodies are intentionally ignored). The
     /// result is cached so repeated calls for the same body do at most one
     /// `JSONSerialization.jsonObject` invocation.
+    ///
+    /// The URL is consulted as a fallback for the model name when the body
+    /// lacks one — Azure OpenAI bodies omit it (deployment is in the URL),
+    /// Gemini puts the model name in the path, and Bedrock invoke-model uses
+    /// `/model/<modelId>/invoke[-with-response-stream]`.
     static func parsedRequestBody(for request: URLRequest) -> ParsedRequest? {
         guard request.httpBodyStream == nil else { return nil }
         guard let body = request.httpBody else { return nil }
 
-        let key = body as NSData
+        // Cache key folds the absolute URL in front of the body bytes so
+        // identical bodies on different URLs (Azure deployment vs. Gemini
+        // vs. Bedrock model variant) cache distinct parsed results, while
+        // retries on the same URL with the same body share a hit.
+        let urlBytes = (request.url?.absoluteString ?? "").data(using: .utf8) ?? Data()
+        var keyBuffer = Data(capacity: urlBytes.count + 1 + body.count)
+        keyBuffer.append(urlBytes)
+        keyBuffer.append(0x1F) // unit-separator delimiter
+        keyBuffer.append(body)
+        let key = keyBuffer as NSData
+
         if let cached = parsedRequestCache.object(forKey: key) {
             return cached.parsed
         }
 
-        let parsed = AIRequestParser.parse(body: body)
+        let parsed = AIRequestParser.parse(body: body, url: request.url)
         parsedRequestCache.setObject(ParsedRequestBox(parsed), forKey: key)
         return parsed
     }

@@ -1057,6 +1057,32 @@ extension Terra {
       .map(SpanHandle.init(storage:))
   }
 
+  /// Force-clears the active span registry as part of lifecycle teardown.
+  ///
+  /// Called from the OpenTelemetry shutdown path so that any spans the host app
+  /// forgot to end do not leak across `shutdown → installOpenTelemetry` cycles.
+  /// Each still-recording span is ended (so its exporter sees a normal `onEnd`
+  /// rather than a dangling reference), end hooks fire, and the underlying
+  /// registry maps are emptied. Idempotent: calling on an empty registry is a
+  /// no-op. Safe to call from any thread.
+  package static func _resetActiveSpansForLifecycle() {
+    let snapshot = spanRegistry.snapshot()
+    for storage in snapshot {
+      // Ensure end hooks fire and the OTel span finishes if it was still recording.
+      if storage.markEndedForAutoLifecycle() {
+        _emitSpanEndHook(
+          span: SpanHandle(storage: storage),
+          duration: ContinuousClock.now - storage.startedAt
+        )
+        if storage.span.isRecording {
+          storage.span.end()
+        }
+      }
+      taskSpanRegistry.pop(spanId: storage.spanId, taskKey: storage.ownerTaskKey)
+      spanRegistry.remove(spanId: storage.spanId)
+    }
+  }
+
   package static func _emitSpanStartHook(_ span: SpanHandle) {
     for hook in hookRegistry.snapshot().start {
       hook(span)
@@ -1127,6 +1153,21 @@ extension Terra {
     currentSpan() != nil
   }
 
+  /// Strategy that controls how a `Terra.workflow(...)` root span chooses its parent.
+  ///
+  /// - `attachToAmbient`: inherit the current Task-local Terra span, the active
+  ///   OpenTelemetry context span, or run as a root if none exists. This is the
+  ///   default and preserves existing behavior for current callers.
+  /// - `detachFromAmbient`: ignore any Task-local Terra span and any ambient
+  ///   OpenTelemetry active span; always start a fresh root trace.
+  ///
+  /// Use `.detachFromAmbient` when a workflow must produce a self-contained trace
+  /// regardless of any ambient instrumentation that may be active in the host app.
+  public enum WorkflowRootStrategy: Sendable, Equatable {
+    case attachToAmbient
+    case detachFromAmbient
+  }
+
   /// Starts a Terra span with explicit lifecycle control.
   ///
   /// Use this when an agentic workflow needs a parent span that survives beyond a
@@ -1143,15 +1184,43 @@ extension Terra {
     id: String? = nil,
     attributes: [String: AttributeValue] = [:]
   ) -> SpanHandle {
-    let parentSpan =
-      _SpanContext.current.flatMap { $0.isEnded ? nil : $0.otelSpan }
-      ?? _currentTaskSpan().flatMap { $0.isEnded ? nil : $0.otelSpan }
-      ?? OpenTelemetry.instance.contextProvider.activeSpan
+    _startSpan(name: name, id: id, attributes: attributes, rootStrategy: .attachToAmbient)
+  }
+
+  /// Internal seam: start a span with an explicit root strategy.
+  ///
+  /// `WorkflowRootStrategy.detachFromAmbient` skips ambient parent resolution and
+  /// emits the `terra.workflow.root.detached_from_ambient` marker attribute so
+  /// downstream consumers can tell the trace was deliberately detached.
+  package static func _startSpan(
+    name: String,
+    id: String? = nil,
+    attributes: [String: AttributeValue] = [:],
+    rootStrategy: WorkflowRootStrategy
+  ) -> SpanHandle {
+    let parentSpan: (any Span)?
+    switch rootStrategy {
+    case .attachToAmbient:
+      parentSpan =
+        _SpanContext.current.flatMap { $0.isEnded ? nil : $0.otelSpan }
+        ?? _currentTaskSpan().flatMap { $0.isEnded ? nil : $0.otelSpan }
+        ?? OpenTelemetry.instance.contextProvider.activeSpan
+    case .detachFromAmbient:
+      parentSpan = nil
+    }
+
     let spanBuilder = tracer().spanBuilder(spanName: name).setSpanKind(spanKind: .internal)
     if let parentSpan {
       spanBuilder.setParent(parentSpan)
+    } else if rootStrategy == .detachFromAmbient {
+      // Force a root span even when the OTel context provider has an ambient span.
+      spanBuilder.setNoParent()
     }
-    for (key, value) in attributes {
+    var enrichedAttributes = attributes
+    if rootStrategy == .detachFromAmbient {
+      enrichedAttributes["terra.workflow.root.detached_from_ambient"] = .bool(true)
+    }
+    for (key, value) in enrichedAttributes {
       spanBuilder.setAttribute(key: key, value: value)
     }
     if let id {
@@ -1166,7 +1235,7 @@ extension Terra {
       id: id,
       span: span,
       parentSpan: parentSpan,
-      initialAttributes: attributes,
+      initialAttributes: enrichedAttributes,
       ownsLifecycle: true
     )
   }
@@ -1181,7 +1250,20 @@ extension Terra {
     id: String? = nil,
     _ body: @escaping @Sendable (SpanHandle) async throws -> R
   ) async throws -> R {
-    try await _runWorkflowRoot(name: name, id: id) { span, _ in
+    try await workflow(name: name, id: id, rootStrategy: .attachToAmbient, body)
+  }
+
+  /// Traces a workflow with explicit control over how the root span attaches (or detaches) from ambient context.
+  ///
+  /// Pass `rootStrategy: .detachFromAmbient` to start a fresh root trace even when the host
+  /// app has an active OpenTelemetry span at the time the workflow runs.
+  public static func workflow<R: Sendable>(
+    name: String,
+    id: String? = nil,
+    rootStrategy: WorkflowRootStrategy,
+    _ body: @escaping @Sendable (SpanHandle) async throws -> R
+  ) async throws -> R {
+    try await _runWorkflowRoot(name: name, id: id, rootStrategy: rootStrategy) { span, _ in
       try await body(span)
     }
   }
@@ -1193,11 +1275,28 @@ extension Terra {
     messages: inout [ChatMessage],
     _ body: @escaping @Sendable (SpanHandle, WorkflowTranscript) async throws -> R
   ) async throws -> R {
+    try await workflow(
+      name: name,
+      id: id,
+      rootStrategy: .attachToAmbient,
+      messages: &messages,
+      body
+    )
+  }
+
+  /// Traces a workflow with a buffered transcript helper and explicit ambient-attachment control.
+  public static func workflow<R: Sendable>(
+    name: String,
+    id: String? = nil,
+    rootStrategy: WorkflowRootStrategy,
+    messages: inout [ChatMessage],
+    _ body: @escaping @Sendable (SpanHandle, WorkflowTranscript) async throws -> R
+  ) async throws -> R {
     let buffer = _LoopMessageBuffer(messages: messages)
     let transcript = WorkflowTranscript(storage: buffer)
 
     do {
-      let result = try await _runWorkflowRoot(name: name, id: id) { span, _ in
+      let result = try await _runWorkflowRoot(name: name, id: id, rootStrategy: rootStrategy) { span, _ in
         try await body(span, transcript)
       }
       messages = await transcript.snapshot()
@@ -1211,6 +1310,7 @@ extension Terra {
   private static func _runWorkflowRoot<R: Sendable>(
     name: String,
     id: String? = nil,
+    rootStrategy: WorkflowRootStrategy = .attachToAmbient,
     _ body: @escaping @Sendable (SpanHandle, AgentContext) async throws -> R
   ) async throws -> R {
     var attributes: [String: AttributeValue] = [
@@ -1220,7 +1320,7 @@ extension Terra {
       attributes["terra.workflow.id"] = .string(id)
     }
 
-    let span = startSpan(name: name, id: id, attributes: attributes)
+    let span = _startSpan(name: name, id: id, attributes: attributes, rootStrategy: rootStrategy)
     let context = AgentContext()
     return try await Terra.$agentContext.withValue(context) {
       try await _withActiveSpan(span) {

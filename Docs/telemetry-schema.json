@@ -1233,6 +1233,446 @@
       "viewer_behavior": "workflow_summary",
       "examples": [1],
       "description": "Number of tool spans observed inside a workflow."
+    },
+    {
+      "key": "terra.agent.tools_used",
+      "type": "string",
+      "unit": "csv",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "agent_summary",
+      "examples": ["search,calculator"],
+      "description": "Sorted tool names observed inside an agent invocation span."
+    },
+    {
+      "key": "terra.agent.models_used",
+      "type": "string",
+      "unit": "csv",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "agent_summary",
+      "examples": ["gpt-4o-mini,llama-3.2"],
+      "description": "Sorted model names observed inside an agent invocation span."
+    },
+    {
+      "key": "terra.agent.inference_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "agent_summary",
+      "examples": [4],
+      "description": "Number of inference spans observed inside an agent invocation span."
+    },
+    {
+      "key": "terra.agent.tool_call_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "agent_summary",
+      "examples": [3],
+      "description": "Number of tool spans observed inside an agent invocation span."
+    },
+    {
+      "key": "terra.app.identifier",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "resource_attribute",
+      "examples": ["com.example.MyApp"],
+      "description": "Resolved Terra application identifier stamped on the OTLP resource when production ingest is configured."
+    },
+    {
+      "key": "terra.app.bundle_id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "resource_attribute",
+      "examples": ["com.example.MyApp"],
+      "description": "Bundle identifier of the host application stamped on the OTLP resource when production ingest is configured."
+    },
+    {
+      "key": "terra.app.version",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "resource_attribute",
+      "examples": ["1.4.2"],
+      "description": "Application short version (CFBundleShortVersionString) stamped on the OTLP resource when production ingest is configured."
+    },
+    {
+      "key": "terra.app.build",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "resource_attribute",
+      "examples": ["2024.05.01.1"],
+      "description": "Application build number (CFBundleVersion) stamped on the OTLP resource when production ingest is configured."
+    },
+    {
+      "key": "terra.installation.id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "resource_attribute",
+      "examples": ["A0E1F2C3-1234-5678-9ABC-DEF012345678"],
+      "description": "Stable per-install identifier stamped on the OTLP resource when production ingest is configured. Mirrored to service.instance.id."
+    },
+    {
+      "key": "terra.platform",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "resource_attribute",
+      "examples": ["macos", "ios", "tvos", "watchos", "visionos"],
+      "description": "Operating-system family for the host process stamped on the OTLP resource when production ingest is configured."
+    },
+    {
+      "key": "terra.coreml.compute_plan.estimated_operation_count",
+      "type": "int",
+      "unit": "count",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": [128],
+      "description": "Number of operations enumerated from the CoreML compute plan when capture succeeds."
+    },
+    {
+      "key": "terra.coreml.compute_plan.estimated_operations_truncated",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "TerraCoreML",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": [false],
+      "description": "True when the captured operation list was truncated to keep the span attribute bounded."
+    },
+    {
+      "key": "terra.coreml.error_type",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "error_detail",
+      "examples": ["Foundation.NSError", "TerraCoreML.PredictionFailure"],
+      "description": "Reflected type name of an error surfaced by a CoreML prediction tracked through TerraSession."
+    },
+    {
+      "key": "terra.coreml.input_summary",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": ["[input: f32 [1,3,224,224]]"],
+      "description": "Summarized CoreML feature shapes recorded on the prediction span."
+    },
+    {
+      "key": "terra.coreml.load.cache_key",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": ["llama-3.2-1B@compute_units=all"],
+      "description": "Stable cache key used to deduplicate model loads inside TerraSession."
+    },
+    {
+      "key": "terra.coreml.load.is_cold",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": [true],
+      "description": "True when a CoreML model load missed the TerraSession cache and triggered a real load."
+    },
+    {
+      "key": "terra.coreml.prediction.estimated_gpu_wall_time_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraMetalProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": [12.4],
+      "description": "Estimated GPU wall-clock time for a CoreML prediction inferred from the prediction wall time."
+    },
+    {
+      "key": "terra.coreml.prediction.estimated_gpu_wall_time_source",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraMetalProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": ["coreml_prediction_wall_time"],
+      "description": "Identifier describing how the GPU wall-time estimate was derived."
+    },
+    {
+      "key": "terra.coreml.prediction.estimated_gpu_route",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraMetalProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": ["gpu", "cpu_and_gpu"],
+      "description": "Estimated execution route used by CoreML for the captured prediction."
+    },
+    {
+      "key": "terra.device.is_simulator",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "session_summary",
+      "examples": [false],
+      "description": "True when TerraSession detected the host process is running on a simulator."
+    },
+    {
+      "key": "terra.hw.power_state",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraTraceKit",
+      "stability": "stable",
+      "viewer_behavior": "hardware_metric",
+      "examples": ["nominal", "low_power"],
+      "description": "Coarse power-state classification surfaced on Terra hardware events."
+    },
+    {
+      "key": "terra.hw.memory_pressure",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraTraceKit",
+      "stability": "stable",
+      "viewer_behavior": "hardware_metric",
+      "examples": ["normal", "warn", "critical"],
+      "description": "Coarse memory-pressure classification surfaced on Terra hardware events."
+    },
+    {
+      "key": "terra.hw.memory_churn_mb",
+      "type": "double",
+      "unit": "MB",
+      "owner_module": "TerraTraceKit",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_metric",
+      "examples": [12.5],
+      "description": "Megabytes of memory churn observed during the sampled interval."
+    },
+    {
+      "key": "terra.hw.ane_utilization_pct",
+      "type": "double",
+      "unit": "percent",
+      "owner_module": "TerraTraceKit",
+      "stability": "experimental",
+      "viewer_behavior": "hardware_metric",
+      "examples": [42.5],
+      "description": "Estimated Apple Neural Engine utilization percentage for the sampled interval."
+    },
+    {
+      "key": "terra.llama.layer.name",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraLlama",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": ["transformer.layer.0"],
+      "description": "Layer name attached to the per-layer profile event emitted by TerraLlama."
+    },
+    {
+      "key": "terra.llama.layer.duration_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraLlama",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": [3.1],
+      "description": "Per-layer execution time recorded by TerraLlama layer profiling."
+    },
+    {
+      "key": "terra.llama.layer.memory_mb",
+      "type": "double",
+      "unit": "MB",
+      "owner_module": "TerraLlama",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": [128.0],
+      "description": "Memory footprint observed for the layer when TerraLlama can resolve it."
+    },
+    {
+      "key": "terra.memory.phys_footprint_bytes",
+      "type": "int",
+      "unit": "bytes",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "session_summary",
+      "examples": [1048576],
+      "description": "Process physical memory footprint in bytes captured by TerraSession during memory sampling."
+    },
+    {
+      "key": "terra.memory.sample_reason",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "session_summary",
+      "examples": ["periodic", "warning"],
+      "description": "Reason TerraSession captured a memory sample (periodic, warning, etc.)."
+    },
+    {
+      "key": "terra.parent.explicit_ended",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": [true],
+      "description": "True when a child span continued running after its explicit parent had already ended."
+    },
+    {
+      "key": "terra.power.collection_status",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraPowerProfiler",
+      "stability": "experimental",
+      "viewer_behavior": "diagnostic_attribute",
+      "examples": ["ok", "permission_denied", "no_samples"],
+      "description": "Status reported by TerraPowerProfiler describing the outcome of a power-metrics capture."
+    },
+    {
+      "key": "terra.service.name",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "resource_attribute",
+      "examples": ["dashboard"],
+      "description": "Logical Terra service identifier stamped on workflow spans by the manual tracing API."
+    },
+    {
+      "key": "terra.session.id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "session_summary",
+      "examples": ["7E0E7C40-...-..."],
+      "description": "Stable identifier for the TerraSession instance that produced the span or event."
+    },
+    {
+      "key": "terra.session.start_time_unix_ms",
+      "type": "int",
+      "unit": "ms",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "session_summary",
+      "examples": [1714555200000],
+      "description": "Unix-millis timestamp recorded when the owning TerraSession started."
+    },
+    {
+      "key": "terra.session.device_model",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "session_summary",
+      "examples": ["MacBookPro18,3"],
+      "description": "Hardware model identifier captured for the host device when the TerraSession started."
+    },
+    {
+      "key": "terra.session.os_version",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "session_summary",
+      "examples": ["14.4.1"],
+      "description": "Operating-system version captured for the host device when the TerraSession started."
+    },
+    {
+      "key": "terra.stream.completed",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "TerraHTTPInstrument",
+      "stability": "stable",
+      "viewer_behavior": "stream_summary",
+      "examples": [true],
+      "description": "True when the HTTP AI streaming observer finished consuming the response body without truncation."
+    },
+    {
+      "key": "terra.token.stage",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraTraceKit",
+      "stability": "experimental",
+      "viewer_behavior": "stream_summary",
+      "examples": ["first", "subsequent"],
+      "description": "Stage label attached to per-token lifecycle events by the streaming classifier."
+    },
+    {
+      "key": "terra.token.index",
+      "type": "int",
+      "unit": "none",
+      "owner_module": "TerraTraceKit",
+      "stability": "experimental",
+      "viewer_behavior": "stream_summary",
+      "examples": [0, 1, 2],
+      "description": "Zero-based index of the token described by a token-lifecycle event."
+    },
+    {
+      "key": "terra.token.gap_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraTraceKit",
+      "stability": "experimental",
+      "viewer_behavior": "stream_summary",
+      "examples": [22.5],
+      "description": "Time between successive token-lifecycle events used by the streaming classifier."
+    },
+    {
+      "key": "terra.trace.id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "span_detail",
+      "examples": ["8b1c7a06b5b8e9c4d8e7f9a0a1b2c3d4"],
+      "description": "Caller-provided trace correlation identifier stamped on workflow spans by the manual tracing API."
+    },
+    {
+      "key": "terra.warning.code",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "session_summary",
+      "examples": ["simulator"],
+      "description": "Short identifier for a TerraSession warning event (e.g. simulator detection)."
+    },
+    {
+      "key": "terra.warning.message",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "TerraAutoInstrument",
+      "stability": "stable",
+      "viewer_behavior": "session_summary",
+      "examples": ["Simulator metrics are not representative of on-device performance."],
+      "description": "Human-readable description for a TerraSession warning event."
+    },
+    {
+      "key": "terra.workflow.root.detached_from_ambient",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "workflow_summary",
+      "examples": [true],
+      "description": "True when the workflow span was forced to be a root span instead of nesting under the ambient OpenTelemetry context."
     }
   ]
 }
