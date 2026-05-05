@@ -1,5 +1,33 @@
 # Release 0.2.4
 
+# PR 23 Zig Lifecycle Fix
+
+- [x] Review PR #23 against current `main` and identify stale/conflicting code paths
+- [x] Integrate Zig lifecycle parity into current `main` without regressing provider feature gates
+- [x] Add focused regression coverage for Zig idempotency/shutdown and persistence failure cleanup
+- [x] Run focused lifecycle tests plus SwiftPM build/test validation
+- [x] Push the fixed branch and update PR #23
+
+## Baseline
+
+- PR #23 is stale relative to `main` and conflicts in `Sources/Terra/Terra+OpenTelemetry.swift`, `Sources/Terra/TerraZigOTelBridge.swift`, and `Sources/TerraAutoInstrument/Terra+Start.swift`.
+- Current `main` already has `_supportsZigBackend(_:)`, production ingest header wiring, service metadata resolution, profiler updates, and `shutdownZigBackend()`.
+- The fix must preserve the current strict Zig capability gate and only add synchronized/idempotent Zig backend lifecycle handling plus regression coverage.
+
+## Review
+
+- Preserved current `main` startup behavior and kept `_supportsZigBackend(_:)` as the strict traces-only gate, so Zig does not silently drop metrics, logs, signposts, sessions, persistence, or sampling configuration.
+- Added synchronized Zig backend state handling around `_zigInstance`; repeated install reuses the active instance, shutdown claims the instance under lock, performs native teardown outside the lock, and drives lifecycle state through shutting down to stopped.
+- Extended test cleanup to shut down an active Zig backend, preventing cross-test runtime leakage.
+- Added Zig integration regression coverage for idempotent install, lifecycle state parity, idempotent shutdown, and global test isolation.
+- Strengthened persistence error mapping coverage to prove failed persistence startup leaves Terra stopped, non-running, and without installed OpenTelemetry configuration/providers.
+- Validation completed:
+  - `swift test --disable-automatic-resolution --scratch-path /Users/chriskarani/CodingProjects/RYNO/Terra/.tmp/release-032-clean/.build --filter 'ZigBackendIntegrationTests|TerraLifecycleAPITests|TerraLifecycleErrorMappingTests'`
+  - `swift build --disable-automatic-resolution --scratch-path /Users/chriskarani/CodingProjects/RYNO/Terra/.tmp/release-032-clean/.build`
+  - `zig build test --summary all` from `zig-core/`
+  - `swift test --disable-automatic-resolution --scratch-path /Users/chriskarani/CodingProjects/RYNO/Terra/.tmp/release-032-clean/.build --parallel --num-workers 1`
+- Residual warnings are pre-existing third-party SwiftPM plugin deprecations and existing deprecated API warnings in tests; all Terra build/test commands passed.
+
 - [x] Confirm the exact diff to ship and keep unrelated TraceKit edits out of the release commit
 - [x] Re-run targeted verification for the handoff/docs release payload
 - [x] Commit the release payload on `main` and prepare it for push to `origin/main`
