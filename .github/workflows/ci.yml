@@ -115,6 +115,13 @@ jobs:
           cd zig-core
           zig build test --summary all
 
+      - name: Zig static library
+        run: |
+          set -euo pipefail
+          cd zig-core
+          zig build
+          test -f zig-out/lib/libterra.a
+
       - name: Rust tests
         run: |
           set -euo pipefail

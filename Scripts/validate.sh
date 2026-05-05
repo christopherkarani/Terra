@@ -39,6 +39,11 @@ python3 Scripts/validate-doc-snippets.py
 run_if_present "Telemetry schema" "Scripts/validate-telemetry-schema.py"
 run_if_present "Binding conformance" "Scripts/validate-bindings.py"
 
+if [[ -d .agents/skills ]]; then
+  section "Project skill scripts"
+  find .agents/skills -name '*.py' -print0 | xargs -0 python3 -c 'import ast, pathlib, sys; [compile(pathlib.Path(path).read_text(encoding="utf-8"), path, "exec", ast.PyCF_ONLY_AST) for path in sys.argv[1:]]'
+fi
+
 section "Python bindings"
 python3 -m py_compile terra-python/terra.py
 python3 -m unittest discover -s terra-python -p 'test*.py'
@@ -47,6 +52,8 @@ section "Zig core"
 (
   cd zig-core
   zig build test --summary all
+  zig build
+  test -f zig-out/lib/libterra.a
 )
 
 section "C++ bindings"

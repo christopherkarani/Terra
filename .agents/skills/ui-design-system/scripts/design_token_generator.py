@@ -10,16 +10,16 @@ import colorsys
 
 class DesignTokenGenerator:
     """Generate comprehensive design system tokens"""
-    
+
     def __init__(self):
         self.base_unit = 8  # 8pt grid system
         self.type_scale_ratio = 1.25  # Major third
         self.base_font_size = 16
-        
-    def generate_complete_system(self, brand_color: str = "#0066CC", 
+
+    def generate_complete_system(self, brand_color: str = "#0066CC",
                                 style: str = "modern") -> Dict:
         """Generate complete design token system"""
-        
+
         tokens = {
             'meta': {
                 'version': '1.0.0',
@@ -36,16 +36,16 @@ class DesignTokenGenerator:
             'breakpoints': self.generate_breakpoints(),
             'z-index': self.generate_z_index_scale()
         }
-        
+
         return tokens
-    
+
     def generate_color_palette(self, brand_color: str) -> Dict:
         """Generate comprehensive color palette from brand color"""
-        
+
         # Convert hex to RGB
         brand_rgb = self._hex_to_rgb(brand_color)
         brand_hsv = colorsys.rgb_to_hsv(*[c/255 for c in brand_rgb])
-        
+
         palette = {
             'primary': self._generate_color_scale(brand_color, 'primary'),
             'secondary': self._generate_color_scale(
@@ -61,9 +61,7 @@ class DesignTokenGenerator:
                 },
                 'warning': {
                     'base': '#F59E0B',
-                    'light': '#FBB
-
-D24',
+                    'light': '#FBBF24',
                     'dark': '#D97706',
                     'contrast': '#FFFFFF'
                 },
@@ -88,34 +86,34 @@ D24',
                 'divider': '#E5E7EB'
             }
         }
-        
+
         return palette
-    
+
     def _generate_color_scale(self, base_color: str, name: str) -> Dict:
         """Generate color scale from base color"""
-        
+
         scale = {}
         rgb = self._hex_to_rgb(base_color)
         h, s, v = colorsys.rgb_to_hsv(*[c/255 for c in rgb])
-        
+
         # Generate scale from 50 to 900
         steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]
-        
+
         for step in steps:
             # Adjust lightness based on step
             factor = (1000 - step) / 1000
             new_v = 0.95 if step < 500 else v * (1 - (step - 500) / 500)
             new_s = s * (0.3 + 0.7 * (step / 900))
-            
+
             new_rgb = colorsys.hsv_to_rgb(h, new_s, new_v)
             scale[str(step)] = self._rgb_to_hex([int(c * 255) for c in new_rgb])
-        
+
         scale['DEFAULT'] = base_color
         return scale
-    
+
     def _generate_neutral_scale(self) -> Dict:
         """Generate neutral color scale"""
-        
+
         return {
             '50': '#F9FAFB',
             '100': '#F3F4F6',
@@ -129,10 +127,10 @@ D24',
             '900': '#111827',
             'DEFAULT': '#6B7280'
         }
-    
+
     def generate_typography_system(self, style: str) -> Dict:
         """Generate typography system"""
-        
+
         # Font families based on style
         font_families = {
             'modern': {
@@ -151,7 +149,7 @@ D24',
                 'mono': 'Source Code Pro, monospace'
             }
         }
-        
+
         typography = {
             'fontFamily': font_families.get(style, font_families['modern']),
             'fontSize': self._generate_type_scale(),
@@ -183,15 +181,15 @@ D24',
             },
             'textStyles': self._generate_text_styles()
         }
-        
+
         return typography
-    
+
     def _generate_type_scale(self) -> Dict:
         """Generate modular type scale"""
-        
+
         scale = {}
         sizes = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl']
-        
+
         for i, size in enumerate(sizes):
             if size == 'base':
                 scale[size] = f'{self.base_font_size}px'
@@ -201,12 +199,12 @@ D24',
             else:
                 factor = self.type_scale_ratio ** (i - sizes.index('base'))
                 scale[size] = f'{round(self.base_font_size * factor)}px'
-        
+
         return scale
-    
+
     def _generate_text_styles(self) -> Dict:
         """Generate pre-composed text styles"""
-        
+
         return {
             'h1': {
                 'fontSize': '48px',
@@ -263,16 +261,16 @@ D24',
                 'letterSpacing': '0.01em'
             }
         }
-    
+
     def generate_spacing_system(self) -> Dict:
         """Generate spacing system based on 8pt grid"""
-        
+
         spacing = {}
         multipliers = [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 20, 24, 32, 40, 48, 56, 64]
-        
+
         for i, mult in enumerate(multipliers):
             spacing[str(i)] = f'{int(self.base_unit * mult)}px'
-        
+
         # Add semantic spacing
         spacing.update({
             'xs': spacing['1'],    # 4px
@@ -283,12 +281,12 @@ D24',
             '2xl': spacing['12'],  # 48px
             '3xl': spacing['16']   # 64px
         })
-        
+
         return spacing
-    
+
     def generate_sizing_tokens(self) -> Dict:
         """Generate sizing tokens for components"""
-        
+
         return {
             'container': {
                 'sm': '640px',
@@ -316,10 +314,10 @@ D24',
                 }
             }
         }
-    
+
     def generate_border_tokens(self, style: str) -> Dict:
         """Generate border tokens"""
-        
+
         radius_values = {
             'modern': {
                 'none': '0',
@@ -349,7 +347,7 @@ D24',
                 'full': '9999px'
             }
         }
-        
+
         return {
             'radius': radius_values.get(style, radius_values['modern']),
             'width': {
@@ -360,10 +358,10 @@ D24',
                 'thick': '4px'
             }
         }
-    
+
     def generate_shadow_tokens(self, style: str) -> Dict:
         """Generate shadow tokens"""
-        
+
         shadow_styles = {
             'modern': {
                 'none': 'none',
@@ -384,12 +382,12 @@ D24',
                 'xl': '0 16px 32px rgba(0, 0, 0, 0.1)'
             }
         }
-        
+
         return shadow_styles.get(style, shadow_styles['modern'])
-    
+
     def generate_animation_tokens(self) -> Dict:
         """Generate animation tokens"""
-        
+
         return {
             'duration': {
                 'instant': '0ms',
@@ -421,10 +419,10 @@ D24',
                 }
             }
         }
-    
+
     def generate_breakpoints(self) -> Dict:
         """Generate responsive breakpoints"""
-        
+
         return {
             'xs': '480px',
             'sm': '640px',
@@ -433,10 +431,10 @@ D24',
             'xl': '1280px',
             '2xl': '1536px'
         }
-    
+
     def generate_z_index_scale(self) -> Dict:
         """Generate z-index scale"""
-        
+
         return {
             'hide': -1,
             'base': 0,
@@ -448,10 +446,10 @@ D24',
             'tooltip': 1060,
             'notification': 1070
         }
-    
+
     def export_tokens(self, tokens: Dict, format: str = 'json') -> str:
         """Export tokens in various formats"""
-        
+
         if format == 'json':
             return json.dumps(tokens, indent=2)
         elif format == 'css':
@@ -460,33 +458,33 @@ D24',
             return self._export_as_scss(tokens)
         else:
             return json.dumps(tokens, indent=2)
-    
+
     def _export_as_css(self, tokens: Dict) -> str:
         """Export as CSS variables"""
-        
+
         css = [':root {']
-        
+
         def flatten_dict(obj, prefix=''):
             for key, value in obj.items():
                 if isinstance(value, dict):
                     flatten_dict(value, f'{prefix}-{key}' if prefix else key)
                 else:
                     css.append(f'  --{prefix}-{key}: {value};')
-        
+
         flatten_dict(tokens)
         css.append('}')
-        
+
         return '\n'.join(css)
-    
+
     def _hex_to_rgb(self, hex_color: str) -> Tuple[int, int, int]:
         """Convert hex to RGB"""
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-    
+
     def _rgb_to_hex(self, rgb: List[int]) -> str:
         """Convert RGB to hex"""
         return '#{:02x}{:02x}{:02x}'.format(*rgb)
-    
+
     def _adjust_hue(self, hex_color: str, degrees: int) -> str:
         """Adjust hue of color"""
         rgb = self._hex_to_rgb(hex_color)
@@ -497,17 +495,17 @@ D24',
 
 def main():
     import sys
-    
+
     generator = DesignTokenGenerator()
-    
+
     # Get parameters
     brand_color = sys.argv[1] if len(sys.argv) > 1 else "#0066CC"
     style = sys.argv[2] if len(sys.argv) > 2 else "modern"
     output_format = sys.argv[3] if len(sys.argv) > 3 else "json"
-    
+
     # Generate tokens
     tokens = generator.generate_complete_system(brand_color, style)
-    
+
     # Output
     if output_format == 'summary':
         print("=" * 60)
