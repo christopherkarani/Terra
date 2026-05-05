@@ -1,5 +1,91 @@
 # Terra Codebase Audit And DX Review
 
+## Terra Production Push - 2026-05-06
+
+- [x] Refresh repo, GitHub PR, CI, release, and memory state.
+- [ ] Preserve task notes and get `swiftformat` clean enough to rebase.
+- [ ] Rebase `swiftformat` onto current `origin/main`.
+- [ ] Resolve conflicts while preserving `main` Zig lifecycle parity and PR #25 audit/remediation fixes.
+- [ ] Run focused post-conflict Swift/Zig lifecycle verification.
+- [ ] Run local release validation gates.
+- [ ] Push branch and get PR #25 conflict-free, non-draft, and green in CI.
+- [ ] Merge PR #25 to `main`.
+- [ ] Revalidate `main`.
+- [ ] Publish GitHub releases for `0.3.2` backfill and `1.0.0`.
+- [ ] Record final production result and residual blockers.
+
+### Plan
+
+1. Keep PR #25 scoped to the existing audit/remediation branch. Do not add Perfetto implementation or stale PR #15-#20 work unless a current conflict proves it is required.
+2. Rebase onto `origin/main` and resolve only the known overlap in package metadata, OpenTelemetry/Zig lifecycle handling, lifecycle tests, Zig backend tests, and task notes.
+3. Treat green local full validation, green GitHub CI, mergeability, post-merge validation, and published release pages as required gates before calling production done.
+4. Use `1.0.0` as the production release version because the branch contains breaking API/configuration changes and native package metadata already reports `1.0.0`.
+
+## Production Readiness Check - 2026-05-06
+
+- [x] Identify the active repo, branch, and dirty worktree scope.
+- [x] Check GitHub default branch, PR, and CI state for the current branch.
+- [x] Run local release/readiness validation commands that are practical in this environment.
+- [x] Compare remaining blockers against the production push decision.
+- [x] Record the final readiness verdict and required follow-up.
+
+### Plan
+
+1. Treat `/Users/chriskarani/CodingProjects/RYNO/Terra` as the active production candidate because the RYNO root is not a git repo, TerraViewer is clean, and Terra is the only dirty checkout.
+2. Fail closed on production readiness if the branch has unmerged changes, failing or missing CI, unresolved local validation blockers, or release-critical task items still open.
+3. Prefer current evidence from git, GitHub, and validation commands over older audit notes.
+
+### Review
+
+- Verdict: not ready to push into production yet.
+- Active candidate is the Terra repo on branch `swiftformat`; TerraViewer is clean on `main`, and the RYNO root is not a git repository.
+- The branch has a local documentation-only task note change in `tasks/todo.md`.
+- GitHub PR #25 is still draft, targets `main`, and GitHub reports it as conflicting.
+- After fetching, `origin/main` is 3 commits ahead of the branch while the branch is 5 commits ahead of `origin/main`.
+- Merge conflicts are present in `Package.swift`, `Sources/Terra/Terra+OpenTelemetry.swift`, `Sources/Terra/TerraZigOTelBridge.swift`, `Tests/TerraAutoInstrumentTests/TerraLifecycleErrorMappingTests.swift`, `Tests/TerraTests/ZigBackendIntegrationTests.swift`, and `tasks/todo.md`.
+- Latest PR CI run failed all four jobs in 3-4 seconds with no step logs exposed, so the branch does not have a green remote gate.
+- Local `Scripts/validate.sh --quick` passed for repository hygiene, telemetry schema, binding conformance, project skill scripts, Python bindings, Zig core, C++ bindings, Rust bindings, Rust package verification, and SwiftPM manifest validation; Android Gradle checks are intentionally skipped in quick mode.
+- Local `git diff --check` passed.
+- Full local `swift build --disable-automatic-resolution` and `swift test --disable-automatic-resolution --parallel --num-workers 1` were stopped after stalling in `swift-protobuf`'s nested protobuf submodule checkout, matching the known SwiftPM bootstrap blocker.
+- Required follow-up before production: rebase or merge current `origin/main`, resolve conflicts, rerun full SwiftPM validation once dependency checkout completes, get CI green, mark the PR ready for review, and only then merge/release.
+
+## Perfetto On-Device Observability Exploration - 2026-05-01
+
+- [x] Review Terra observability memory, skills, and existing OpenTelemetry/TraceKit seams
+- [x] Research current Perfetto SDK, TrackEvent, trace format, and Apple-platform constraints
+- [x] Split repo and Perfetto feasibility checks across focused subagents
+- [x] Identify safest integration shape and avoid source implementation before check-in
+- [ ] Confirm implementation scope before changing package/source files
+- [ ] Add failing converter/export tests first
+- [ ] Implement optional Perfetto export path
+- [ ] Verify generated trace files open/query in Perfetto tooling
+- [ ] Document adoption limits and user-facing workflow
+
+### Plan
+
+1. Keep Terra's OpenTelemetry span model as the source of truth; do not replace `Terra.installOpenTelemetry` or the existing OTLP export path.
+2. Add Perfetto as an optional local export/analysis module, most likely a new `TerraPerfetto` target/product, instead of adding Perfetto runtime dependencies to `TerraCore`.
+3. Start with a TraceKit-based converter from `TraceSnapshot`/`SpanRecord` to Perfetto TrackEvent protobuf files (`.perfetto-trace` / `.pftrace`).
+4. Map Terra spans to Perfetto slices, Terra events to instant events, profiler numeric attributes to counters where stable, and low-cardinality attributes to debug annotations.
+5. Treat live in-process Perfetto SDK embedding as a later prototype only after the file-export path is proven; gate any Apple-device claim behind a real macOS/iOS build and generated trace proof.
+6. Verify with focused unit tests, a golden Perfetto fixture, SwiftPM manifest/build checks where dependency resolution allows, and Perfetto Trace Processor or UI open/query proof.
+
+### Research Notes
+
+- Perfetto is strong for local/client timeline analysis, but it is not an OpenTelemetry-style distributed tracer.
+- Perfetto's system recording tools do not integrate with system-level macOS data sources; Apple support should be framed as Terra app/inference timeline export, not full-system Apple tracing.
+- The official SDK is C++17 and distributed as amalgamated `perfetto.h` / `perfetto.cc`; docs mention macOS for in-process SDK usage but did not show an official iOS support claim.
+- Perfetto supports synthetic TrackEvent protobuf generation, which fits Terra better than embedding the C++ SDK in the first pass.
+- Existing repo seams favor `TerraTraceKit`/`SpanRecord` conversion: `OTLPHTTPServer` ingests spans into `TraceStore`, and `TraceSnapshot` already gives normalized span data.
+- Avoid new telemetry keys for the first pass. If new `terra.*`, `gen_ai.*`, `process.*`, or `metal.*` keys become necessary, register them in `Docs/telemetry-schema.json` and run schema validation.
+
+### Review
+
+- No source implementation has started yet.
+- Recommended first implementation scope: `Package.swift`, `Sources/TerraPerfetto`, `Tests/TerraPerfettoTests`, and docs/snippets only after converter tests exist.
+- Primary risk: overpromising "on-device Perfetto" as system tracing on Apple. The production-grade scope is offline/local Perfetto trace export from Terra's existing app-level telemetry.
+- Known verification constraint: prior SwiftPM checks in this repo can stall during `swift-protobuf` checkout; use focused filters and record exact bootstrap blockers instead of overstating test status.
+
 ## Packaging And Native Validation Fixes - 2026-04-30
 
 - [x] Preserve current dirty worktree and avoid reverting unrelated edits
