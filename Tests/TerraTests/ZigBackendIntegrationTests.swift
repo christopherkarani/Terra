@@ -2,6 +2,7 @@
 
 import Testing
 import CTerraBridge
+@testable import TerraCore
 
 @Suite("Zig Backend Integration", .serialized)
 struct ZigBackendIntegrationTests {
@@ -17,6 +18,40 @@ struct ZigBackendIntegrationTests {
 
         let result = terra_shutdown(inst)
         #expect(result == 0, "terra_shutdown failed with \(result)")
+    }
+
+    @Test func terraInstallZigBackendIsIdempotentAndUpdatesLifecycle() {
+        Terra.lockTestingIsolation()
+        defer { Terra.unlockTestingIsolation() }
+        Terra.resetOpenTelemetryForTesting()
+        defer { Terra.resetOpenTelemetryForTesting() }
+
+        #expect(Terra._lifecycleState == .stopped)
+        #expect(Terra.installZigBackend(serviceName: "zig-idempotent", serviceVersion: "1.0.0"))
+        let instance = Terra._zigInstance
+        #expect(instance != nil)
+        #expect(Terra._lifecycleState == .running)
+        #expect(Terra.installZigBackend(serviceName: "zig-idempotent", serviceVersion: "1.0.1"))
+        #expect(Terra._zigInstance == instance)
+        #expect(Terra._lifecycleState == .running)
+
+        Terra.shutdownZigBackend()
+        #expect(Terra._zigInstance == nil)
+        #expect(Terra._lifecycleState == .stopped)
+    }
+
+    @Test func terraShutdownZigBackendIsIdempotent() {
+        Terra.lockTestingIsolation()
+        defer { Terra.unlockTestingIsolation() }
+        Terra.resetOpenTelemetryForTesting()
+        defer { Terra.resetOpenTelemetryForTesting() }
+
+        #expect(Terra.installZigBackend(serviceName: "zig-shutdown", serviceVersion: nil))
+        Terra.shutdownZigBackend()
+        Terra.shutdownZigBackend()
+
+        #expect(Terra._zigInstance == nil)
+        #expect(Terra._lifecycleState == .stopped)
     }
 
     @Test func inferenceSpanLifecycle() {

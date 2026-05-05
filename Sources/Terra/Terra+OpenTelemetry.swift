@@ -569,6 +569,9 @@ extension Terra {
   }
 
   static func resetOpenTelemetryForTesting() {
+    #if canImport(CTerraBridge)
+    Terra.shutdownZigBackend()
+    #endif
     openTelemetryInstallLock.lock()
     defer { openTelemetryInstallLock.unlock() }
     installedOpenTelemetryConfiguration = nil
