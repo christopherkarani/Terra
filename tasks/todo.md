@@ -8,7 +8,7 @@
 - [x] Resolve conflicts while preserving `main` Zig lifecycle parity and PR #25 audit/remediation fixes.
 - [x] Run focused post-conflict Swift/Zig lifecycle verification.
 - [x] Run local release validation gates.
-- [ ] Push branch and get PR #25 conflict-free, non-draft, and green in CI.
+- [ ] Push branch and get PR #25 conflict-free, non-draft, and green in CI or documented manual release exception.
 - [ ] Merge PR #25 to `main`.
 - [ ] Revalidate `main`.
 - [ ] Publish GitHub releases for `0.3.2` backfill and `1.0.0`.
@@ -30,7 +30,8 @@
 - `JAVA_HOME=/opt/homebrew/opt/openjdk@21 PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH Scripts/validate.sh --quick` passed.
 - `JAVA_HOME=/opt/homebrew/opt/openjdk@21 ANDROID_HOME=/opt/homebrew/share/android-commandlinetools PATH=/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/share/android-commandlinetools/platform-tools:$PATH TERRA_SWIFTPM_TIMEOUT_SECONDS=600 Scripts/validate.sh` passed, including SwiftPM, 404 Swift tests, Android native libraries, Gradle unit tests, and release AAR assembly.
 - Pushed rebased branch `swiftformat` to PR #25; GitHub reports the PR as mergeable and conflict-free.
-- Remote CI is blocked outside the repo: all four jobs failed before starting with the annotation "The job was not started because your account is locked due to a billing issue." PR #25 remains draft, unmerged, and unreleased until GitHub Actions can run green.
+- Remote CI is blocked outside the repo: all four jobs failed before starting with the annotation "The job was not started because your account is locked due to a billing issue."
+- Manual release exception approved on 2026-05-06 because Terra must ship now and the billing issue cannot be addressed. Use the passing full local validation as the release gate, then run the same validation again on clean `main` after merge.
 
 ## Production Readiness Check - 2026-05-06
 
