@@ -24,7 +24,7 @@ class SpanContextCoroutineTest {
     }
 
     @Test
-    fun `SpanContext propagates through coroutine context`() = runBlocking {
+    fun spanContextPropagatesThroughCoroutineContext() = runBlocking {
         Terra.initDefault()
 
         val parent = Terra.beginInferenceSpan("parent")
@@ -42,7 +42,7 @@ class SpanContextCoroutineTest {
     }
 
     @Test
-    fun `SpanContext survives coroutine dispatch`() = runBlocking {
+    fun spanContextSurvivesCoroutineDispatch() = runBlocking {
         Terra.initDefault()
 
         val parent = Terra.beginInferenceSpan("dispatch-test")
@@ -67,7 +67,7 @@ class SpanContextCoroutineTest {
     }
 
     @Test
-    fun `nested coroutine scopes maintain context`() = runBlocking {
+    fun nestedCoroutineScopesMaintainContext() = runBlocking {
         Terra.initDefault()
 
         val root = Terra.beginAgentSpan("agent")
@@ -95,7 +95,7 @@ class SpanContextCoroutineTest {
     }
 
     @Test
-    fun `SpanContext data class equality`() = runBlocking {
+    fun spanContextDataClassEquality() = runBlocking {
         Terra.initDefault()
 
         val span = Terra.beginInferenceSpan("equality-test")
@@ -109,16 +109,19 @@ class SpanContextCoroutineTest {
     }
 
     @Test
-    fun `SpanContext isValid for zero context`() {
+    fun spanContextIsValidForZeroContext() {
         val zero = SpanContext(0L, 0L, 0L)
         assertFalse("Zero context should not be valid", zero.isValid)
 
         val partial = SpanContext(0L, 1L, 0L)
-        assertTrue("Non-zero trace ID should be valid", partial.isValid)
+        assertFalse("Trace ID without span ID should not be valid", partial.isValid)
+
+        val valid = SpanContext(0L, 1L, 1L)
+        assertTrue("Trace ID and span ID should be valid", valid.isValid)
     }
 
     @Test
-    fun `parallel coroutines with independent spans`() = runBlocking {
+    fun parallelCoroutinesWithIndependentSpans() = runBlocking {
         Terra.initDefault()
 
         val parent = Terra.beginInferenceSpan("parallel-parent")

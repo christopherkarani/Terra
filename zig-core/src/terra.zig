@@ -145,8 +145,9 @@ pub const TerraInstance = struct {
             return null;
         };
 
-        const trace_id = if (parent_ctx) |ctx| ctx.traceID() else TraceID.generate();
-        const parent_id = if (parent_ctx) |ctx| ctx.spanID() else SpanID.zero;
+        const valid_parent_ctx = if (parent_ctx) |ctx| if (ctx.isValid()) ctx else null else null;
+        const trace_id = if (valid_parent_ctx) |ctx| ctx.traceID() else TraceID.generate();
+        const parent_id = if (valid_parent_ctx) |ctx| ctx.spanID() else SpanID.zero;
 
         s.* = Span.init(
             name,
@@ -365,6 +366,21 @@ test "TerraInstance context propagation" {
 
     inst.endSpan(child);
     inst.endSpan(parent);
+}
+
+test "TerraInstance ignores invalid parent context" {
+    var cfg = TerraConfig.default();
+    cfg.allocator = std.testing.allocator;
+    const inst = try TerraInstance.create(std.testing.allocator, cfg);
+    defer inst.destroy();
+
+    const invalid_parent = SpanContext{ .trace_id_hi = 9, .trace_id_lo = 10, .span_id = 0 };
+    const child = inst.beginToolSpan(invalid_parent, "child-tool", false).?;
+
+    try std.testing.expect(!child.trace_id.isZero());
+    try std.testing.expect(child.parent_span_id.isZero());
+
+    inst.endSpan(child);
 }
 
 test "TerraInstance session management" {

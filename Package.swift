@@ -26,6 +26,7 @@ let package = Package(
     .library(name: "TerraANEProfiler", targets: ["TerraANEProfiler"]),
     .library(name: "TerraTracedMacro", targets: ["TerraTracedMacro"]),
     .executable(name: "TerraSample", targets: ["TerraSample"]),
+    .executable(name: "TerraAutoInstrumentExample", targets: ["TerraAutoInstrumentExample"]),
     .executable(name: "TerraSDKBenchmarks", targets: ["TerraSDKBenchmarks"])
   ],
   dependencies: [
@@ -95,6 +96,9 @@ let package = Package(
         .product(name: "OpenTelemetryProtocolExporter", package: "opentelemetry-swift")
       ],
       path: "Sources/TerraTraceKit",
+      resources: [
+        .copy("../../Docs/telemetry-schema.json")
+      ],
     ),
 
     // MARK: - Auto-Instrumentation Umbrella
@@ -157,7 +161,12 @@ let package = Package(
       path: "Sources/CTerraANEBridge",
       publicHeadersPath: "include",
       cSettings: [
-        .define("APP_STORE", .when(configuration: .release)),
+        // P0-7: Safe-by-default gating. App Store / Developer ID release
+        // builds NEVER reach the private `_ANEPerformanceStats` symbol.
+        // Developers opt-in by passing `-Xcc -DENABLE_ANE_PRIVATE_APIS`
+        // (or by editing this stanza) when archiving with a Developer ID
+        // profile that legally permits the private API.
+        .define("APP_STORE"),
       ]
     ),
     .target(
@@ -169,7 +178,8 @@ let package = Package(
       ],
       path: "Sources/TerraANEProfiler",
       swiftSettings: [
-        .define("APP_STORE", .when(configuration: .release)),
+        // See CTerraANEBridge note. Swift mirror for #if-guarded code paths.
+        .define("APP_STORE"),
       ]
     ),
     .target(
@@ -336,6 +346,14 @@ let package = Package(
       path: "Tests/TerraFoundationModelsTests",
     ),
     .testTarget(
+      name: "TerraAccelerateTests",
+      dependencies: [
+        "TerraAccelerate",
+        .product(name: "OpenTelemetryApi", package: "opentelemetry-swift-core"),
+      ],
+      path: "Tests/TerraAccelerateTests",
+    ),
+    .testTarget(
       name: "TerraTracedMacroTests",
       dependencies: [
         "TerraTracedMacroPlugin",
@@ -355,6 +373,11 @@ let package = Package(
       name: "TerraSample",
       dependencies: ["Terra"],
       path: "Examples/Terra Sample"
+    ),
+    .executableTarget(
+      name: "TerraAutoInstrumentExample",
+      dependencies: ["Terra"],
+      path: "Examples/Terra AutoInstrument"
     )
   ]
 )

@@ -714,7 +714,6 @@ private extension Terra {
       Terra could not expose the active span for \(fallbackName). This indicates a Terra context propagation bug, not valid SDK usage.
       Use Terra.workflow(...) or Terra.startSpan(...) for explicit parent control, and report this path if it reproduces.
       """
-      assertionFailure(guidance)
       let invalidHandle = Terra._invalidSpanHandle(
         guidance: guidance
       )

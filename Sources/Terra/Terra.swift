@@ -13,8 +13,22 @@ public enum Terra {
     Runtime.shared.install(installation)
   }
 
-  package static func shouldCaptureAutoInstrumentedPromptContent() -> Bool {
-    Runtime.shared.privacy.shouldCapture(includeContent: false)
+  package static func autoInstrumentedPromptAttributes(
+    for prompt: String
+  ) -> [String: AttributeValue] {
+    let privacy = Runtime.shared.privacy
+    guard privacy.shouldCapture(includeContent: false) else { return [:] }
+    return redactedStringAttributes(
+      original: prompt,
+      lengthKey: Keys.Terra.promptLength,
+      hmacKey: Keys.Terra.promptHMACSHA256,
+      legacySHA256Key: Keys.Terra.promptSHA256,
+      using: privacy
+    )
+  }
+
+  package static func sanitizedErrorType(_ error: any Error) -> String {
+    String(reflecting: Swift.type(of: error))
   }
 
   // MARK: - Public API (Phase 2)
@@ -237,12 +251,17 @@ public enum Terra {
     }
     spanBuilder.setAttribute(key: Keys.Terra.thermalState, value: .string(Runtime.thermalStateLabel()))
 
-    let parentSpan =
-      explicitParent.flatMap { $0.isEnded ? nil : $0.otelSpan }
-      ?? Terra.currentSpan().flatMap { $0.isEnded ? nil : $0.otelSpan }
-      ?? OpenTelemetry.instance.contextProvider.activeSpan
+    let explicitParentEnded = explicitParent?.isEnded == true
+    let parentSpan: (any Span)? = if let explicitParent {
+      explicitParent.isEnded ? nil : explicitParent.otelSpan
+    } else {
+      Terra.currentSpan().flatMap { $0.isEnded ? nil : $0.otelSpan }
+        ?? OpenTelemetry.instance.contextProvider.activeSpan
+    }
     if let parentSpan {
       spanBuilder.setParent(parentSpan)
+    } else if explicitParentEnded {
+      spanBuilder.setNoParent()
     }
     let span = spanBuilder.startSpan()
     let startMemorySnapshot = TerraSystemProfiler.isInstalled
@@ -259,6 +278,15 @@ public enum Terra {
     let markDetachedParentEnded = Terra._hasDetachedParentEndedMarker
     if markDetachedParentEnded {
       span.addEvent(name: "detached.parent.ended")
+    }
+    if explicitParentEnded {
+      span.setAttribute(key: "terra.parent.explicit_ended", value: .bool(true))
+      span.addEvent(
+        name: "terra.parent.explicit_ended",
+        attributes: [
+          "fix": .string("Create child spans before ending the explicit parent, or capture span.handoff() before the child span closes.")
+        ]
+      )
     }
     let scope = Scope<Kind>(span: span)
     defer {

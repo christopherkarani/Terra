@@ -17,7 +17,7 @@ include $(PREBUILT_STATIC_LIBRARY)
 
 # ── JNI bridge shared library ────────────────────────────────────────────
 include $(CLEAR_VARS)
-LOCAL_MODULE := terra
+LOCAL_MODULE := tera
 LOCAL_SRC_FILES := terra_jni.c
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../../zig-core/include
 LOCAL_STATIC_LIBRARIES := terra_prebuilt

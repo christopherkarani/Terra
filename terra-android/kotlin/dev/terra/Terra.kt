@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicLong
 object Terra {
 
     init {
-        System.loadLibrary("terra")
+        System.loadLibrary("tera")
     }
 
     /** Opaque pointer to the native terra_t instance, or 0 if not initialized. */
@@ -121,12 +121,13 @@ object Terra {
         parent: SpanContext? = null
     ): TerraSpan {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginInferenceSpan(
+        val validParent = parent.validOrNull()
+        val spanPtr = TerraSpan.beginInferenceSpan(
             handle,
-            parent?.traceIdHi ?: 0L,
-            parent?.traceIdLo ?: 0L,
-            parent?.spanId ?: 0L,
-            parent != null,
+            validParent?.traceIdHi ?: 0L,
+            validParent?.traceIdLo ?: 0L,
+            validParent?.spanId ?: 0L,
+            validParent != null,
             model,
             includeContent
         )
@@ -140,12 +141,13 @@ object Terra {
         parent: SpanContext? = null
     ): TerraSpan {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginEmbeddingSpan(
+        val validParent = parent.validOrNull()
+        val spanPtr = TerraSpan.beginEmbeddingSpan(
             handle,
-            parent?.traceIdHi ?: 0L,
-            parent?.traceIdLo ?: 0L,
-            parent?.spanId ?: 0L,
-            parent != null,
+            validParent?.traceIdHi ?: 0L,
+            validParent?.traceIdLo ?: 0L,
+            validParent?.spanId ?: 0L,
+            validParent != null,
             model,
             includeContent
         )
@@ -159,12 +161,13 @@ object Terra {
         parent: SpanContext? = null
     ): TerraSpan {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginAgentSpan(
+        val validParent = parent.validOrNull()
+        val spanPtr = TerraSpan.beginAgentSpan(
             handle,
-            parent?.traceIdHi ?: 0L,
-            parent?.traceIdLo ?: 0L,
-            parent?.spanId ?: 0L,
-            parent != null,
+            validParent?.traceIdHi ?: 0L,
+            validParent?.traceIdLo ?: 0L,
+            validParent?.spanId ?: 0L,
+            validParent != null,
             agentName,
             includeContent
         )
@@ -178,12 +181,13 @@ object Terra {
         parent: SpanContext? = null
     ): TerraSpan {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginToolSpan(
+        val validParent = parent.validOrNull()
+        val spanPtr = TerraSpan.beginToolSpan(
             handle,
-            parent?.traceIdHi ?: 0L,
-            parent?.traceIdLo ?: 0L,
-            parent?.spanId ?: 0L,
-            parent != null,
+            validParent?.traceIdHi ?: 0L,
+            validParent?.traceIdLo ?: 0L,
+            validParent?.spanId ?: 0L,
+            validParent != null,
             toolName,
             includeContent
         )
@@ -197,12 +201,13 @@ object Terra {
         parent: SpanContext? = null
     ): TerraSpan {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginSafetySpan(
+        val validParent = parent.validOrNull()
+        val spanPtr = TerraSpan.beginSafetySpan(
             handle,
-            parent?.traceIdHi ?: 0L,
-            parent?.traceIdLo ?: 0L,
-            parent?.spanId ?: 0L,
-            parent != null,
+            validParent?.traceIdHi ?: 0L,
+            validParent?.traceIdLo ?: 0L,
+            validParent?.spanId ?: 0L,
+            validParent != null,
             checkName,
             includeContent
         )
@@ -216,12 +221,13 @@ object Terra {
         parent: SpanContext? = null
     ): StreamingScope {
         val handle = requireHandle()
-        val spanPtr = TerraSpan.nativeBeginStreamingSpan(
+        val validParent = parent.validOrNull()
+        val spanPtr = TerraSpan.beginStreamingSpan(
             handle,
-            parent?.traceIdHi ?: 0L,
-            parent?.traceIdLo ?: 0L,
-            parent?.spanId ?: 0L,
-            parent != null,
+            validParent?.traceIdHi ?: 0L,
+            validParent?.traceIdLo ?: 0L,
+            validParent?.spanId ?: 0L,
+            validParent != null,
             model,
             includeContent
         )
@@ -277,6 +283,8 @@ object Terra {
         val msg = nativeLastErrorMessage() ?: "Native error code $code"
         throw TerraException(code, msg)
     }
+
+    private fun SpanContext?.validOrNull(): SpanContext? = this?.takeIf { it.isValid }
 
     /* ── JNI declarations ─────────────────────────────────────────────── */
 

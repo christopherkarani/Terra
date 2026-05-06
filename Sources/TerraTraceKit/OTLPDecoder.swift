@@ -1,13 +1,13 @@
 import Foundation
 
 #if canImport(OpenTelemetryProtocolExporterCommon)
-import OpenTelemetryProtocolExporterCommon
+  import OpenTelemetryProtocolExporterCommon
 #elseif canImport(OpenTelemetryProtocolExporterGrpc)
-import OpenTelemetryProtocolExporterGrpc
+  import OpenTelemetryProtocolExporterGrpc
 #elseif canImport(OpenTelemetryProtocolExporterHttp)
-import OpenTelemetryProtocolExporterHttp
+  import OpenTelemetryProtocolExporterHttp
 #elseif canImport(OpenTelemetryProtocolExporterHTTP)
-import OpenTelemetryProtocolExporterHTTP
+  import OpenTelemetryProtocolExporterHTTP
 #endif
 
 public enum OTLPRequestDecoderError: Error, Sendable, Equatable, CustomStringConvertible {
@@ -17,21 +17,29 @@ public enum OTLPRequestDecoderError: Error, Sendable, Equatable, CustomStringCon
   case invalidProtobuf(String)
   case malformedData(reason: String)
   case decompressionFailed(reason: String)
+  /// A span carried impossible timestamps. Examples:
+  /// - `endTimeUnixNano > 0 && endTimeUnixNano < startTimeUnixNano` (negative duration).
+  /// - `endTimeUnixNano == 0 && status != .unset` (claimed completion without an end).
+  ///
+  /// `endTimeUnixNano == 0` is interpreted as "in-flight" only when `status == .unset`.
+  case invalidTimestamp(reason: String)
 
   public var description: String {
     switch self {
-    case .unsupportedEncoding(let encoding):
+    case let .unsupportedEncoding(encoding):
       return "Unsupported content encoding: \(encoding)"
-    case .compressedSizeLimitExceeded(let actual, let max):
+    case let .compressedSizeLimitExceeded(actual, max):
       return "Compressed payload exceeds limit (\(actual) > \(max))"
-    case .decompressedSizeLimitExceeded(let max):
+    case let .decompressedSizeLimitExceeded(max):
       return "Decompressed payload exceeds limit (max: \(max))"
-    case .invalidProtobuf(let reason):
+    case let .invalidProtobuf(reason):
       return "Invalid OTLP protobuf: \(reason)"
-    case .malformedData(let reason):
+    case let .malformedData(reason):
       return "Malformed OTLP data: \(reason)"
-    case .decompressionFailed(let reason):
+    case let .decompressionFailed(reason):
       return "Decompression failed: \(reason)"
+    case let .invalidTimestamp(reason):
+      return "Invalid OTLP span timestamp: \(reason)"
     }
   }
 }
@@ -42,27 +50,55 @@ public struct OTLPRequestDecoder: Sendable {
     public var maxDecompressedBytes: Int
     public var maxSpansPerRequest: Int
     public var maxAttributesPerSpan: Int
+    public var maxAttributesPerResource: Int
+    public var maxEventsPerSpan: Int
+    public var maxLinksPerSpan: Int
+    public var maxAttributesPerEvent: Int
+    public var maxAttributesPerLink: Int
+    public var maxAttributeKeyBytes: Int
+    public var maxAttributeValueBytes: Int
     public var maxAnyValueDepth: Int
 
     public init(
       maxBodyBytes: Int,
       maxDecompressedBytes: Int,
-      maxSpansPerRequest: Int = 10_000,
+      maxSpansPerRequest: Int = 10000,
       maxAttributesPerSpan: Int = 256,
+      maxAttributesPerResource: Int = 256,
+      maxEventsPerSpan: Int = 1024,
+      maxLinksPerSpan: Int = 128,
+      maxAttributesPerEvent: Int = 64,
+      maxAttributesPerLink: Int = 64,
+      maxAttributeKeyBytes: Int = 512,
+      maxAttributeValueBytes: Int = 8 * 1024,
       maxAnyValueDepth: Int = 8
     ) {
       self.maxBodyBytes = maxBodyBytes
       self.maxDecompressedBytes = maxDecompressedBytes
       self.maxSpansPerRequest = maxSpansPerRequest
       self.maxAttributesPerSpan = maxAttributesPerSpan
+      self.maxAttributesPerResource = maxAttributesPerResource
+      self.maxEventsPerSpan = maxEventsPerSpan
+      self.maxLinksPerSpan = maxLinksPerSpan
+      self.maxAttributesPerEvent = maxAttributesPerEvent
+      self.maxAttributesPerLink = maxAttributesPerLink
+      self.maxAttributeKeyBytes = maxAttributeKeyBytes
+      self.maxAttributeValueBytes = maxAttributeValueBytes
       self.maxAnyValueDepth = maxAnyValueDepth
     }
 
     public static let `default` = Limits(
       maxBodyBytes: 10 * 1024 * 1024,
       maxDecompressedBytes: 50 * 1024 * 1024,
-      maxSpansPerRequest: 10_000,
+      maxSpansPerRequest: 10000,
       maxAttributesPerSpan: 256,
+      maxAttributesPerResource: 256,
+      maxEventsPerSpan: 1024,
+      maxLinksPerSpan: 128,
+      maxAttributesPerEvent: 64,
+      maxAttributesPerLink: 64,
+      maxAttributeKeyBytes: 512,
+      maxAttributeValueBytes: 8 * 1024,
       maxAnyValueDepth: 8
     )
   }
@@ -74,7 +110,7 @@ public struct OTLPRequestDecoder: Sendable {
   }
 
   public init(maxBodyBytes: Int, maxDecompressedBytes: Int) {
-    self.limits = Limits(
+    limits = Limits(
       maxBodyBytes: maxBodyBytes,
       maxDecompressedBytes: maxDecompressedBytes
     )
@@ -161,7 +197,16 @@ public struct OTLPRequestDecoder: Sendable {
 
     var seenSpanCount = 0
     for resourceSpans in request.resourceSpans {
-      let resourceAttributesDict = try attributesDictionary(from: resourceSpans.resource.attributes)
+      guard resourceSpans.resource.attributes.count <= limits.maxAttributesPerResource else {
+        throw OTLPRequestDecoderError.malformedData(
+          reason: "Resource has \(resourceSpans.resource.attributes.count) attributes (limit \(limits.maxAttributesPerResource))"
+        )
+      }
+      let resourceAttributesDict = try attributesDictionary(
+        from: resourceSpans.resource.attributes,
+        limit: limits.maxAttributesPerResource,
+        owner: "resource"
+      )
       let resourceAttributes = Attributes(dictionary: resourceAttributesDict)
       let resource = Resource(attributes: resourceAttributes)
 
@@ -202,6 +247,11 @@ public struct OTLPRequestDecoder: Sendable {
     let parentSpanID: SpanID?
     if span.parentSpanID.isEmpty {
       parentSpanID = nil
+    } else if span.parentSpanID.count == 8, span.parentSpanID.allSatisfy({ $0 == 0 }) {
+      // Some OTel SDKs zero-fill the parent_span_id field instead of leaving
+      // it empty. Treat an all-zero non-empty parent_span_id as no-parent for
+      // exporter compatibility (P1-6).
+      parentSpanID = nil
     } else {
       guard let parsed = SpanID(data: span.parentSpanID) else {
         throw OTLPRequestDecoderError.malformedData(reason: "Invalid parent_span_id length")
@@ -211,21 +261,51 @@ public struct OTLPRequestDecoder: Sendable {
 
     let kind = mapSpanKind(span.kind.rawValue)
     let status = mapStatusCode(span.status.code.rawValue)
+    let statusDescription = span.status.message.isEmpty ? nil : span.status.message
+
+    // P1-4: validate timestamp invariants.
+    // - endTimeUnixNano > 0 && endTimeUnixNano < startTimeUnixNano => negative duration.
+    // - endTimeUnixNano == 0 && status != .unset => completion claim without an end.
+    if span.endTimeUnixNano > 0, span.endTimeUnixNano < span.startTimeUnixNano {
+      throw OTLPRequestDecoderError.invalidTimestamp(
+        reason: "end_time_unix_nano precedes start_time_unix_nano"
+      )
+    }
+    if span.endTimeUnixNano == 0, status != .unset {
+      throw OTLPRequestDecoderError.invalidTimestamp(
+        reason: "end_time_unix_nano is zero but status is not unset"
+      )
+    }
 
     guard span.attributes.count <= limits.maxAttributesPerSpan else {
       throw OTLPRequestDecoderError.malformedData(
         reason: "Span '\(span.name)' has \(span.attributes.count) attributes (limit \(limits.maxAttributesPerSpan))"
       )
     }
+    guard span.events.count <= limits.maxEventsPerSpan else {
+      throw OTLPRequestDecoderError.malformedData(
+        reason: "Span '\(span.name)' has \(span.events.count) events (limit \(limits.maxEventsPerSpan))"
+      )
+    }
+    guard span.links.count <= limits.maxLinksPerSpan else {
+      throw OTLPRequestDecoderError.malformedData(
+        reason: "Span '\(span.name)' has \(span.links.count) links (limit \(limits.maxLinksPerSpan))"
+      )
+    }
 
-    var attributesDict = try attributesDictionary(from: span.attributes)
+    var attributesDict = try attributesDictionary(
+      from: span.attributes,
+      limit: limits.maxAttributesPerSpan,
+      owner: "span '\(span.name)'"
+    )
 
     if let serviceName = resourceAttributes["service.name"] {
       attributesDict["service.name"] = serviceName
     }
 
     for (key, value) in resourceAttributes
-    where key.hasPrefix("gen_ai.") || key.hasPrefix("terra.") {
+      where key.hasPrefix("gen_ai.") || key.hasPrefix("terra.")
+    {
       if attributesDict[key] == nil {
         attributesDict[key] = value
       }
@@ -235,6 +315,8 @@ public struct OTLPRequestDecoder: Sendable {
     attributesDict["status.code"] = .string(status.rawValue)
 
     let attributes = Attributes(dictionary: attributesDict)
+    let events = try mapEvents(span.events, spanName: span.name)
+    let links = try mapLinks(span.links, spanName: span.name)
 
     return SpanRecord(
       traceID: traceID,
@@ -246,8 +328,69 @@ public struct OTLPRequestDecoder: Sendable {
       startTimeUnixNano: span.startTimeUnixNano,
       endTimeUnixNano: span.endTimeUnixNano,
       attributes: attributes,
-      resource: resource
+      resource: resource,
+      statusDescription: statusDescription,
+      events: events,
+      links: links,
+      droppedAttributesCount: span.droppedAttributesCount,
+      droppedEventsCount: span.droppedEventsCount,
+      droppedLinksCount: span.droppedLinksCount
     )
+  }
+
+  private func mapEvents(
+    _ events: [Opentelemetry_Proto_Trace_V1_Span.Event],
+    spanName: String
+  ) throws -> [SpanEventRecord] {
+    try events.map { event in
+      guard event.attributes.count <= limits.maxAttributesPerEvent else {
+        throw OTLPRequestDecoderError.malformedData(
+          reason: "Event '\(event.name)' on span '\(spanName)' has \(event.attributes.count) attributes (limit \(limits.maxAttributesPerEvent))"
+        )
+      }
+      let attributes = try attributesDictionary(
+        from: event.attributes,
+        limit: limits.maxAttributesPerEvent,
+        owner: "event '\(event.name)'"
+      )
+      return SpanEventRecord(
+        name: event.name,
+        timeUnixNano: event.timeUnixNano,
+        attributes: Attributes(dictionary: attributes),
+        droppedAttributesCount: event.droppedAttributesCount
+      )
+    }
+  }
+
+  private func mapLinks(
+    _ links: [Opentelemetry_Proto_Trace_V1_Span.Link],
+    spanName: String
+  ) throws -> [SpanLinkRecord] {
+    try links.map { link in
+      guard let traceID = TraceID(data: link.traceID) else {
+        throw OTLPRequestDecoderError.malformedData(reason: "Invalid link trace_id length on span '\(spanName)'")
+      }
+      guard let spanID = SpanID(data: link.spanID) else {
+        throw OTLPRequestDecoderError.malformedData(reason: "Invalid link span_id length on span '\(spanName)'")
+      }
+      guard link.attributes.count <= limits.maxAttributesPerLink else {
+        throw OTLPRequestDecoderError.malformedData(
+          reason: "Link on span '\(spanName)' has \(link.attributes.count) attributes (limit \(limits.maxAttributesPerLink))"
+        )
+      }
+      let attributes = try attributesDictionary(
+        from: link.attributes,
+        limit: limits.maxAttributesPerLink,
+        owner: "link on span '\(spanName)'"
+      )
+      return SpanLinkRecord(
+        traceID: traceID,
+        spanID: spanID,
+        traceState: link.traceState,
+        attributes: Attributes(dictionary: attributes),
+        droppedAttributesCount: link.droppedAttributesCount
+      )
+    }
   }
 
   private func mapSpanKind(_ rawValue: Int) -> SpanKind {
@@ -279,15 +422,34 @@ public struct OTLPRequestDecoder: Sendable {
   }
 
   private func attributesDictionary(
-    from keyValues: [Opentelemetry_Proto_Common_V1_KeyValue]
+    from keyValues: [Opentelemetry_Proto_Common_V1_KeyValue],
+    limit: Int,
+    owner: String
   ) throws -> [String: AttributeValue] {
+    guard keyValues.count <= limit else {
+      throw OTLPRequestDecoderError.malformedData(
+        reason: "\(owner) has \(keyValues.count) attributes (limit \(limit))"
+      )
+    }
+
     var result: [String: AttributeValue] = [:]
     result.reserveCapacity(keyValues.count)
 
     for keyValue in keyValues {
       let key = keyValue.key
       guard !key.isEmpty else { continue }
-      result[key] = try attributeValue(from: keyValue.value, depth: 0)
+      guard key.utf8.count <= limits.maxAttributeKeyBytes else {
+        throw OTLPRequestDecoderError.malformedData(
+          reason: "\(owner) attribute key exceeds \(limits.maxAttributeKeyBytes) bytes"
+        )
+      }
+      let value = try attributeValue(from: keyValue.value, depth: 0)
+      guard attributeValueByteCount(value) <= limits.maxAttributeValueBytes else {
+        throw OTLPRequestDecoderError.malformedData(
+          reason: "\(owner) attribute '\(key)' value exceeds \(limits.maxAttributeValueBytes) bytes"
+        )
+      }
+      result[key] = value
     }
 
     return result
@@ -304,26 +466,47 @@ public struct OTLPRequestDecoder: Sendable {
     }
 
     switch value.value {
-    case .stringValue(let string):
+    case let .stringValue(string):
       return .string(string)
-    case .boolValue(let bool):
+    case let .boolValue(bool):
       return .bool(bool)
-    case .intValue(let int):
+    case let .intValue(int):
       return .int(int)
-    case .doubleValue(let double):
+    case let .doubleValue(double):
       return .double(double)
-    case .arrayValue(let array):
+    case let .arrayValue(array):
       let values = try array.values.map { try attributeValue(from: $0, depth: depth + 1) }
       return .array(values)
-    case .kvlistValue(let kvlist):
+    case let .kvlistValue(kvlist):
       let attributes = try kvlist.values.map {
-        Attribute(key: $0.key, value: try attributeValue(from: $0.value, depth: depth + 1))
+        try Attribute(key: $0.key, value: attributeValue(from: $0.value, depth: depth + 1))
       }
       return .kvlist(attributes)
-    case .bytesValue(let data):
+    case let .bytesValue(data):
       return .bytes(Array(data))
     case .none:
       return .null
+    }
+  }
+
+  private func attributeValueByteCount(_ value: AttributeValue) -> Int {
+    switch value {
+    case let .string(string):
+      return string.utf8.count
+    case .bool:
+      return 1
+    case .int, .double:
+      return 8
+    case let .bytes(bytes):
+      return bytes.count
+    case let .array(values):
+      return values.reduce(0) { $0 + attributeValueByteCount($1) }
+    case let .kvlist(attributes):
+      return attributes.reduce(0) { partial, attribute in
+        partial + attribute.key.utf8.count + attributeValueByteCount(attribute.value)
+      }
+    case .null:
+      return 0
     }
   }
 }

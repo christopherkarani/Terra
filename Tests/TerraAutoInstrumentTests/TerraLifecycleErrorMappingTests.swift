@@ -58,6 +58,12 @@ final class TerraLifecycleErrorMappingTests {
     } catch {
       #expect(Bool(false), "Unexpected error type: \(error)")
     }
+
+    var recovery = makeConfig()
+    recovery.persistence = .off
+    try await Terra.start(recovery)
+    #expect(Terra.isRunning)
+    await Terra.shutdown()
   }
 
   @Test("starting with different config while running maps to already_started")

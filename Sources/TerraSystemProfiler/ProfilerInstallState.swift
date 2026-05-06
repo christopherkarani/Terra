@@ -20,6 +20,12 @@ package final class ProfilerInstallState<Marker>: @unchecked Sendable {
     lock.unlock()
   }
 
+  package func reset() {
+    lock.lock()
+    _isInstalled = false
+    lock.unlock()
+  }
+
   package var isInstalled: Bool {
     lock.lock()
     defer { lock.unlock() }

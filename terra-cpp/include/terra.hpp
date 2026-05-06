@@ -48,6 +48,7 @@ enum class RedactionStrategy : uint8_t {
     Drop        = TERRA_REDACT_DROP,
     LengthOnly  = TERRA_REDACT_LENGTH_ONLY,
     HmacSha256  = TERRA_REDACT_HMAC_SHA256,
+    Sha256      = TERRA_REDACT_SHA256,
 };
 
 enum class LifecycleState : uint8_t {
@@ -109,13 +110,7 @@ struct SpanContext {
 namespace detail {
 
 /// Ensure a string_view is null-terminated for the C ABI.
-/// If it already ends at a '\0' in memory, return the pointer directly.
-/// Otherwise copy into the provided std::string and return its c_str().
 inline const char* ensure_z(std::string_view sv, std::string& buf) {
-    // Most literals and std::string-backed views are already null-terminated.
-    if (!sv.empty() && sv.data()[sv.size()] == '\0') {
-        return sv.data();
-    }
     buf.assign(sv.data(), sv.size());
     return buf.c_str();
 }
@@ -429,7 +424,7 @@ public:
         std::string mbuf;
         terra_span_context_t c_ctx{};
         const terra_span_context_t* ctx_ptr = nullptr;
-        if (parent_ctx) {
+        if (parent_ctx && parent_ctx->is_valid()) {
             c_ctx = parent_ctx->to_c();
             ctx_ptr = &c_ctx;
         }
@@ -488,7 +483,7 @@ private:
         std::string nbuf;
         terra_span_context_t c_ctx{};
         const terra_span_context_t* ctx_ptr = nullptr;
-        if (parent_ctx) {
+        if (parent_ctx && parent_ctx->is_valid()) {
             c_ctx = parent_ctx->to_c();
             ctx_ptr = &c_ctx;
         }

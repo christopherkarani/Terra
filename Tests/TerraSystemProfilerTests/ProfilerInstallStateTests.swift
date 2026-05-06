@@ -28,6 +28,14 @@ struct ProfilerInstallStateTests {
     #expect(state.isInstalled)
   }
 
+  @Test("reset transitions back to uninstalled")
+  func resetTransitionsBackToUninstalled() {
+    let state = ProfilerInstallState<TestMarker>()
+    state.install()
+    state.reset()
+    #expect(!state.isInstalled)
+  }
+
   @Test("concurrent installs are safe")
   func concurrentInstalls() async {
     let state = ProfilerInstallState<TestMarker>()

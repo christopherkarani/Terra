@@ -215,6 +215,91 @@ extension Terra {
   private static var installedMeterProvider: MeterProviderSdk?
   private static var installedLogProcessor: (any LogRecordProcessor)?
   private static var ownsInstalledTracerProvider: Bool = false
+  /// Gate for the OS signposts processor that Terra installs onto a borrowed
+  /// `TracerProviderSdk` when the augment-existing strategy is used. Tracked
+  /// separately from the export-side gates so shutdown can disable it without
+  /// taking ownership of the borrowed provider.
+  private static var installedAugmentedSignpostsGate: ProcessorGate?
+
+  /// A small one-shot toggle used to gate a `SpanProcessor` after Terra shuts down.
+  ///
+  /// Once `disable()` is called the gate stays disabled; `isEnabled` is the
+  /// fast-path probe `GatedSpanProcessor` checks before delegating any work.
+  package final class ProcessorGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var enabled: Bool
+
+    package init(enabled: Bool = true) {
+      self.enabled = enabled
+    }
+
+    package var isEnabled: Bool {
+      lock.lock()
+      defer { lock.unlock() }
+      return enabled
+    }
+
+    package func disable() {
+      lock.lock()
+      enabled = false
+      lock.unlock()
+    }
+  }
+
+  /// Wraps an existing `SpanProcessor` and short-circuits every method when the
+  /// associated `ProcessorGate` is disabled. Used to "borrow" a foreign tracer
+  /// provider while still being able to stop emitting events on shutdown.
+  package final class GatedSpanProcessor: SpanProcessor {
+    // Stored as `var` because `SpanProcessor.onEnd` and `shutdown` are declared
+    // `mutating` in the OTel protocol, even though concrete implementations
+    // (e.g. `OSSignposterIntegration`) are reference types and don't actually
+    // mutate. The underlying object is shared either way.
+    private var inner: any SpanProcessor
+    private let gate: ProcessorGate
+
+    package init(inner: any SpanProcessor, gate: ProcessorGate) {
+      self.inner = inner
+      self.gate = gate
+    }
+
+    package var isStartRequired: Bool { inner.isStartRequired }
+    package var isEndRequired: Bool { inner.isEndRequired }
+
+    package func onStart(parentContext: SpanContext?, span: ReadableSpan) {
+      guard gate.isEnabled else { return }
+      inner.onStart(parentContext: parentContext, span: span)
+    }
+
+    package func onEnd(span: ReadableSpan) {
+      guard gate.isEnabled else { return }
+      inner.onEnd(span: span)
+    }
+
+    package func shutdown(explicitTimeout: TimeInterval?) {
+      inner.shutdown(explicitTimeout: explicitTimeout)
+    }
+
+    package func forceFlush(timeout: TimeInterval?) {
+      inner.forceFlush(timeout: timeout)
+    }
+  }
+
+  private struct PreparedTracingInstallation {
+    let tracerProvider: TracerProviderSdk
+    let ownsProvider: Bool
+    let install: () -> Void
+  }
+
+  private struct PreparedMetricsInstallation {
+    let meterProvider: MeterProviderSdk
+    let install: () -> Void
+  }
+
+  private struct PreparedLogsInstallation {
+    let loggerProvider: LoggerProviderSdk
+    let logProcessor: any LogRecordProcessor
+    let install: () -> Void
+  }
 
   package static var _installedOpenTelemetryConfiguration: OpenTelemetryConfiguration? {
     openTelemetryInstallLock.lock()
@@ -250,25 +335,34 @@ extension Terra {
       throw InstallOpenTelemetryError.alreadyInstalled
     }
 
-    installedOpenTelemetryConfiguration = configuration
-
     do {
       Runtime.shared.markStarting()
       if let persistence = configuration.persistence {
         try FileManager.default.createDirectory(at: persistence.storageURL, withIntermediateDirectories: true, attributes: nil)
       }
 
-      let (tracerProviderSdk, ownsTracer) = try installTracing(configuration: configuration)
+      let preparedTracing = try prepareTracingInstallation(configuration: configuration)
+      let preparedLogs = configuration.enableLogs
+        ? try prepareLogsInstallation(configuration: configuration)
+        : nil
+      let preparedMetrics = configuration.enableMetrics
+        ? try prepareMetricsInstallation(configuration: configuration)
+        : nil
+
+      preparedTracing.install()
+      let tracerProviderSdk = preparedTracing.tracerProvider
       installedTracerProvider = tracerProviderSdk
-      ownsInstalledTracerProvider = ownsTracer
+      ownsInstalledTracerProvider = preparedTracing.ownsProvider
 
       if configuration.enableSignposts {
-        installSignposts(tracerProviderSdk: tracerProviderSdk)
+        let gate = ProcessorGate(enabled: true)
+        installSignposts(tracerProviderSdk: tracerProviderSdk, gate: gate)
+        installedAugmentedSignpostsGate = gate
       }
 
-      if configuration.enableLogs {
-        let (_, logProcessor) = try installLogs(configuration: configuration)
-        installedLogProcessor = logProcessor
+      if let preparedLogs {
+        preparedLogs.install()
+        installedLogProcessor = preparedLogs.logProcessor
       }
 
       if configuration.enableSessions {
@@ -276,11 +370,14 @@ extension Terra {
         SessionEventInstrumentation.install()
       }
 
-      if configuration.enableMetrics {
-        let meterProvider = try installMetrics(configuration: configuration)
+      if let preparedMetrics {
+        preparedMetrics.install()
+        let meterProvider = preparedMetrics.meterProvider
         installedMeterProvider = meterProvider
         Terra.install(.init(privacy: Runtime.shared.privacy, meterProvider: meterProvider, registerProvidersAsGlobal: false))
       }
+
+      installedOpenTelemetryConfiguration = configuration
     } catch {
       installedOpenTelemetryConfiguration = nil
       installedTracerProvider = nil
@@ -307,7 +404,7 @@ extension Terra {
     return Resource(attributes: attributes)
   }
 
-  private static func installTracing(configuration: OpenTelemetryConfiguration) throws -> (TracerProviderSdk, Bool) {
+  private static func prepareTracingInstallation(configuration: OpenTelemetryConfiguration) throws -> PreparedTracingInstallation {
     func makeExporter() throws -> any SpanExporter {
       let networkExporter = SimulatorAwareSpanExporter(
         spanExporter: OtlpHttpTraceExporter(
@@ -348,15 +445,16 @@ extension Terra {
     switch configuration.tracerProviderStrategy {
     case .augmentExisting:
       if let existing = OpenTelemetry.instance.tracerProvider as? TracerProviderSdk {
-        existing.updateActiveResource(existing.getActiveResource().merging(other: resource))
-        if let sampler {
-          existing.updateActiveSampler(sampler)
+        return PreparedTracingInstallation(tracerProvider: existing, ownsProvider: false) {
+          existing.updateActiveResource(existing.getActiveResource().merging(other: resource))
+          if let sampler {
+            existing.updateActiveSampler(sampler)
+          }
+          existing.addSpanProcessor(TerraSpanEnrichmentProcessor())
+          if let spanProcessor {
+            existing.addSpanProcessor(spanProcessor)
+          }
         }
-        existing.addSpanProcessor(TerraSpanEnrichmentProcessor())
-        if let spanProcessor {
-          existing.addSpanProcessor(spanProcessor)
-        }
-        return (existing, false)
       }
       fallthrough
     case .registerNew:
@@ -370,28 +468,52 @@ extension Terra {
         builder = builder.add(spanProcessor: spanProcessor)
       }
       let provider = builder.build()
-      OpenTelemetry.registerTracerProvider(tracerProvider: provider)
-      return (provider, true)
+      return PreparedTracingInstallation(tracerProvider: provider, ownsProvider: true) {
+        OpenTelemetry.registerTracerProvider(tracerProvider: provider)
+      }
     }
   }
 
-  private static func installSignposts(tracerProviderSdk: TracerProviderSdk) {
+  private static func installSignposts(tracerProviderSdk: TracerProviderSdk, gate: ProcessorGate) {
     #if canImport(SignPostIntegration)
       if #available(iOS 15.0, macOS 12, tvOS 15.0, watchOS 8.0, *) {
-        tracerProviderSdk.addSpanProcessor(OSSignposterIntegration())
+        let processor = OSSignposterIntegration()
+        tracerProviderSdk.addSpanProcessor(GatedSpanProcessor(inner: processor, gate: gate))
       } else {
         #if !os(watchOS) && !os(visionOS)
-          tracerProviderSdk.addSpanProcessor(SignPostIntegration())
+          let processor = SignPostIntegration()
+          tracerProviderSdk.addSpanProcessor(GatedSpanProcessor(inner: processor, gate: gate))
         #endif
       }
     #else
       _ = tracerProviderSdk
+      _ = gate
     #endif
+  }
+
+  /// Test-only seam that installs an arbitrary `SpanProcessor` through the same
+  /// gate Terra uses for the OS signposts processor. The gate is owned by
+  /// `installedAugmentedSignpostsGate` so the processor is disabled on shutdown
+  /// in the same atomic step as the real signposts processor.
+  ///
+  /// Behaves as a no-op if no Terra installation is currently active.
+  package static func _installAugmentedSignpostsProcessorForTesting(_ processor: any SpanProcessor) {
+    openTelemetryInstallLock.lock()
+    let provider = installedTracerProvider
+    let existingGate = installedAugmentedSignpostsGate
+    let gate = existingGate ?? ProcessorGate(enabled: true)
+    if existingGate == nil {
+      installedAugmentedSignpostsGate = gate
+    }
+    openTelemetryInstallLock.unlock()
+
+    guard let provider else { return }
+    provider.addSpanProcessor(GatedSpanProcessor(inner: processor, gate: gate))
   }
 
   // MARK: - Metrics
 
-  private static func installMetrics(configuration: OpenTelemetryConfiguration) throws -> MeterProviderSdk {
+  private static func prepareMetricsInstallation(configuration: OpenTelemetryConfiguration) throws -> PreparedMetricsInstallation {
     func makeExporter() throws -> any MetricExporter {
       let networkExporter = SimulatorAwareMetricExporter(
         metricExporter: OtlpHttpMetricExporter(
@@ -425,13 +547,14 @@ extension Terra {
       .registerView(selector: InstrumentSelectorBuilder().build(), view: View.builder().build())
       .build()
 
-    OpenTelemetry.registerMeterProvider(meterProvider: provider)
-    return provider
+    return PreparedMetricsInstallation(meterProvider: provider) {
+      OpenTelemetry.registerMeterProvider(meterProvider: provider)
+    }
   }
 
   // MARK: - Logs
 
-  private static func installLogs(configuration: OpenTelemetryConfiguration) throws -> (LoggerProviderSdk, any LogRecordProcessor) {
+  private static func prepareLogsInstallation(configuration: OpenTelemetryConfiguration) throws -> PreparedLogsInstallation {
     func makeExporter() throws -> any LogRecordExporter {
       let networkExporter = SimulatorAwareLogExporter(
         logExporter: OtlpHttpLogExporter(
@@ -462,8 +585,9 @@ extension Terra {
       .with(processors: [processor])
       .build()
 
-    OpenTelemetry.registerLoggerProvider(loggerProvider: provider)
-    return (provider, processor)
+    return PreparedLogsInstallation(loggerProvider: provider, logProcessor: processor) {
+      OpenTelemetry.registerLoggerProvider(loggerProvider: provider)
+    }
   }
 
   // MARK: - Lifecycle Queries
@@ -517,6 +641,9 @@ extension Terra {
     openTelemetryInstallLock.lock()
     guard installedOpenTelemetryConfiguration != nil else {
       openTelemetryInstallLock.unlock()
+      // Even on the no-op path, clear any leaked span registry entries so an
+      // out-of-band `shutdown` call leaves a clean lifecycle state.
+      _resetActiveSpansForLifecycle()
       return
     }
     Runtime.shared.markShuttingDown()
@@ -526,12 +653,18 @@ extension Terra {
     let tracerProvider = installedTracerProvider
     let meterProvider = installedMeterProvider
     let logProcessor = installedLogProcessor
+    let augmentedSignpostsGate = installedAugmentedSignpostsGate
     installedTracerProvider = nil
     installedMeterProvider = nil
     installedLogProcessor = nil
+    installedAugmentedSignpostsGate = nil
     let tracerOwned = ownsInstalledTracerProvider
     ownsInstalledTracerProvider = false
     openTelemetryInstallLock.unlock()
+
+    // Disable the augmented-signposts gate so the borrowed provider stops
+    // emitting signpost events even though we don't own its lifecycle.
+    augmentedSignpostsGate?.disable()
 
     // Flush and shut down outside the lock — these are potentially blocking I/O.
     // We already own the refs exclusively; the lock is not needed here.
@@ -541,6 +674,10 @@ extension Terra {
     _ = meterProvider?.shutdown()
     _ = logProcessor?.forceFlush()
     _ = logProcessor?.shutdown()
+
+    // Clear any leaked Terra spans so a fresh `installOpenTelemetry()` starts
+    // with an empty registry.
+    _resetActiveSpansForLifecycle()
 
     Runtime.shared.markStopped()
   }
@@ -573,12 +710,14 @@ extension Terra {
     Terra.shutdownZigBackend()
     #endif
     openTelemetryInstallLock.lock()
-    defer { openTelemetryInstallLock.unlock() }
     installedOpenTelemetryConfiguration = nil
     installedTracerProvider = nil
     installedMeterProvider = nil
     installedLogProcessor = nil
     ownsInstalledTracerProvider = false
+    installedAugmentedSignpostsGate = nil
+    openTelemetryInstallLock.unlock()
+    Terra._resetActiveSpansForLifecycle()
     Runtime.shared.markStopped()
   }
 }

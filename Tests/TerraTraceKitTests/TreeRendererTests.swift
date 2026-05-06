@@ -1,6 +1,6 @@
 import Foundation
-import XCTest
 @testable import TerraTraceKit
+import XCTest
 
 final class TreeRendererTests: XCTestCase {
   func testTreeRendererOrdersChildrenByStartTime() async throws {
@@ -25,7 +25,8 @@ final class TreeRendererTests: XCTestCase {
     let spans = try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
 
     guard let root = spans.first(where: { $0.name == "root" }),
-          let child = spans.first(where: { $0.name == "child" }) else {
+          let child = spans.first(where: { $0.name == "child" })
+    else {
       XCTFail("Missing expected spans")
       return
     }
@@ -47,9 +48,45 @@ final class TreeRendererTests: XCTestCase {
     let expectedWithParent = expectedTree(for: [root, child])
     XCTAssertEqual(outputWithParent, expectedWithParent)
   }
+
+  func testTreeRendererShowsCyclesInsteadOfDroppingTrace() throws {
+    let traceID = try XCTUnwrap(TraceID(hex: OTLPTestFixtures.traceIDHex))
+    let spanAID = try XCTUnwrap(SpanID(hex: "aaaaaaaaaaaaaaaa"))
+    let spanBID = try XCTUnwrap(SpanID(hex: "bbbbbbbbbbbbbbbb"))
+    let spanA = makeSpanRecord(traceID: traceID, spanID: spanAID, parentSpanID: spanBID, name: "cycle-a", start: 10)
+    let spanB = makeSpanRecord(traceID: traceID, spanID: spanBID, parentSpanID: spanAID, name: "cycle-b", start: 20)
+    let snapshot = TraceSnapshot(allSpans: [spanA, spanB], traces: [traceID: [spanA, spanB]])
+
+    let output = TreeRenderer().render(snapshot: snapshot)
+
+    XCTAssertTrue(output.contains("cycle-a"))
+    XCTAssertTrue(output.contains("cycle-b"))
+    XCTAssertTrue(output.contains("terra.trace.cycle=true"))
+  }
 }
 
 private extension TreeRendererTests {
+  func makeSpanRecord(
+    traceID: TraceID,
+    spanID: SpanID,
+    parentSpanID: SpanID?,
+    name: String,
+    start: UInt64
+  ) -> SpanRecord {
+    SpanRecord(
+      traceID: traceID,
+      spanID: spanID,
+      parentSpanID: parentSpanID,
+      name: name,
+      kind: .internal,
+      status: .ok,
+      startTimeUnixNano: start,
+      endTimeUnixNano: start + 10,
+      attributes: Attributes([]),
+      resource: Resource(attributes: Attributes([]))
+    )
+  }
+
   func expectedTree(for spans: [SpanRecord]) -> String {
     guard let traceID = spans.first?.traceID else { return "" }
 
@@ -68,7 +105,7 @@ private extension TreeRendererTests {
     }
     let sortedRoots = roots.sorted { $0.startTimeUnixNano < $1.startTimeUnixNano }
 
-    var lines: [String] = ["trace \(traceID.short)"]
+    var lines = ["trace \(traceID.short)"]
     for (index, root) in sortedRoots.enumerated() {
       let isLast = index == sortedRoots.count - 1
       appendLines(for: root, prefix: "", isLast: isLast, children: children, lines: &lines)

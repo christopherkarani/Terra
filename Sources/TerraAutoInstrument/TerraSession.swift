@@ -677,12 +677,35 @@ private enum TerraSessionDefaults {
   }
 
   static func serializedFeatureSummary(_ summaries: [TerraSession.FeatureSummary]) -> String {
-    guard let data = try? JSONEncoder().encode(summaries),
-          let string = String(data: data, encoding: .utf8)
-    else {
-      return "[]"
+    let maxSummaryCount = 16
+    let maxSerializedCharacters = 2_048
+    var redacted = summaries.prefix(maxSummaryCount).map { summary in
+      SerializedFeatureSummary(
+        name: "sha256:\(sha256(summary.name).prefix(16))",
+        kind: String(summary.kind.prefix(64)),
+        shape: summary.shape.map { Array($0.prefix(8)) }
+      )
     }
-    return string
+
+    while !redacted.isEmpty {
+      if let string = encodeFeatureSummaries(redacted), string.count <= maxSerializedCharacters {
+        return string
+      }
+      redacted.removeLast()
+    }
+
+    return "[]"
+  }
+
+  private struct SerializedFeatureSummary: Codable {
+    let name: String
+    let kind: String
+    let shape: [Int]?
+  }
+
+  private static func encodeFeatureSummaries(_ summaries: [SerializedFeatureSummary]) -> String? {
+    guard let data = try? JSONEncoder().encode(summaries) else { return nil }
+    return String(data: data, encoding: .utf8)
   }
 
   static func monotonicTime() -> UInt64 {
@@ -720,8 +743,17 @@ private enum TerraSessionDefaults {
     let digest = SHA256.hash(data: Data(string.utf8))
     return digest.map { String(format: "%02x", $0) }.joined()
     #else
-    return string
+    return fnv1a64Hex(string)
     #endif
+  }
+
+  private static func fnv1a64Hex(_ string: String) -> String {
+    var hash: UInt64 = 0xcbf29ce484222325
+    for byte in string.utf8 {
+      hash ^= UInt64(byte)
+      hash &*= 0x100000001b3
+    }
+    return String(format: "%016llx", hash)
   }
 
   static func recordCoreMLError(on span: any Span, error: any Error, at date: Date) {

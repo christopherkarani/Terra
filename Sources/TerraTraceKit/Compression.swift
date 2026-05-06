@@ -1,13 +1,17 @@
 import Compression
 import Foundation
 
+#if canImport(zlib)
+  import zlib
+#endif
+
 enum OTLPContentEncoding: String, Sendable {
   case gzip
   case deflate
   case identity
 }
 
-struct OTLPDecompressor {
+enum OTLPDecompressor {
   static func decompress(
     _ data: Data,
     encoding: OTLPContentEncoding,
@@ -22,11 +26,23 @@ struct OTLPDecompressor {
     case .deflate:
       return try decompressZlib(data, maxOutputBytes: maxOutputBytes)
     case .gzip:
-      let deflatePayload = try extractGzipDeflatePayload(from: data)
-      return try decompressZlib(deflatePayload, maxOutputBytes: maxOutputBytes)
+      let member = try parseGzipMember(from: data)
+      let output = try decompressZlib(member.deflatePayload, maxOutputBytes: maxOutputBytes)
+      let actualCRC = CRC32.checksum(output)
+      guard actualCRC == member.crc32 else {
+        throw OTLPRequestDecoderError.decompressionFailed(reason: "Gzip CRC mismatch")
+      }
+      guard UInt32(truncatingIfNeeded: output.count) == member.isize else {
+        throw OTLPRequestDecoderError.decompressionFailed(reason: "Gzip ISIZE mismatch")
+      }
+      return output
     }
   }
 
+  // The per-stream `maxOutputBytes` cap below protects against zip-bomb payloads
+  // that inflate to absurd sizes from a small compressed footprint. It does NOT
+  // bound aggregate concurrent connections — that responsibility lives in
+  // `OTLPHTTPServer` (request body limiter, max in-flight requests).
   private static func decompressZlib(_ data: Data, maxOutputBytes: Int) throws -> Data {
     if data.isEmpty { return Data() }
 
@@ -66,6 +82,11 @@ struct OTLPDecompressor {
 
       var streamStatus = COMPRESSION_STATUS_OK
       repeat {
+        // P1-14: Cooperative cancellation. The inflate loop polls
+        // `Task.checkCancellation()` once per 64 KiB chunk so a calling worker
+        // can be torn down without burning CPU on attacker-controlled payloads.
+        try Task.checkCancellation()
+
         stream.dst_ptr = dstBuffer
         stream.dst_size = dstSize
 
@@ -88,14 +109,14 @@ struct OTLPDecompressor {
     }
   }
 
-  private static func extractGzipDeflatePayload(from data: Data) throws -> Data {
-    try data.withUnsafeBytes { rawBuffer -> Data in
+  private static func parseGzipMember(from data: Data) throws -> GzipMember {
+    try data.withUnsafeBytes { rawBuffer -> GzipMember in
       let bytes = rawBuffer.bindMemory(to: UInt8.self)
       guard bytes.count >= 18 else {
         throw OTLPRequestDecoderError.malformedData(reason: "Gzip payload too small")
       }
 
-      guard bytes[0] == 0x1f, bytes[1] == 0x8b else {
+      guard bytes[0] == 0x1F, bytes[1] == 0x8B else {
         throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip header")
       }
 
@@ -119,7 +140,9 @@ struct OTLPDecompressor {
       }
 
       if flags & 0x08 != 0 {
-        while index < bytes.count, bytes[index] != 0 { index += 1 }
+        while index < bytes.count, bytes[index] != 0 {
+          index += 1
+        }
         guard index < bytes.count else {
           throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip filename")
         }
@@ -127,7 +150,9 @@ struct OTLPDecompressor {
       }
 
       if flags & 0x10 != 0 {
-        while index < bytes.count, bytes[index] != 0 { index += 1 }
+        while index < bytes.count, bytes[index] != 0 {
+          index += 1
+        }
         guard index < bytes.count else {
           throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip comment")
         }
@@ -146,7 +171,70 @@ struct OTLPDecompressor {
         throw OTLPRequestDecoderError.malformedData(reason: "Invalid gzip trailer")
       }
 
-      return data.subdata(in: index..<(bytes.count - trailerLength))
+      let trailerStart = bytes.count - trailerLength
+      let crc32 = UInt32(bytes[trailerStart])
+        | (UInt32(bytes[trailerStart + 1]) << 8)
+        | (UInt32(bytes[trailerStart + 2]) << 16)
+        | (UInt32(bytes[trailerStart + 3]) << 24)
+      let isize = UInt32(bytes[trailerStart + 4])
+        | (UInt32(bytes[trailerStart + 5]) << 8)
+        | (UInt32(bytes[trailerStart + 6]) << 16)
+        | (UInt32(bytes[trailerStart + 7]) << 24)
+
+      return GzipMember(
+        deflatePayload: data.subdata(in: index ..< trailerStart),
+        crc32: crc32,
+        isize: isize
+      )
     }
   }
+}
+
+private struct GzipMember {
+  let deflatePayload: Data
+  let crc32: UInt32
+  let isize: UInt32
+}
+
+// P1-14: CRC32 hot path. The pure-Swift table-driven implementation pinned
+// a CPU for ~1.5s on a 50 MB legitimate gzip payload during stress testing.
+// Apple platforms ship a SIMD-accelerated `zlib.crc32`, which the gating
+// below prefers. The pure-Swift fallback is retained verbatim under the
+// `#if !canImport(zlib)` branch so non-Darwin builds remain self-contained.
+private enum CRC32 {
+  #if canImport(zlib)
+    static func checksum(_ data: Data) -> UInt32 {
+      if data.isEmpty { return 0 }
+      // `zlib.crc32` returns UInt (`uLong`) on macOS; the upper bits are
+      // always zero for the 32-bit checksum so the truncating cast is safe.
+      return data.withUnsafeBytes { rawBuffer -> UInt32 in
+        guard let base = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+          return 0
+        }
+        let result = zlib.crc32(0, base, UInt32(rawBuffer.count))
+        return UInt32(truncatingIfNeeded: result)
+      }
+    }
+  #else
+    static func checksum(_ data: Data) -> UInt32 {
+      var crc: UInt32 = 0xFFFF_FFFF
+      for byte in data {
+        let index = Int((crc ^ UInt32(byte)) & 0xFF)
+        crc = (crc >> 8) ^ table[index]
+      }
+      return crc ^ 0xFFFF_FFFF
+    }
+
+    private static let table: [UInt32] = (0 ..< 256).map { value in
+      var crc = UInt32(value)
+      for _ in 0 ..< 8 {
+        if crc & 1 == 1 {
+          crc = (crc >> 1) ^ 0xEDB8_8320
+        } else {
+          crc = crc >> 1
+        }
+      }
+      return crc
+    }
+  #endif
 }

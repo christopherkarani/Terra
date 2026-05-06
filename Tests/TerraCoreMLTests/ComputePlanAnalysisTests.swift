@@ -129,6 +129,27 @@ struct ComputePlanAnalysisTests {
     #expect(attrs["terra.hw.ane.probe_source"] == AttributeValue.string("mlcomputeplan"))
   }
 
+  @Test("compute plan operation telemetry hashes identifiers and records truncation")
+  func operationTelemetryIsRedactedAndCapped() {
+    let ops = (0..<80).map { index in
+      TerraCoreMLComputePlanOperationEstimate(
+        identifier: "program.main.block.secret_layer_\(index)",
+        kind: "program_operation",
+        preferredDevice: "gpu",
+        supportedDevices: ["gpu"]
+      )
+    }
+    let attrs = makeSummary(ops: ops).telemetryAttributes
+
+    #expect(attrs[TerraCoreML.Keys.computePlanOperationCount] == AttributeValue.int(80))
+    #expect(attrs[TerraCoreML.Keys.computePlanEstimatedOperationsTruncated] == AttributeValue.bool(true))
+
+    let serialized = attrs[TerraCoreML.Keys.computePlanEstimatedOperations]?.description ?? ""
+    #expect(serialized.contains("sha256:"))
+    #expect(!serialized.contains("secret_layer"))
+    #expect(serialized.count <= TerraCoreMLComputePlanSummary.maxEstimatedOperationsTelemetryCharacters)
+  }
+
   @Test("ANEFallbackAssessment telemetry attributes")
   func fallbackAttributes() {
     let assessment = ANEFallbackAssessment(isFallbackLikely: true, confidence: .high)

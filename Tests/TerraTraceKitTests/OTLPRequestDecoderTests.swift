@@ -1,14 +1,14 @@
-import XCTest
 @testable import TerraTraceKit
+import XCTest
 
 #if canImport(OpenTelemetryProtocolExporterCommon)
-import OpenTelemetryProtocolExporterCommon
+  import OpenTelemetryProtocolExporterCommon
 #elseif canImport(OpenTelemetryProtocolExporterGrpc)
-import OpenTelemetryProtocolExporterGrpc
+  import OpenTelemetryProtocolExporterGrpc
 #elseif canImport(OpenTelemetryProtocolExporterHttp)
-import OpenTelemetryProtocolExporterHttp
+  import OpenTelemetryProtocolExporterHttp
 #elseif canImport(OpenTelemetryProtocolExporterHTTP)
-import OpenTelemetryProtocolExporterHTTP
+  import OpenTelemetryProtocolExporterHTTP
 #endif
 
 final class OTLPRequestDecoderTests: XCTestCase {
@@ -25,31 +25,31 @@ final class OTLPRequestDecoderTests: XCTestCase {
   }
 
   #if canImport(Compression)
-  func testDecodeGzipPayloadReturnsExpectedSpans() throws {
-    let body = try OTLPTestFixtures.serializedRequest()
-    let compressed = try OTLPTestCompression.gzip(body)
-    let decoder = OTLPRequestDecoder(
-      maxBodyBytes: compressed.count + 64,
-      maxDecompressedBytes: body.count + 64
-    )
+    func testDecodeGzipPayloadReturnsExpectedSpans() throws {
+      let body = try OTLPTestFixtures.serializedRequest()
+      let compressed = try OTLPTestCompression.gzip(body)
+      let decoder = OTLPRequestDecoder(
+        maxBodyBytes: compressed.count + 64,
+        maxDecompressedBytes: body.count + 64
+      )
 
-    let spans = try decoder.decode(body: compressed, headers: ["Content-Encoding": "gzip"])
+      let spans = try decoder.decode(body: compressed, headers: ["Content-Encoding": "gzip"])
 
-    assertDecodedSpans(spans)
-  }
+      assertDecodedSpans(spans)
+    }
 
-  func testDecodeDeflatePayloadReturnsExpectedSpans() throws {
-    let body = try OTLPTestFixtures.serializedRequest()
-    let compressed = try OTLPTestCompression.deflate(body)
-    let decoder = OTLPRequestDecoder(
-      maxBodyBytes: compressed.count + 64,
-      maxDecompressedBytes: body.count + 64
-    )
+    func testDecodeDeflatePayloadReturnsExpectedSpans() throws {
+      let body = try OTLPTestFixtures.serializedRequest()
+      let compressed = try OTLPTestCompression.deflate(body)
+      let decoder = OTLPRequestDecoder(
+        maxBodyBytes: compressed.count + 64,
+        maxDecompressedBytes: body.count + 64
+      )
 
-    let spans = try decoder.decode(body: compressed, headers: ["Content-Encoding": "deflate"])
+      let spans = try decoder.decode(body: compressed, headers: ["Content-Encoding": "deflate"])
 
-    assertDecodedSpans(spans)
-  }
+      assertDecodedSpans(spans)
+    }
   #endif
 
   func testDecodeRejectsOversizedDecompressedPayload() throws {
@@ -93,7 +93,7 @@ final class OTLPRequestDecoderTests: XCTestCase {
       return
     }
 
-    firstSpan.attributes = (0..<3).map { index in
+    firstSpan.attributes = (0 ..< 3).map { index in
       OTLPTestFixtures.makeKeyValue(key: "attr-\(index)", stringValue: "value-\(index)")
     }
     firstScope.spans[0] = firstSpan
@@ -107,6 +107,26 @@ final class OTLPRequestDecoderTests: XCTestCase {
         maxSpansPerRequest: 10,
         maxAttributesPerSpan: 2,
         maxAnyValueDepth: 8
+      )
+    )
+
+    XCTAssertThrowsError(
+      try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    )
+  }
+
+  func testDecodeRejectsWhenResourceAttributesExceedLimit() throws {
+    var request = OTLPTestFixtures.makeExportRequest()
+    request.resourceSpans[0].resource.attributes = (0 ..< 3).map { index in
+      OTLPTestFixtures.makeKeyValue(key: "resource-\(index)", stringValue: "value-\(index)")
+    }
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(
+        maxBodyBytes: body.count + 64,
+        maxDecompressedBytes: body.count + 64,
+        maxAttributesPerResource: 2
       )
     )
 
@@ -149,6 +169,220 @@ final class OTLPRequestDecoderTests: XCTestCase {
     XCTAssertThrowsError(
       try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
     )
+  }
+
+  func testDecodePreservesEventsLinksStatusDescriptionAndDroppedCounts() throws {
+    var request = OTLPTestFixtures.makeExportRequest()
+    var scope = request.resourceSpans[0].scopeSpans[0]
+    var root = scope.spans[0]
+
+    root.status.code = .error
+    root.status.message = "model returned partial output"
+    root.droppedAttributesCount = 1
+    root.droppedEventsCount = 2
+    root.droppedLinksCount = 3
+
+    var event = Opentelemetry_Proto_Trace_V1_Span.Event()
+    event.name = "terra.first_token"
+    event.timeUnixNano = OTLPTestFixtures.childStart
+    event.attributes = [
+      OTLPTestFixtures.makeKeyValue(key: "terra.stream.chunk_count", stringValue: "1"),
+    ]
+    event.droppedAttributesCount = 4
+    root.events = [event]
+
+    var link = Opentelemetry_Proto_Trace_V1_Span.Link()
+    link.traceID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".hexBytesForTraceKitTests()
+    link.spanID = "bbbbbbbbbbbbbbbb".hexBytesForTraceKitTests()
+    link.traceState = "rojo=00f067aa0ba902b7"
+    link.attributes = [
+      OTLPTestFixtures.makeKeyValue(key: "link.kind", stringValue: "causal"),
+    ]
+    link.droppedAttributesCount = 5
+    root.links = [link]
+
+    scope.spans[0] = root
+    request.resourceSpans[0].scopeSpans[0] = scope
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(maxBodyBytes: body.count + 64, maxDecompressedBytes: body.count + 64)
+    )
+
+    let spans = try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    let decodedRoot = try XCTUnwrap(spans.first(where: { $0.name == "root" }))
+
+    XCTAssertEqual(decodedRoot.status, .error)
+    XCTAssertEqual(decodedRoot.statusDescription, "model returned partial output")
+    XCTAssertEqual(decodedRoot.droppedAttributesCount, 1)
+    XCTAssertEqual(decodedRoot.droppedEventsCount, 2)
+    XCTAssertEqual(decodedRoot.droppedLinksCount, 3)
+    XCTAssertEqual(decodedRoot.events.count, 1)
+    XCTAssertEqual(decodedRoot.events[0].name, "terra.first_token")
+    XCTAssertEqual(decodedRoot.events[0].timeUnixNano, OTLPTestFixtures.childStart)
+    XCTAssertEqual(decodedRoot.events[0].attributes[string: "terra.stream.chunk_count"], "1")
+    XCTAssertEqual(decodedRoot.events[0].droppedAttributesCount, 4)
+    XCTAssertEqual(decodedRoot.links.count, 1)
+    XCTAssertEqual(decodedRoot.links[0].traceID.hex, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    XCTAssertEqual(decodedRoot.links[0].spanID.hex, "bbbbbbbbbbbbbbbb")
+    XCTAssertEqual(decodedRoot.links[0].traceState, "rojo=00f067aa0ba902b7")
+    XCTAssertEqual(decodedRoot.links[0].attributes[string: "link.kind"], "causal")
+    XCTAssertEqual(decodedRoot.links[0].droppedAttributesCount, 5)
+  }
+
+  // MARK: - P1-4 Negative duration / end_time==0 with set status
+
+  func testDecodeRejectsSpanWithEndBeforeStart() throws {
+    var request = OTLPTestFixtures.makeExportRequest()
+    var scope = request.resourceSpans[0].scopeSpans[0]
+    var root = scope.spans[0]
+    root.startTimeUnixNano = 1_000_000_000
+    root.endTimeUnixNano = 999_999_999 // strictly less than start
+    scope.spans[0] = root
+    request.resourceSpans[0].scopeSpans[0] = scope
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(maxBodyBytes: body.count + 64, maxDecompressedBytes: body.count + 64)
+    )
+
+    XCTAssertThrowsError(
+      try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    ) { error in
+      guard let decoded = error as? OTLPRequestDecoderError else {
+        XCTFail("Expected OTLPRequestDecoderError, got \(error)")
+        return
+      }
+      if case .invalidTimestamp = decoded {
+        // expected
+      } else {
+        XCTFail("Expected .invalidTimestamp, got \(decoded)")
+      }
+    }
+  }
+
+  func testDecodeRejectsSpanWithEndZeroButStatusSet() throws {
+    var request = OTLPTestFixtures.makeExportRequest()
+    var scope = request.resourceSpans[0].scopeSpans[0]
+    var root = scope.spans[0]
+    root.endTimeUnixNano = 0
+    var statusMessage = Opentelemetry_Proto_Trace_V1_Status()
+    statusMessage.code = .ok
+    root.status = statusMessage
+    scope.spans[0] = root
+    request.resourceSpans[0].scopeSpans[0] = scope
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(maxBodyBytes: body.count + 64, maxDecompressedBytes: body.count + 64)
+    )
+
+    XCTAssertThrowsError(
+      try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    ) { error in
+      guard let decoded = error as? OTLPRequestDecoderError else {
+        XCTFail("Expected OTLPRequestDecoderError, got \(error)")
+        return
+      }
+      if case .invalidTimestamp = decoded {
+        // expected
+      } else {
+        XCTFail("Expected .invalidTimestamp, got \(decoded)")
+      }
+    }
+  }
+
+  func testDecodeAcceptsInFlightSpanWithEndZeroAndStatusUnset() throws {
+    // end=0, status=unset is the only legal "in-flight" combination.
+    var request = OTLPTestFixtures.makeExportRequest()
+    var scope = request.resourceSpans[0].scopeSpans[0]
+    var root = scope.spans[0]
+    root.endTimeUnixNano = 0
+    var statusMessage = Opentelemetry_Proto_Trace_V1_Status()
+    statusMessage.code = .unset
+    root.status = statusMessage
+    scope.spans = [root]
+    request.resourceSpans[0].scopeSpans[0] = scope
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(maxBodyBytes: body.count + 64, maxDecompressedBytes: body.count + 64)
+    )
+
+    let spans = try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    XCTAssertEqual(spans.count, 1)
+    XCTAssertEqual(spans[0].endTimeUnixNano, 0)
+    XCTAssertEqual(spans[0].status, .unset)
+  }
+
+  // MARK: - P1-6 Zero parent_span_id treated as no-parent
+
+  func testDecodeAcceptsZeroParentSpanIDAsNoParent() throws {
+    var request = OTLPTestFixtures.makeExportRequest()
+    var scope = request.resourceSpans[0].scopeSpans[0]
+    guard let childIndex = scope.spans.firstIndex(where: { $0.name == "child" }) else {
+      XCTFail("Expected child span in fixture")
+      return
+    }
+    var child = scope.spans[childIndex]
+    child.parentSpanID = Data(repeating: 0, count: 8)
+    scope.spans[childIndex] = child
+    request.resourceSpans[0].scopeSpans[0] = scope
+
+    let body = try request.serializedData()
+    let decoder = OTLPRequestDecoder(
+      limits: .init(maxBodyBytes: body.count + 64, maxDecompressedBytes: body.count + 64)
+    )
+
+    let spans = try decoder.decode(body: body, headers: ["Content-Encoding": "identity"])
+    let decodedChild = try XCTUnwrap(spans.first(where: { $0.name == "child" }))
+    XCTAssertNil(decodedChild.parentSpanID, "All-zero parent_span_id must be treated as no parent")
+  }
+
+  #if canImport(Compression)
+    func testDecodeRejectsGzipWithCorruptCRC() throws {
+      let body = try OTLPTestFixtures.serializedRequest()
+      var compressed = try OTLPTestCompression.gzip(body)
+      compressed[compressed.count - 8] ^= 0xFF
+      let decoder = OTLPRequestDecoder(
+        maxBodyBytes: compressed.count + 64,
+        maxDecompressedBytes: body.count + 64
+      )
+
+      XCTAssertThrowsError(
+        try decoder.decode(body: compressed, headers: ["Content-Encoding": "gzip"])
+      )
+    }
+
+    func testDecodeRejectsGzipWithCorruptISIZE() throws {
+      let body = try OTLPTestFixtures.serializedRequest()
+      var compressed = try OTLPTestCompression.gzip(body)
+      compressed[compressed.count - 4] ^= 0xFF
+      let decoder = OTLPRequestDecoder(
+        maxBodyBytes: compressed.count + 64,
+        maxDecompressedBytes: body.count + 64
+      )
+
+      XCTAssertThrowsError(
+        try decoder.decode(body: compressed, headers: ["Content-Encoding": "gzip"])
+      )
+    }
+  #endif
+}
+
+private extension String {
+  func hexBytesForTraceKitTests() -> Data {
+    var data = Data()
+    var index = startIndex
+    while index < endIndex {
+      let nextIndex = self.index(index, offsetBy: 2)
+      let byteString = self[index ..< nextIndex]
+      if let byte = UInt8(byteString, radix: 16) {
+        data.append(byte)
+      }
+      index = nextIndex
+    }
+    return data
   }
 }
 
@@ -194,7 +428,7 @@ private extension OTLPRequestDecoderTests {
 
     var spans: [Opentelemetry_Proto_Trace_V1_Span] = []
     spans.reserveCapacity(spanCount)
-    for index in 0..<spanCount {
+    for index in 0 ..< spanCount {
       var span = template
       span.name = "span-\(index)"
       span.spanID = Data(repeating: UInt8((index + 1) % 255), count: 8)

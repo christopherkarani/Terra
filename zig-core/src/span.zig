@@ -20,13 +20,8 @@ const MAX_SPAN_NAME = models.MAX_SPAN_NAME;
 
 // ── Span ────────────────────────────────────────────────────────────────
 // NOTE: String ownership contract
-// Attribute keys, string values, event names, and error messages are stored
-// by reference ([]const u8 slices). Callers MUST ensure these strings remain
-// valid for the lifetime of the span (until after end() and drain/export).
-// For C callers: string parameters passed to terra_span_set_string() etc.
-// must remain valid until terra_span_end() returns. Static string literals
-// are always safe. Stack-allocated buffers are safe only if the span is
-// ended before the buffer goes out of scope.
+// Mutation APIs copy string keys, values, event names, and error messages into
+// span-owned storage. Callers may pass temporary C/Rust/Python/C++ buffers.
 pub const Span = struct {
     trace_id: TraceID = TraceID.zero,
     span_id: SpanID = SpanID.zero,
@@ -48,6 +43,7 @@ pub const Span = struct {
 
     // Attributes (max 64)
     attributes: BoundedAttributes(64) = .{},
+    string_storage: models.StringStorage = .{},
 
     // Events (max 8)
     events: [8]SpanEvent = undefined,
@@ -95,22 +91,22 @@ pub const Span = struct {
     // ── Attributes ──────────────────────────────────────────────────────
     pub fn setString(self: *Span, key: []const u8, value: []const u8) void {
         if (self.ended) return;
-        _ = self.attributes.append(.{ .key = key, .value = .{ .string = value } });
+        _ = self.appendAttributeOwned(.{ .key = key, .value = .{ .string = value } });
     }
 
     pub fn setInt(self: *Span, key: []const u8, value: i64) void {
         if (self.ended) return;
-        _ = self.attributes.append(.{ .key = key, .value = .{ .int_val = value } });
+        _ = self.appendAttributeOwned(.{ .key = key, .value = .{ .int_val = value } });
     }
 
     pub fn setDouble(self: *Span, key: []const u8, value: f64) void {
         if (self.ended) return;
-        _ = self.attributes.append(.{ .key = key, .value = .{ .double_val = value } });
+        _ = self.appendAttributeOwned(.{ .key = key, .value = .{ .double_val = value } });
     }
 
     pub fn setBool(self: *Span, key: []const u8, value: bool) void {
         if (self.ended) return;
-        _ = self.attributes.append(.{ .key = key, .value = .{ .bool_val = value } });
+        _ = self.appendAttributeOwned(.{ .key = key, .value = .{ .bool_val = value } });
     }
 
     // ── Status ──────────────────────────────────────────────────────────
@@ -132,8 +128,9 @@ pub const Span = struct {
     pub fn addEventTs(self: *Span, name: []const u8, timestamp_ns: u64) void {
         if (self.ended) return;
         if (self.event_count >= 8) return;
+        const owned_name = self.string_storage.copy(name) orelse return;
         self.events[self.event_count] = .{
-            .name = name,
+            .name = owned_name,
             .timestamp_ns = timestamp_ns,
             .attributes = .{},
         };
@@ -143,13 +140,15 @@ pub const Span = struct {
     pub fn addEventAttrs(self: *Span, name: []const u8, timestamp_ns: u64, attrs: []const Attribute) void {
         if (self.ended) return;
         if (self.event_count >= 8) return;
+        const owned_name = self.string_storage.copy(name) orelse return;
         var event = SpanEvent{
-            .name = name,
+            .name = owned_name,
             .timestamp_ns = timestamp_ns,
             .attributes = .{},
         };
         for (attrs) |attr| {
-            _ = event.attributes.append(attr);
+            const owned_attr = self.ownAttribute(attr) orelse return;
+            _ = event.attributes.append(owned_attr);
         }
         self.events[self.event_count] = event;
         self.event_count += 1;
@@ -183,8 +182,8 @@ pub const Span = struct {
     }
 
     // ── Export to SpanRecord ────────────────────────────────────────────
-    pub fn toRecord(self: *const Span) SpanRecord {
-        var rec = SpanRecord{};
+    pub fn writeRecord(self: *const Span, rec: *SpanRecord) void {
+        rec.* = SpanRecord{};
         rec.trace_id = self.trace_id;
         rec.span_id = self.span_id;
         rec.parent_span_id = self.parent_span_id;
@@ -196,16 +195,30 @@ pub const Span = struct {
         rec.end_time_ns = self.end_time_ns;
         rec.include_content = self.include_content;
         rec.content_policy_at_creation = @intFromEnum(self.content_policy_at_creation);
-        rec.attributes = self.attributes;
-        rec.event_count = self.event_count;
-        if (self.event_count > 0) {
-            @memcpy(rec.events[0..self.event_count], self.events[0..self.event_count]);
+        for (self.attributes.slice()) |attr| {
+            _ = rec.appendAttributeOwned(attr);
+        }
+        var i: usize = 0;
+        while (i < self.event_count) : (i += 1) {
+            _ = rec.appendEventOwned(self.events[i]);
         }
         if (self.status_description_len > 0) {
             @memcpy(rec.status_description_buf[0..self.status_description_len], self.status_description_buf[0..self.status_description_len]);
             rec.status_description_len = self.status_description_len;
         }
-        return rec;
+    }
+
+    fn appendAttributeOwned(self: *Span, attr: Attribute) bool {
+        const owned = self.ownAttribute(attr) orelse return false;
+        return self.attributes.append(owned);
+    }
+
+    fn ownAttribute(self: *Span, attr: Attribute) ?Attribute {
+        const owned_key = self.string_storage.copy(attr.key) orelse return null;
+        return .{
+            .key = owned_key,
+            .value = models.tryOwnValue(&self.string_storage, attr.value) orelse return null,
+        };
     }
 };
 
@@ -395,10 +408,55 @@ test "Span toRecord" {
     clk.advance(50);
     s.end();
 
-    const rec = s.toRecord();
+    var rec = SpanRecord{};
+    s.writeRecord(&rec);
     try std.testing.expectEqualStrings("gen_ai.inference", rec.nameSlice());
     try std.testing.expectEqual(@as(u64, 100), rec.start_time_ns);
     try std.testing.expectEqual(@as(u64, 150), rec.end_time_ns);
+}
+
+test "Span owns dynamic attribute event and error strings" {
+    var clk = testing_clock{};
+    var s = Span.init("test", TraceID.generate(), SpanID.zero, testing_clock.read, clk.context(), .never, false);
+
+    var key = [_]u8{ 'd', 'y', 'n', '.', 'k', 'e', 'y' };
+    var value = [_]u8{ 'd', 'y', 'n', '.', 'v', 'a', 'l', 'u', 'e' };
+    var event_name = [_]u8{ 'd', 'y', 'n', '.', 'e', 'v', 'e', 'n', 't' };
+    var error_type = [_]u8{ 'D', 'y', 'n', 'E', 'r', 'r' };
+    var error_message = [_]u8{ 'd', 'y', 'n', ' ', 'm', 's', 'g' };
+
+    s.setString(&key, &value);
+    s.addEvent(&event_name);
+    s.recordError(&error_type, &error_message, true);
+
+    @memset(&key, 'x');
+    @memset(&value, 'x');
+    @memset(&event_name, 'x');
+    @memset(&error_type, 'x');
+    @memset(&error_message, 'x');
+
+    try std.testing.expectEqualStrings("dyn.key", s.attributes.slice()[0].key);
+    try std.testing.expectEqualStrings("dyn.value", s.attributes.slice()[0].value.string);
+    try std.testing.expectEqualStrings("dyn.event", s.events[0].name);
+    try std.testing.expectEqualStrings("DynErr", s.events[1].attributes.slice()[0].value.string);
+    try std.testing.expectEqualStrings("dyn msg", s.events[1].attributes.slice()[1].value.string);
+}
+
+test "SpanRecord owns strings after source span reset" {
+    var clk = testing_clock{};
+    var s = Span.init("test", TraceID.generate(), SpanID.zero, testing_clock.read, clk.context(), .never, false);
+    var value = [_]u8{ 'o', 'r', 'i', 'g', 'i', 'n', 'a', 'l' };
+    s.setString("dynamic.value", &value);
+    s.addEvent("dynamic.event");
+    var rec = SpanRecord{};
+    s.writeRecord(&rec);
+
+    @memset(&value, 'x');
+    s = Span{};
+
+    try std.testing.expectEqualStrings("dynamic.value", rec.attributes.slice()[0].key);
+    try std.testing.expectEqualStrings("original", rec.attributes.slice()[0].value.string);
+    try std.testing.expectEqualStrings("dynamic.event", rec.events[0].name);
 }
 
 test "StreamingScope TTFT calculation" {

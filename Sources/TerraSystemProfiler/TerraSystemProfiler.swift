@@ -68,6 +68,10 @@ public enum TerraSystemProfiler {
     state.isInstalled
   }
 
+  package static func reset() {
+    state.reset()
+  }
+
   /// Captures the current process memory snapshot.
   ///
   /// - Returns: ``MemorySnapshot`` containing current resident memory size and timestamp,

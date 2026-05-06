@@ -29,7 +29,7 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `init and shutdown lifecycle`() {
+    fun initAndShutdownLifecycle() {
         assertTrue("Should be running after init", Terra.isRunning)
         assertEquals(LifecycleState.RUNNING, Terra.lifecycleState)
 
@@ -40,19 +40,19 @@ class TerraIntegrationTest {
     }
 
     @Test(expected = IllegalStateException::class)
-    fun `double init throws`() {
+    fun doubleInitThrows() {
         Terra.initDefault()
     }
 
     @Test
-    fun `shutdown is idempotent`() {
+    fun shutdownIsIdempotent() {
         Terra.shutdown()
         Terra.shutdown()
         assertFalse(Terra.isRunning)
     }
 
     @Test
-    fun `inference span full lifecycle`() {
+    fun inferenceSpanFullLifecycle() {
         val span = Terra.beginInferenceSpan("gpt-4")
 
         span.setAttribute("gen_ai.request.model", "gpt-4")
@@ -65,7 +65,7 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `all six span types create and end`() {
+    fun allSixSpanTypesCreateAndEnd() {
         val inference = Terra.beginInferenceSpan("m")
         val embedding = Terra.beginEmbeddingSpan("m")
         val agent = Terra.beginAgentSpan("agent-1")
@@ -82,7 +82,7 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `parent child context propagation`() {
+    fun parentChildContextPropagation() {
         val parent = Terra.beginInferenceSpan("parent")
         val ctx = parent.spanContext()
 
@@ -106,21 +106,21 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `error recording sets status`() {
+    fun errorRecordingSetsStatus() {
         val span = Terra.beginInferenceSpan("test")
         span.recordError("RuntimeError", "test error")
         span.end()
     }
 
     @Test
-    fun `error recording without status change`() {
+    fun errorRecordingWithoutStatusChange() {
         val span = Terra.beginInferenceSpan("test")
         span.recordError("Warning", "non-fatal issue", setStatus = false)
         span.end()
     }
 
     @Test
-    fun `use block auto-ends span`() {
+    fun useBlockAutoEndsSpan() {
         val span = Terra.beginInferenceSpan("auto-end")
         var blockExecuted = false
 
@@ -133,7 +133,7 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `use block records exception and rethrows`() {
+    fun useBlockRecordsExceptionAndRethrows() {
         val span = Terra.beginInferenceSpan("error-test")
         try {
             span.use { _ ->
@@ -146,7 +146,7 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `use block returns value`() {
+    fun useBlockReturnsValue() {
         val span = Terra.beginInferenceSpan("return-test")
         val result = span.use { s ->
             s.setAttribute("key", "value")
@@ -156,7 +156,7 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `streaming span full lifecycle`() {
+    fun streamingSpanFullLifecycle() {
         val stream = Terra.beginStreamingSpan("stream-model")
 
         stream.recordFirstToken()
@@ -170,7 +170,7 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `streaming scope use block auto-finishes`() {
+    fun streamingScopeUseBlockAutoFinishes() {
         val stream = Terra.beginStreamingSpan("auto-finish")
         var tokensRecorded = 0L
 
@@ -186,7 +186,7 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `streaming scope attributes and events`() {
+    fun streamingScopeAttributesAndEvents() {
         val stream = Terra.beginStreamingSpan("attr-test")
 
         stream.setAttribute("gen_ai.request.model", "gemma-2b")
@@ -201,14 +201,14 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `streaming scope error recording`() {
+    fun streamingScopeErrorRecording() {
         val stream = Terra.beginStreamingSpan("error-stream")
         stream.recordError("TimeoutError", "stream timed out")
         stream.finish()
     }
 
     @Test
-    fun `streaming scope context extraction`() {
+    fun streamingScopeContextExtraction() {
         val stream = Terra.beginStreamingSpan("ctx-stream")
         val ctx = stream.spanContext()
         assertTrue("Streaming span context should be valid", ctx.isValid)
@@ -216,22 +216,22 @@ class TerraIntegrationTest {
     }
 
     @Test
-    fun `set service info`() {
+    fun setServiceInfo() {
         Terra.setServiceInfo("test-kotlin", "2.0.0")
     }
 
     @Test
-    fun `set session id`() {
+    fun setSessionId() {
         Terra.setSessionId("kotlin-session-42")
     }
 
     @Test
-    fun `spans dropped initially zero`() {
+    fun spansDroppedInitiallyZero() {
         assertEquals(0L, Terra.spansDropped())
     }
 
     @Test
-    fun `transport not degraded initially`() {
+    fun transportNotDegradedInitially() {
         assertFalse(Terra.transportDegraded())
     }
 }

@@ -20,6 +20,8 @@ public enum TerraCoreML {
     package static let computePlanNodeCount = "terra.coreml.compute_plan.node_count"
     package static let computePlanCaptureDurationMs = "terra.coreml.compute_plan.capture_duration_ms"
     package static let computePlanEstimatedOperations = "terra.coreml.compute_plan.estimated_operations"
+    package static let computePlanOperationCount = "terra.coreml.compute_plan.estimated_operation_count"
+    package static let computePlanEstimatedOperationsTruncated = "terra.coreml.compute_plan.estimated_operations_truncated"
     package static let computePlanErrorType = "terra.coreml.compute_plan.error_type"
   }
 

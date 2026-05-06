@@ -1,0 +1,224 @@
+{
+  "schema_version": "terra.trace.golden.v1",
+  "fixture_name": "canonical-ai-workflow",
+  "description": "Canonical workflow trace with inference, tool, and streaming error spans.",
+  "trace_id": "11111111111111112222222222222222",
+  "resource": {
+    "service.name": "terra-golden-fixture",
+    "service.version": "1.0.0",
+    "telemetry.sdk.language": "fixture"
+  },
+  "privacy": {
+    "content_policy": "opt_in",
+    "redaction_strategy": "hmac_sha256",
+    "content_captured": false,
+    "content_placeholder": "[redacted]"
+  },
+  "spans": [
+    {
+      "span_id": "0000000000000001",
+      "parent_span_id": null,
+      "name": "assistant.turn",
+      "kind": "workflow",
+      "start_time_unix_nano": 1700000000000000000,
+      "end_time_unix_nano": 1700000000900000000,
+      "status": {
+        "code": "ok"
+      },
+      "attributes": {
+        "terra.workflow.name": {
+          "type": "string",
+          "value": "assistant.turn"
+        },
+        "terra.workflow.id": {
+          "type": "string",
+          "value": "turn-001"
+        },
+        "terra.workflow.inference_count": {
+          "type": "int",
+          "value": 2
+        },
+        "terra.workflow.tool_call_count": {
+          "type": "int",
+          "value": 1
+        },
+        "terra.workflow.models_used": {
+          "type": "string",
+          "value": "gpt-4o-mini"
+        },
+        "terra.workflow.tools_used": {
+          "type": "string",
+          "value": "web_search"
+        }
+      },
+      "events": [
+        {
+          "name": "workflow.start",
+          "time_unix_nano": 1700000000000000000,
+          "attributes": {}
+        },
+        {
+          "name": "workflow.complete",
+          "time_unix_nano": 1700000000900000000,
+          "attributes": {}
+        }
+      ]
+    },
+    {
+      "span_id": "0000000000000002",
+      "parent_span_id": "0000000000000001",
+      "name": "gen_ai.inference",
+      "kind": "inference",
+      "start_time_unix_nano": 1700000000100000000,
+      "end_time_unix_nano": 1700000000300000000,
+      "status": {
+        "code": "ok"
+      },
+      "attributes": {
+        "gen_ai.operation.name": {
+          "type": "string",
+          "value": "inference"
+        },
+        "gen_ai.request.model": {
+          "type": "string",
+          "value": "gpt-4o-mini"
+        },
+        "gen_ai.request.max_tokens": {
+          "type": "int",
+          "value": 256
+        },
+        "gen_ai.request.temperature": {
+          "type": "double",
+          "value": 0.2
+        },
+        "gen_ai.request.stream": {
+          "type": "bool",
+          "value": false
+        },
+        "gen_ai.provider.name": {
+          "type": "string",
+          "value": "openai-compatible"
+        },
+        "gen_ai.usage.input_tokens": {
+          "type": "int",
+          "value": 42
+        },
+        "gen_ai.usage.output_tokens": {
+          "type": "int",
+          "value": 18
+        },
+        "gen_ai.response.model": {
+          "type": "string",
+          "value": "gpt-4o-mini-2024-07-18"
+        }
+      },
+      "events": [
+        {
+          "name": "inference.started",
+          "time_unix_nano": 1700000000100000000,
+          "attributes": {}
+        }
+      ]
+    },
+    {
+      "span_id": "0000000000000003",
+      "parent_span_id": "0000000000000001",
+      "name": "gen_ai.tool",
+      "kind": "tool",
+      "start_time_unix_nano": 1700000000350000000,
+      "end_time_unix_nano": 1700000000450000000,
+      "status": {
+        "code": "ok"
+      },
+      "attributes": {
+        "gen_ai.operation.name": {
+          "type": "string",
+          "value": "execute_tool"
+        },
+        "gen_ai.tool.name": {
+          "type": "string",
+          "value": "web_search"
+        },
+        "gen_ai.tool.type": {
+          "type": "string",
+          "value": "web_search"
+        },
+        "gen_ai.tool.call.id": {
+          "type": "string",
+          "value": "call-001"
+        }
+      },
+      "events": [
+        {
+          "name": "tool.invoked",
+          "time_unix_nano": 1700000000350000000,
+          "attributes": {
+            "terra.redaction.applied": {
+              "type": "bool",
+              "value": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "span_id": "0000000000000004",
+      "parent_span_id": "0000000000000001",
+      "name": "gen_ai.inference",
+      "kind": "streaming",
+      "start_time_unix_nano": 1700000000500000000,
+      "end_time_unix_nano": 1700000000880000000,
+      "status": {
+        "code": "error",
+        "description": "FixtureStreamingError"
+      },
+      "attributes": {
+        "gen_ai.operation.name": {
+          "type": "string",
+          "value": "inference"
+        },
+        "gen_ai.request.model": {
+          "type": "string",
+          "value": "gpt-4o-mini"
+        },
+        "gen_ai.request.stream": {
+          "type": "bool",
+          "value": true
+        },
+        "terra.stream.chunk_count": {
+          "type": "int",
+          "value": 2
+        },
+        "terra.stream.output_tokens": {
+          "type": "int",
+          "value": 9
+        },
+        "terra.stream.time_to_first_token_ms": {
+          "type": "double",
+          "value": 18.5
+        },
+        "terra.stream.tokens_per_second": {
+          "type": "double",
+          "value": 23.68
+        }
+      },
+      "events": [
+        {
+          "name": "terra.first_token",
+          "time_unix_nano": 1700000000518500000,
+          "attributes": {}
+        },
+        {
+          "name": "exception",
+          "time_unix_nano": 1700000000880000000,
+          "attributes": {
+            "exception.type": {
+              "type": "string",
+              "value": "FixtureStreamingError"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

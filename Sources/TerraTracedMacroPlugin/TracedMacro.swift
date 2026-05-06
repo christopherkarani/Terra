@@ -136,7 +136,15 @@ public struct TracedMacro: BodyMacro {
     case .model:
       let modelExpr = try requiredArg(named: "model", in: arguments)
       let streamingArg = argument(named: "streaming", in: arguments)
-      let forceStreaming = streamingArg == "true"
+      let forceStreaming: Bool
+      switch streamingArg {
+      case nil, "false":
+        forceStreaming = false
+      case "true":
+        forceStreaming = true
+      default:
+        throw MacroError.nonLiteralStreaming
+      }
       let inference = buildModelCall(
         kind: "infer",
         modelExpr: modelExpr,
@@ -497,6 +505,7 @@ public struct TracedMacro: BodyMacro {
     case notAFunction
     case missingBody
     case requiresAsyncFunction
+    case nonLiteralStreaming
 
     var description: String {
       switch self {
@@ -508,6 +517,8 @@ public struct TracedMacro: BodyMacro {
         return "@Traced requires a function with a body"
       case .requiresAsyncFunction:
         return "@Traced currently supports async functions only because it wraps Terra traced async APIs"
+      case .nonLiteralStreaming:
+        return "@Traced streaming: must be the literal true or false. Use an explicit Terra.stream/Terra.infer branch for runtime streaming decisions."
       }
     }
   }

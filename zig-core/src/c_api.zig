@@ -2,6 +2,7 @@
 // C ABI function implementations. All functions: null-safe, never panic, return terra_error_t or ?*Handle.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const terra_mod = @import("terra.zig");
 const config_mod = @import("config.zig");
 const span_mod = @import("span.zig");
@@ -11,6 +12,7 @@ const transport_mod = @import("transport.zig");
 const scheduler_mod = @import("scheduler.zig");
 const storage_mod = @import("storage.zig");
 const clock = @import("clock.zig");
+const constants = @import("constants.zig");
 
 const TerraInstance = terra_mod.TerraInstance;
 const TerraConfig = config_mod.TerraConfig;
@@ -83,16 +85,43 @@ pub const TERRA_ERR_OUT_OF_MEMORY: c_int = 4;
 pub const TERRA_ERR_TRANSPORT_FAILED: c_int = 5;
 pub const TERRA_ERR_SHUTTING_DOWN: c_int = 6;
 
-// ── Last error (threadlocal for safe error reporting) ───────────────────
-threadlocal var last_error_code: c_int = TERRA_OK;
-threadlocal var last_error_msg: [256]u8 = [_]u8{0} ** 256;
-threadlocal var last_error_msg_len: u8 = 0;
+// Zig's x86_64 Android TLS path pulls in __tls_get_addr when linked into the
+// NDK-built JNI bridge. Avoid TLS there so emulator builds link cleanly.
+const use_threadlocal_errors = !(builtin.abi == .android and builtin.cpu.arch == .x86_64);
+
+threadlocal var tls_last_error_code: c_int = TERRA_OK;
+threadlocal var tls_last_error_msg: [256]u8 = [_]u8{0} ** 256;
+threadlocal var tls_last_error_msg_len: u8 = 0;
+
+var global_last_error_lock: std.Thread.Mutex = .{};
+var global_last_error_code: c_int = TERRA_OK;
+var global_last_error_msg: [256]u8 = [_]u8{0} ** 256;
+var global_last_error_msg_len: u8 = 0;
+
+inline fn lastErrorCodePtr() *c_int {
+    return if (use_threadlocal_errors) &tls_last_error_code else &global_last_error_code;
+}
+
+inline fn lastErrorMsgPtr() *[256]u8 {
+    return if (use_threadlocal_errors) &tls_last_error_msg else &global_last_error_msg;
+}
+
+inline fn lastErrorMsgLenPtr() *u8 {
+    return if (use_threadlocal_errors) &tls_last_error_msg_len else &global_last_error_msg_len;
+}
 
 fn setLastError(code: c_int, msg: []const u8) void {
-    last_error_code = code;
+    if (!use_threadlocal_errors) {
+        global_last_error_lock.lock();
+        defer global_last_error_lock.unlock();
+    }
+
+    lastErrorCodePtr().* = code;
     const copy_len = @min(msg.len, @as(usize, 255));
+    const last_error_msg = lastErrorMsgPtr();
+    @memset(last_error_msg, 0);
     @memcpy(last_error_msg[0..copy_len], msg[0..copy_len]);
-    last_error_msg_len = @intCast(copy_len);
+    lastErrorMsgLenPtr().* = @intCast(copy_len);
 }
 
 fn mapContentPolicy(raw: c_int) !privacy.ContentPolicy {
@@ -366,11 +395,21 @@ pub export fn terra_span_context(s: ?*const Span) callconv(.c) SpanContext {
 // ── Diagnostics ─────────────────────────────────────────────────────────
 
 pub export fn terra_last_error() callconv(.c) c_int {
-    return last_error_code;
+    if (!use_threadlocal_errors) {
+        global_last_error_lock.lock();
+        defer global_last_error_lock.unlock();
+    }
+    return lastErrorCodePtr().*;
 }
 
 pub export fn terra_last_error_message(buf: ?[*]u8, max_len: u32) callconv(.c) u32 {
     const b = buf orelse return 0;
+    if (!use_threadlocal_errors) {
+        global_last_error_lock.lock();
+        defer global_last_error_lock.unlock();
+    }
+    const last_error_msg_len = lastErrorMsgLenPtr().*;
+    const last_error_msg = lastErrorMsgPtr();
     const copy_len = @min(@as(u32, last_error_msg_len), max_len);
     @memcpy(b[0..copy_len], last_error_msg[0..copy_len]);
     return copy_len;
@@ -506,6 +545,66 @@ test "terra_span lifecycle via C API" {
     terra_span_record_error(span, "RuntimeError", "test error", false);
 
     terra_span_end(inst, span);
+}
+
+fn cStringBuffer(comptime size: usize, value: []const u8) [size:0]u8 {
+    var buf: [size:0]u8 = undefined;
+    @memset(buf[0..], 0);
+    @memcpy(buf[0..value.len], value);
+    return buf;
+}
+
+fn poisonCStringBuffer(buf: []u8, value_len: usize) void {
+    @memset(buf[0..value_len], 'x');
+}
+
+fn findStringAttr(rec: *const SpanRecord, key: []const u8) ?[]const u8 {
+    for (rec.attributes.slice()) |attr| {
+        if (std.mem.eql(u8, attr.key, key)) {
+            return switch (attr.value) {
+                .string => |s| s,
+                else => null,
+            };
+        }
+    }
+    return null;
+}
+
+test "C API span strings survive temporary caller buffers" {
+    const inst = terra_init(null).?;
+    defer _ = terra_shutdown(inst);
+
+    var model = cStringBuffer(64, "borrowed-model");
+    const span = terra_begin_inference_span_ctx(inst, null, &model, false).?;
+    poisonCStringBuffer(model[0..], "borrowed-model".len);
+
+    var key = cStringBuffer(64, "dynamic.key");
+    var value = cStringBuffer(64, "dynamic-value");
+    terra_span_set_string(span, &key, &value);
+    poisonCStringBuffer(key[0..], "dynamic.key".len);
+    poisonCStringBuffer(value[0..], "dynamic-value".len);
+
+    var event = cStringBuffer(64, "dynamic.event");
+    terra_span_add_event(span, &event);
+    poisonCStringBuffer(event[0..], "dynamic.event".len);
+
+    var error_type = cStringBuffer(64, "DynamicError");
+    var error_message = cStringBuffer(64, "temporary error message");
+    terra_span_record_error(span, &error_type, &error_message, true);
+    poisonCStringBuffer(error_type[0..], "DynamicError".len);
+    poisonCStringBuffer(error_message[0..], "temporary error message".len);
+
+    terra_span_end(inst, span);
+
+    var buf: [4]SpanRecord = undefined;
+    const count = terra_test_drain_spans(inst, &buf, 4);
+    try std.testing.expectEqual(@as(u32, 1), count);
+
+    try std.testing.expectEqualStrings("borrowed-model", findStringAttr(&buf[0], constants.keys.gen_ai.request_model).?);
+    try std.testing.expectEqualStrings("dynamic-value", findStringAttr(&buf[0], "dynamic.key").?);
+    try std.testing.expectEqualStrings("dynamic.event", buf[0].events[0].name);
+    try std.testing.expectEqualStrings("DynamicError", buf[0].events[1].attributes.slice()[0].value.string);
+    try std.testing.expectEqualStrings("temporary error message", buf[0].events[1].attributes.slice()[1].value.string);
 }
 
 test "terra_span_context extraction" {

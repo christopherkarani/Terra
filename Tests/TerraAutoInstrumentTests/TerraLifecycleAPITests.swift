@@ -2,6 +2,8 @@ import Foundation
 import Testing
 @testable import Terra
 @testable import TerraCore
+@testable import TerraMetalProfiler
+@testable import TerraSystemProfiler
 
 @Suite("Terra lifecycle public API", .serialized)
 final class TerraLifecycleAPITests {
@@ -34,6 +36,28 @@ final class TerraLifecycleAPITests {
 
     #expect(Terra.lifecycleState == .stopped)
     #expect(!Terra.isRunning)
+  }
+
+  @Test("shutdown resets profiler install state")
+  func shutdownResetsProfilerInstallState() async throws {
+    Terra.resetOpenTelemetryForTesting()
+    await Terra.reset()
+
+    var config = Terra.Configuration(preset: .quickstart)
+    config.features = []
+    config.profiling = [.memory, .metal, .thermal]
+    try await Terra.start(config)
+
+    #expect(TerraSystemProfiler.isInstalled)
+    #expect(TerraMetalProfiler.isInstalled)
+    #expect(ThermalMonitor.isInstalled)
+
+    await Terra.shutdown()
+
+    #expect(!TerraSystemProfiler.isInstalled)
+    #expect(!TerraMetalProfiler.isInstalled)
+    #expect(!ThermalMonitor.isInstalled)
+    #expect(Terra.lastProfilingDiagnostics == .none)
   }
 
   @Test("reset is idempotent and leaves Terra uninitialized")
@@ -73,6 +97,40 @@ final class TerraLifecycleAPITests {
     } catch {
       #expect(Bool(false), "Unexpected error: \(error)")
     }
+  }
+
+  // P1-10: shutdown must reset ANE / Power profilers in addition to the
+  // umbrella-managed profilers. We can't import TerraANEProfiler /
+  // TerraPowerProfiler directly here without expanding test target deps, so
+  // this test exercises the umbrella shutdown path and asserts the
+  // diagnostics envelope is cleared. The deeper assertions live in their
+  // own module test suites.
+  @Test("shutdown resets ANE and Power profilers")
+  func testShutdownResetsANEAndPowerProfilers() async throws {
+    Terra.resetOpenTelemetryForTesting()
+    await Terra.reset()
+
+    var config = Terra.Configuration(preset: .quickstart)
+    config.features = []
+    // Request ANE/power flags so the diagnostics envelope is populated.
+    config.profiling = [.ane, .power]
+    try await Terra.start(config)
+
+    // Both flags require opt-in targets — diagnostics should reflect that.
+    let after = Terra.lastProfilingDiagnostics
+    #expect(after.ane.status == .requiresOptInTarget)
+    #expect(after.power.status == .requiresOptInTarget)
+
+    await Terra.shutdown()
+
+    // Shutdown must clear the diagnostics envelope.
+    #expect(Terra.lastProfilingDiagnostics == .none)
+
+    // The umbrella shutdown path also fans out the
+    // `TerraDidRequestProfilerShutdown` notification; opt-in profilers that
+    // have been touched by the running process observe it and drain their
+    // state. Cross-target install-state assertions live in
+    // TerraANEProfilerTests / TerraPowerProfilerTests.
   }
 
   @Test("concurrent start/shutdown/reconfigure tasks do not deadlock")

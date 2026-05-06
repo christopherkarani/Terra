@@ -69,4 +69,78 @@ func migrationGuidePointsLegacyRootsToWorkflowFirstReplacements() throws {
   #expect(source.contains("| `Terra.agentic(name:id:_:)` | `Terra.workflow(name:id:_:)` plus `SpanHandle` child helpers |"))
   #expect(source.contains("| `TraceHandle` in `.run { ... }` | `SpanHandle` in `.run { ... }` |"))
 }
+
+// P1-15: every canonical cookbook recipe must have a compile-checked mirror.
+//
+// This test asserts that for every Swift fenced code block published in
+// `README.md` and `Docs/cookbook.md`, `CookbookSnippetsCompileTests.swift`
+// has a `// SNIPPET: <doc>#<n>` annotation. The mirror functions in that file
+// fail the build if the cookbook recipe references removed types, wrong
+// argument labels, or changed return types — catching stale docs at build
+// time rather than at runtime in a downstream integrator.
+@Test("Every published cookbook swift snippet has a compile-checked mirror")
+func everyPublishedCookbookSwiftSnippetHasACompileCheckedMirror() throws {
+  let repoRoot = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+    .deletingLastPathComponent()
+
+  let mirrorURL = repoRoot.appendingPathComponent(
+    "Tests/TerraTests/CookbookSnippetsCompileTests.swift"
+  )
+  let mirrorSource = try String(contentsOf: mirrorURL)
+
+  let mirrorAnnotations = Self.extractMirrorAnnotations(from: mirrorSource)
+
+  let docsToCover: [String] = [
+    "README.md",
+    "Docs/cookbook.md",
+  ]
+
+  for relativePath in docsToCover {
+    let doc = relativePath.split(separator: "/").last.map(String.init) ?? relativePath
+    let docURL = repoRoot.appendingPathComponent(relativePath)
+    let docSource = try String(contentsOf: docURL)
+    let snippetCount = Self.countSwiftFences(in: docSource)
+    let mirroredCount = mirrorAnnotations.filter { $0.hasPrefix("\(doc)#") }.count
+
+    #expect(
+      mirroredCount >= snippetCount,
+      "\(relativePath) publishes \(snippetCount) swift snippet(s) but the mirror only annotates \(mirroredCount). Add one `// SNIPPET: \(doc)#<id>` block per recipe to CookbookSnippetsCompileTests.swift."
+    )
+  }
+}
+
+private static func extractMirrorAnnotations(from source: String) -> [String] {
+  var annotations: [String] = []
+  let prefix = "// SNIPPET: "
+  for line in source.split(separator: "\n") {
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    if trimmed.hasPrefix(prefix) {
+      annotations.append(String(trimmed.dropFirst(prefix.count)))
+    }
+  }
+  return annotations
+}
+
+private static func countSwiftFences(in source: String) -> Int {
+  // Count fenced code blocks opened with a `swift` language tag. The
+  // pattern matches the start fence "```swift" at the beginning of a line.
+  var count = 0
+  var inFence = false
+  for line in source.split(separator: "\n", omittingEmptySubsequences: false) {
+    let trimmed = line.trimmingCharacters(in: .whitespaces)
+    if trimmed.hasPrefix("```") {
+      if inFence {
+        inFence = false
+      } else {
+        inFence = true
+        if trimmed.lowercased() == "```swift" {
+          count += 1
+        }
+      }
+    }
+  }
+  return count
+}
 }

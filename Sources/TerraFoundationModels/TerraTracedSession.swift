@@ -280,7 +280,7 @@ public final class TerraTracedSession {
               let stream = self.backend.streamResponse(to: prompt)
               for try await chunk in stream {
                 try Task.checkCancellation()
-                streamScope.chunk(tokens: 0)
+                streamScope.chunk(tokens: Self.estimatedChunkTokenCount(chunk.content))
                 if let explicitCount = chunk.outputTokenCount {
                   streamScope.outputTokens(explicitCount)
                 }
@@ -308,6 +308,12 @@ public final class TerraTracedSession {
       call = call.includeContent()
     }
     return call
+  }
+
+  private static func estimatedChunkTokenCount(_ content: String) -> Int {
+    let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return 0 }
+    return max(1, trimmed.split(whereSeparator: \.isWhitespace).count)
   }
 
   private func emitGuardrailSpan(
@@ -356,7 +362,7 @@ public final class TerraTracedSession {
       trace.emit(
         ToolCallEvent(
           name: call.name,
-          arguments: captureContent ? call.arguments : nil
+          arguments: Self.redactedToolContent(call.arguments, captureContent: captureContent)
         )
       )
     }
@@ -364,13 +370,81 @@ public final class TerraTracedSession {
       trace.emit(
         ToolResultEvent(
           name: result.name,
-          result: captureContent ? result.result : nil
+          result: Self.redactedToolContent(result.result, captureContent: captureContent)
         )
       )
     }
 
+    // Aggregate counters surface regardless of redaction policy — these are
+    // not content, only counts/names, and are required for tool-usage
+    // analytics.
     trace.attribute(.init("terra.fm.tools.called"), toolNames.joined(separator: ","))
     trace.attribute(.init("terra.fm.tool_call_count"), diff.toolCalls.count)
+  }
+
+  /// Produces a privacy-respecting representation of FM tool content
+  /// (arguments or results) that mirrors Terra's HTTP instrumentation
+  /// redaction policy.
+  ///
+  /// - Returns: `nil` when the caller did not opt into content capture, or
+  ///   when the active `Terra.Privacy` policy forbids surfacing content.
+  ///   Otherwise a single-attribute string whose shape is determined by the
+  ///   active `Terra.RedactionStrategy`:
+  ///   - `.lengthOnly` → `"[redacted: N chars]"`
+  ///   - `.hashHMACSHA256` → `"[hmac_sha256:<hex>; len:N]"` (with optional
+  ///     anonymization key id appended when one is configured)
+  ///   - `.hashSHA256` → `"[sha256:<hex>; len:N]"`
+  ///   - `.drop` (or content not allowed by `contentPolicy`) → `nil`
+  ///
+  /// This is a local mirror of the HTTP path's redaction logic. We can't
+  /// reach `Runtime.shared.privacy` directly across modules so we probe via
+  /// `Terra.autoInstrumentedPromptAttributes(for:)` — the only
+  /// package-accessible helper that exposes the active redaction strategy
+  /// applied to a sample value. The probe's key set tells us which strategy
+  /// is active; we then re-render the FM tool content into the
+  /// single-string `terra.fm.tool.arguments` / `terra.fm.tool.result`
+  /// schema slots used by the FM viewer.
+  ///
+  /// - Note: When the global `contentPolicy` is `.never`, the probe is
+  ///   empty and we surface nothing — even though the FM caller opted in
+  ///   via `Terra.CapturePolicy.includeContent`. The global privacy policy
+  ///   is the strict upper bound; per-call opt-in cannot override `.never`.
+  internal static func redactedToolContent(
+    _ value: String?,
+    captureContent: Bool
+  ) -> String? {
+    guard let value, captureContent else { return nil }
+    let probe = Terra.autoInstrumentedPromptAttributes(for: value)
+    // Empty probe: either contentPolicy disallows capture (.never / .optIn
+    // with includeContent: false), or redaction == .drop. In all those
+    // cases we surface nothing — not even a length.
+    if probe.isEmpty {
+      return nil
+    }
+    let length = value.count
+    if let hmacAttribute = probe[Terra.Keys.Terra.promptHMACSHA256],
+       case let .string(hmacHex) = hmacAttribute
+    {
+      var rendered = "[hmac_sha256:\(hmacHex); len:\(length)"
+      if let keyIDAttribute = probe[Terra.Keys.Terra.anonymizationKeyID],
+         case let .string(keyID) = keyIDAttribute
+      {
+        rendered += "; key_id:\(keyID)"
+      }
+      rendered += "]"
+      return rendered
+    }
+    if let shaAttribute = probe[Terra.Keys.Terra.promptSHA256],
+       case let .string(shaHex) = shaAttribute
+    {
+      return "[sha256:\(shaHex); len:\(length)]"
+    }
+    if probe[Terra.Keys.Terra.promptLength] != nil {
+      return "[redacted: \(length) chars]"
+    }
+    // Defensive: probe returned something unexpected — fall back to
+    // length-only representation rather than leaking raw content.
+    return "[redacted: \(length) chars]"
   }
 
   private static func isGuardrailError(_ error: any Error) -> Bool {

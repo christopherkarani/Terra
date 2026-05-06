@@ -8,7 +8,38 @@
 import Foundation
 import Terra
 
-try await Terra.start()
+private func environmentValue(_ name: String) -> String? {
+  guard let value = ProcessInfo.processInfo.environment[name]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !value.isEmpty
+  else {
+    return nil
+  }
+  return value
+}
+
+let smokeMode = environmentValue("TERRA_SMOKE_ENDPOINT") != nil
+
+if let endpointString = environmentValue("TERRA_SMOKE_ENDPOINT"),
+   let endpoint = URL(string: endpointString),
+   let ingestKey = environmentValue("TERRA_SMOKE_INGEST_KEY"),
+   let environmentName = environmentValue("TERRA_SMOKE_ENVIRONMENT")
+{
+  let processName = ProcessInfo.processInfo.processName
+  let bundleIdentifier = Bundle.main.bundleIdentifier ?? "<nil>"
+  print("TerraSample smoke: starting production ingest")
+  print("TerraSample smoke: process=\(processName) bundle=\(bundleIdentifier) environment=\(environmentName)")
+  var config = Terra.Configuration(preset: .production)
+  config.destination = .endpoint(endpoint)
+  config.persistence = .off
+  config.productionIngest = .init(
+    environmentName: environmentName,
+    ingestKey: ingestKey,
+    installationID: environmentValue("TERRA_SMOKE_INSTALLATION_ID")
+  )
+  try await Terra.start(config)
+} else {
+  try await Terra.start()
+}
 
 try await Terra.workflow(name: "DemoAgent", id: "demo-agent-1") { workflow in
   workflow.event("workflow.start")
@@ -31,7 +62,11 @@ try await Terra.workflow(name: "DemoAgent", id: "demo-agent-1") { workflow in
 }
 
 // Give periodic metrics export a moment to run in this sample.
+if smokeMode { print("TerraSample smoke: workflow complete, waiting for export") }
 try await Task.sleep(nanoseconds: 2_000_000_000)
+if smokeMode { print("TerraSample smoke: shutting down") }
+await Terra.shutdown()
+if smokeMode { print("TerraSample smoke: shutdown complete") }
 
 #else
 

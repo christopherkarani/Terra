@@ -9,7 +9,9 @@ Kotlin SDK (dev.terra.*)
     ↓ JNI
 terra_jni.c
     ↓ C ABI
-libtera.so (Zig cross-compiled)
+libtera.so (NDK-built JNI bridge)
+    ↓ static link
+libterra.a (Zig core)
 ```
 
 The Zig core handles span lifecycle, ring buffer management, batching, privacy/redaction, and OTLP protobuf serialization. The Kotlin layer provides an idiomatic Android API with coroutine context propagation.
@@ -20,37 +22,28 @@ The Zig core handles span lifecycle, ring buffer management, batching, privacy/r
 
 - JDK 17
 - Zig 0.14+ (for cross-compilation)
-- Android SDK with API 26+ (for Kotlin SDK)
+- Android SDK with API 26+ and Android NDK (for JNI linking)
 - Kotlin 1.9+
 - Gradle wrapper is vendored in this directory; no system Gradle install is required
 
-### Cross-compile libtera for Android
+### Build Android native libraries
 
 ```bash
-cd zig-core/
-
-# ARM64 (most Android devices)
-zig build -Dtarget=aarch64-linux-android -Doptimize=ReleaseSafe
-
-# x86_64 (emulators)
-zig build -Dtarget=x86_64-linux-android -Doptimize=ReleaseSafe
+cd ..
+bash Scripts/build-libtera-android.sh
 ```
 
-### Place native libraries
-
-Copy the built `.so` files into the Gradle-expected layout:
-
-```bash
-mkdir -p terra-android/jniLibs/arm64-v8a
-mkdir -p terra-android/jniLibs/x86_64
-
-cp zig-core/zig-out/lib/libterra.so terra-android/jniLibs/arm64-v8a/
-# (repeat for x86_64 target)
-```
+That script:
+- cross-compiles `libterra.a` from Zig for `arm64-v8a` and `x86_64`
+- links `terra_jni.c` plus the static core through `ndk-build`
+- writes the final JNI artifacts to `terra-android/jniLibs/<abi>/libtera.so`
 
 ### Build and test from a fresh checkout
 
 ```bash
+cd ..
+bash Scripts/build-libtera-android.sh
+
 cd terra-android/
 ./gradlew test assembleRelease
 ```
@@ -60,11 +53,14 @@ cd terra-android/
 The host `test` task runs JVM-safe contract tests. The JNI and coroutine integration tests run as Android instrumentation tests:
 
 ```bash
+cd ..
+bash Scripts/build-libtera-android.sh
+
 cd terra-android/
 ./gradlew connectedDebugAndroidTest
 ```
 
-That requires an emulator or device plus both `arm64-v8a` and `x86_64` `libtera.so` artifacts in `jniLibs/`.
+That requires an emulator or device plus the matching `libtera.so` artifact in `jniLibs/`. The build script above produces both `arm64-v8a` and `x86_64`.
 
 ## Usage
 

@@ -12,9 +12,22 @@ jobs:
     runs-on: macos-latest
     env:
       SWIFTLINT_VERSION: "0.57.1"
+      TERRA_SWIFTPM_TIMEOUT_SECONDS: "900"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
 
       - name: Toolchain
         run: |
@@ -33,24 +46,177 @@ jobs:
       - name: SwiftLint
         run: swiftlint lint --reporter github-actions-logging
 
-      - name: SwiftPM tests
+      - name: Repository validation
         run: |
           set -euo pipefail
-          swift test
+          bash Scripts/validate_no_legacy_refs.sh
+          python3 Scripts/validate-doc-snippets.py
+          if [ -f Scripts/validate-telemetry-schema.py ]; then python3 Scripts/validate-telemetry-schema.py; fi
+          if [ -f Scripts/validate-bindings.py ]; then python3 Scripts/validate-bindings.py; fi
+
+      - name: SwiftPM manifest
+        run: Scripts/validate-swiftpm.sh --manifest-only
+
+      - name: SwiftPM tests
+        run: Scripts/validate-swiftpm.sh
 
       - name: API breaking changes (SDK targets, PRs only)
         if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
-          swift package diagnose-api-breaking-changes Terra
-          swift package diagnose-api-breaking-changes TerraCore
-          swift package diagnose-api-breaking-changes TerraCoreML
-          swift package diagnose-api-breaking-changes TerraTraceKit
-          swift package diagnose-api-breaking-changes TerraHTTPInstrument
-          swift package diagnose-api-breaking-changes TerraFoundationModels
-          swift package diagnose-api-breaking-changes TerraMLX
-          swift package diagnose-api-breaking-changes TerraMetalProfiler
-          swift package diagnose-api-breaking-changes TerraSystemProfiler
-          swift package diagnose-api-breaking-changes TerraLlama
-          swift package diagnose-api-breaking-changes TerraAccelerate
-          swift package diagnose-api-breaking-changes TerraTracedMacro
+          BASE_REF="${GITHUB_BASE_REF:-main}"
+          git fetch --no-tags --depth=1 origin "${BASE_REF}"
+          # Note: TerraTracedMacro is intentionally omitted — macro plugin
+          # products are compiler executables, not analyzable libraries, so
+          # `swift package diagnose-api-breaking-changes` cannot inspect
+          # them. All other public products are still checked below.
+          PRODUCTS=(
+            Terra
+            TerraCore
+            TerraCoreML
+            TerraTraceKit
+            TerraHTTPInstrument
+            TerraFoundationModels
+            TerraMLX
+            TerraMetalProfiler
+            TerraSystemProfiler
+            TerraAccelerate
+            TerraPowerProfiler
+            TerraANEProfiler
+          )
+          swift package diagnose-api-breaking-changes "origin/${BASE_REF}" --products "${PRODUCTS[@]}"
+
+  native-bindings:
+    name: Zig, Rust, and Python bindings
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            terra-rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('terra-rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install Zig
+        run: |
+          set -euo pipefail
+          brew install zig
+
+      - name: Zig tests
+        run: |
+          set -euo pipefail
+          cd zig-core
+          zig build test --summary all
+
+      - name: Zig static library
+        run: |
+          set -euo pipefail
+          cd zig-core
+          zig build
+          test -f zig-out/lib/libterra.a
+
+      - name: Rust tests
+        run: |
+          set -euo pipefail
+          cd terra-rust
+          TERRA_LIB_DIR="$GITHUB_WORKSPACE/zig-core/zig-out/lib" cargo test -- --test-threads=1
+
+      - name: Rust package verification
+        run: |
+          set -euo pipefail
+          cd terra-rust
+          TERRA_LIB_DIR="$GITHUB_WORKSPACE/zig-core/zig-out/lib" cargo package
+
+      - name: Python syntax check
+        run: |
+          set -euo pipefail
+          python3 -m py_compile terra-python/terra.py
+
+      - name: Python unit tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s terra-python -p 'test*.py'
+
+      - name: C++ CMake smoke
+        run: |
+          set -euo pipefail
+          cmake -S terra-cpp -B .build/terra-cpp \
+            -DTERRA_LIB_PATH="$GITHUB_WORKSPACE/zig-core/zig-out/lib/libterra.a"
+          cmake --build .build/terra-cpp
+          ctest --test-dir .build/terra-cpp --output-on-failure
+
+  android:
+    name: Android bindings
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('terra-android/**/*.gradle*', 'terra-android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android native toolchain
+        run: |
+          set -euo pipefail
+          brew install zig
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;26.3.11579264"
+
+      - name: Build Android native libraries
+        run: |
+          set -euo pipefail
+          bash Scripts/build-libtera-android.sh
+
+      - name: Gradle tests and release assembly
+        run: |
+          set -euo pipefail
+          cd terra-android
+          ./gradlew test assembleRelease
+
+  ios-simulator:
+    name: iOS Simulator build (advisory)
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build-ios
+            ~/.swiftpm
+          key: ${{ runner.os }}-spm-ios-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-ios-
+
+      - name: Build for iOS Simulator
+        run: |
+          set -e
+          xcodebuild build \
+            -scheme Terra-Package \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath .build-ios \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO \
+            | tail -50

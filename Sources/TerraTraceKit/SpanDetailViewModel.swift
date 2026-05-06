@@ -41,11 +41,35 @@ struct EventItem: Hashable, Identifiable {
   }
 }
 
-/// Display-ready link entry.
+/// Display-ready link entry. Attributes are routed through the privacy
+/// predicate at construction so any future surface that renders them inherits
+/// the same redaction guarantees as span attributes.
 struct LinkItem: Hashable, Identifiable {
   var id: String { "\(traceId.hexString)-\(spanId.hexString)" }
   let traceId: TraceId
   let spanId: SpanId
+  let attributes: [(String, String)]
+
+  init(traceId: TraceId, spanId: SpanId, attributes: [(String, String)] = []) {
+    self.traceId = traceId
+    self.spanId = spanId
+    self.attributes = attributes
+  }
+
+  static func == (lhs: LinkItem, rhs: LinkItem) -> Bool {
+    lhs.traceId == rhs.traceId
+      && lhs.spanId == rhs.spanId
+      && lhs.attributes.elementsEqual(rhs.attributes, by: ==)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(traceId)
+    hasher.combine(spanId)
+    for pair in attributes {
+      hasher.combine(pair.0)
+      hasher.combine(pair.1)
+    }
+  }
 }
 
 /// View model for a selected span's details.
@@ -55,6 +79,9 @@ final class SpanDetailViewModel {
   private(set) var selectedSpan: SpanData?
   /// Attributes prepared for display.
   private(set) var attributeItems: [AttributeItem] = []
+  /// Privacy-aware status description for the selected span, when present.
+  /// `nil` when the underlying status carries no message.
+  private(set) var displayedStatusDescription: String?
   /// Events prepared for display.
   private(set) var eventItems: [EventItem] = []
   /// Recommendation events prepared for display.
@@ -89,14 +116,20 @@ final class SpanDetailViewModel {
     selectedSpan = span
     attributeItems = span.attributes
       .sorted(by: { $0.key < $1.key })
-      .map { AttributeItem(key: $0.key, value: $0.value.description) }
+      .map {
+        AttributeItem(
+          key: $0.key,
+          value: TelemetryPrivacy.displayValue(forKey: $0.key, value: $0.value.description)
+        )
+      }
+    displayedStatusDescription = redactedStatusDescription(for: span.status)
 
     let allEvents = span.events.sorted(by: { $0.timestamp < $1.timestamp })
     let preparedEvents = allEvents.map { event in
       (
         source: event,
         item: EventItem(
-          name: event.name,
+          name: redactedEventName(event.name),
           timestamp: event.timestamp,
           attributes: normalizedAttributes(event.attributes)
         )
@@ -140,7 +173,11 @@ final class SpanDetailViewModel {
     lifecycleEventItems = lifecycle
 
     linkItems = span.links.map { link in
-      LinkItem(traceId: link.context.traceId, spanId: link.context.spanId)
+      LinkItem(
+        traceId: link.context.traceId,
+        spanId: link.context.spanId,
+        attributes: normalizedAttributes(link.attributes)
+      )
     }
   }
 
@@ -148,6 +185,7 @@ final class SpanDetailViewModel {
   func clearSelection() {
     selectedSpan = nil
     attributeItems = []
+    displayedStatusDescription = nil
     eventItems = []
     recommendationEventItems = []
     anomalyEventItems = []
@@ -157,9 +195,24 @@ final class SpanDetailViewModel {
     linkItems = []
   }
 
+  // MARK: - Privacy-aware projections
+
+  private func redactedStatusDescription(for status: Status) -> String? {
+    guard case let .error(description) = status else { return nil }
+    let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    return TelemetryPrivacy.shouldRedactStatusDescription(trimmed)
+      ? TelemetryPrivacy.redactedValue
+      : trimmed
+  }
+
+  private func redactedEventName(_ name: String) -> String {
+    TelemetryPrivacy.shouldRedactEventName(name) ? TelemetryPrivacy.redactedValue : name
+  }
+
   private func normalizedAttributes(_ values: [String: OpenTelemetryApi.AttributeValue]) -> [(String, String)] {
     values.map { key, value in
-      (key, value.description)
+      (key, TelemetryPrivacy.displayValue(forKey: key, value: value.description))
     }.sorted { lhs, rhs in
       lhs.0 == rhs.0 ? lhs.1 < rhs.1 : lhs.0 < rhs.0
     }

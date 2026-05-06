@@ -47,32 +47,32 @@ class StreamingScope internal constructor(
      */
     fun setAttribute(key: String, value: String): StreamingScope {
         checkNotFinished()
-        TerraSpan.nativeSetString(spanHandle, key, value)
+        TerraSpan.setString(spanHandle, key, value)
         return this
     }
 
     fun setAttribute(key: String, value: Long): StreamingScope {
         checkNotFinished()
-        TerraSpan.nativeSetInt(spanHandle, key, value)
+        TerraSpan.setInt(spanHandle, key, value)
         return this
     }
 
     fun setAttribute(key: String, value: Double): StreamingScope {
         checkNotFinished()
-        TerraSpan.nativeSetDouble(spanHandle, key, value)
+        TerraSpan.setDouble(spanHandle, key, value)
         return this
     }
 
     fun setAttribute(key: String, value: Boolean): StreamingScope {
         checkNotFinished()
-        TerraSpan.nativeSetBool(spanHandle, key, value)
+        TerraSpan.setBool(spanHandle, key, value)
         return this
     }
 
     /** Add a named event to the underlying span. */
     fun addEvent(name: String): StreamingScope {
         checkNotFinished()
-        TerraSpan.nativeAddEvent(spanHandle, name)
+        TerraSpan.addEventNative(spanHandle, name)
         return this
     }
 
@@ -83,7 +83,7 @@ class StreamingScope internal constructor(
         setStatus: Boolean = true
     ): StreamingScope {
         checkNotFinished()
-        TerraSpan.nativeRecordError(spanHandle, type, message, setStatus)
+        TerraSpan.recordErrorNative(spanHandle, type, message, setStatus)
         return this
     }
 
@@ -102,7 +102,7 @@ class StreamingScope internal constructor(
         checkNotFinished()
         finished = true
         nativeEnd(spanHandle)
-        TerraSpan.nativeEnd(instHandle, spanHandle)
+        TerraSpan.endNative(instHandle, spanHandle)
     }
 
     /** Use as a scoped block — auto-finishes on exit. */

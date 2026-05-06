@@ -10,7 +10,13 @@ package final class TerraSpanEnrichmentProcessor: SpanProcessor {
   package init() {}
 
   package func onStart(parentContext: SpanContext?, span: ReadableSpan) {
-    guard Terra.SpanNames.isTerraSpanName(span.name) else { return }
+    // Filter broadened (P1-7): user-named workflow spans (e.g.
+    // `Terra.workflow(name: "request-workflow")`) do not match
+    // `Terra.SpanNames.isTerraSpanName`, so we additionally accept any span
+    // produced by Terra's own tracer (instrumentation scope == Terra). This
+    // ensures privacy enrichment runs on every Terra-emitted span without
+    // relying on the eager-merge path in `Terra.startSpan`.
+    guard Self.isTerraOwnedSpan(span) else { return }
 
     let privacy = Runtime.shared.privacy
     span.setAttribute(key: Terra.Keys.Terra.contentPolicy, value: privacy.contentPolicy.asAttributeValue)
@@ -24,6 +30,16 @@ package final class TerraSpanEnrichmentProcessor: SpanProcessor {
       redactionValue = privacy.redaction.asAttributeValue
     }
     span.setAttribute(key: Terra.Keys.Terra.contentRedaction, value: redactionValue)
+  }
+
+  /// Returns true if a span originated from Terra's tracer scope OR matches one
+  /// of the canonical Terra span names. Either signal means the span is owned
+  /// by Terra and should be enriched.
+  private static func isTerraOwnedSpan(_ span: ReadableSpan) -> Bool {
+    if span.instrumentationScopeInfo.name == Terra.instrumentationName {
+      return true
+    }
+    return Terra.SpanNames.isTerraSpanName(span.name)
   }
 
   package func onEnd(span: ReadableSpan) {}

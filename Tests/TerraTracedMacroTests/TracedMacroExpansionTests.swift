@@ -577,6 +577,31 @@ func modelMacroRawString() {
   )
 }
 
+@Test("Model macro rejects runtime streaming expressions")
+func modelMacroRejectsRuntimeStreamingExpression() {
+  assertMacroExpansion(
+    """
+    @Traced(model: "gpt-4", streaming: shouldStream)
+    func generate(prompt: String, shouldStream: Bool) async throws -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    expandedSource: """
+    func generate(prompt: String, shouldStream: Bool) async throws -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    diagnostics: [
+      DiagnosticSpec(
+        message: "@Traced streaming: must be the literal true or false. Use an explicit Terra.stream/Terra.infer branch for runtime streaming decisions.",
+        line: 1,
+        column: 1
+      )
+    ],
+    macros: testMacros
+  )
+}
+
 @Test("Model macro emits fix-it when provider is passed as raw string")
 func modelMacroRawProviderDiagnostic() {
   assertMacroExpansion(

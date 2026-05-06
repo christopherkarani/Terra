@@ -14,14 +14,14 @@ private struct SpanHarness {
   let spanExporter: InMemoryExporter
   let tracerProvider: TracerProviderSdk
 
-  init() {
+  init(privacy: Terra.Privacy = .default) {
     previousTracerProvider = OpenTelemetry.instance.tracerProvider
     Terra.resetOpenTelemetryForTesting()
     spanExporter = InMemoryExporter()
     tracerProvider = TracerProviderSdk()
     tracerProvider.addSpanProcessor(SimpleSpanProcessor(spanExporter: spanExporter))
     OpenTelemetry.registerTracerProvider(tracerProvider: tracerProvider)
-    Terra.install(.init(tracerProvider: tracerProvider, registerProvidersAsGlobal: false))
+    Terra.install(.init(privacy: privacy, tracerProvider: tracerProvider, registerProvidersAsGlobal: false))
   }
 
   func finishedSpans() -> [SpanData] {
@@ -147,7 +147,11 @@ func transcriptDiffEmitsToolEvents() async throws {
   Terra.lockTestingIsolation()
   defer { Terra.unlockTestingIsolation() }
 
-  let harness = SpanHarness()
+  // Length-only redaction with content captured opt-in: preserves the legacy
+  // `[redacted: N chars]` payload that this test asserts on.
+  let harness = SpanHarness(
+    privacy: .init(contentPolicy: .always, redaction: .lengthOnly)
+  )
   defer { harness.tearDown() }
 
   let backend = MockBackend(
@@ -167,6 +171,132 @@ func transcriptDiffEmitsToolEvents() async throws {
   )
   #expect(span.events.contains { $0.name == "tool_call" })
   #expect(span.events.contains { $0.name == "tool_result" })
+  let toolCall = try #require(span.events.first { $0.name == "tool_call" })
+  let toolResult = try #require(span.events.first { $0.name == "tool_result" })
+  #expect(toolCall.attributes["terra.fm.tool.arguments"]?.description == "[redacted: 13 chars]")
+  #expect(toolResult.attributes["terra.fm.tool.result"]?.description == "[redacted: 10 chars]")
+  #expect(toolCall.attributes["terra.fm.tool.arguments"]?.description.contains("swift") == false)
+  #expect(toolResult.attributes["terra.fm.tool.result"]?.description.contains("hits") == false)
+  #expect(span.attributes["terra.fm.tools.called"]?.description == "search")
+  #expect(span.attributes["terra.fm.tool_call_count"]?.description == "1")
+}
+
+@available(macOS 26.0, iOS 26.0, *)
+@Test("Tool content redaction respects hashHMACSHA256 policy")
+func testToolContentRedactionRespectsHashHMACPolicy() async throws {
+  Terra.lockTestingIsolation()
+  defer { Terra.unlockTestingIsolation() }
+
+  let harness = SpanHarness(
+    privacy: .init(contentPolicy: .always, redaction: .hashHMACSHA256)
+  )
+  defer { harness.tearDown() }
+
+  let backend = MockBackend(
+    afterTranscript: [
+      MockBackend.ToolCallEntry(toolName: "search", arguments: "{\"q\":\"swift\"}"),
+      MockBackend.ToolResultEntry(toolName: "search", result: "{\"hits\":1}"),
+    ]
+  )
+  let session = TerraTracedSession(backend: backend)
+  _ = try await session.respond(to: "Find swift docs [hmac]", promptCapture: .includeContent)
+
+  let span = try #require(
+    harness.finishedSpans().last(where: {
+      $0.name == "gen_ai.inference"
+        && $0.attributes["terra.fm.tool_call_count"]?.description == "1"
+    })
+  )
+
+  let toolCall = try #require(span.events.first { $0.name == "tool_call" })
+  let toolResult = try #require(span.events.first { $0.name == "tool_result" })
+
+  let argumentsValue = try #require(toolCall.attributes["terra.fm.tool.arguments"]?.description)
+  let resultValue = try #require(toolResult.attributes["terra.fm.tool.result"]?.description)
+
+  #expect(argumentsValue.contains("hmac_sha256:"))
+  #expect(argumentsValue.contains("len:13"))
+  #expect(argumentsValue.contains("swift") == false)
+  #expect(argumentsValue.contains("[redacted:") == false)
+  #expect(resultValue.contains("hmac_sha256:"))
+  #expect(resultValue.contains("len:10"))
+  #expect(resultValue.contains("hits") == false)
+
+  // Aggregate counters always emit regardless of redaction.
+  #expect(span.attributes["terra.fm.tools.called"]?.description == "search")
+  #expect(span.attributes["terra.fm.tool_call_count"]?.description == "1")
+}
+
+@available(macOS 26.0, iOS 26.0, *)
+@Test("Tool content redaction respects lengthOnly policy")
+func testToolContentRedactionRespectsLengthOnlyPolicy() async throws {
+  Terra.lockTestingIsolation()
+  defer { Terra.unlockTestingIsolation() }
+
+  let harness = SpanHarness(
+    privacy: .init(contentPolicy: .always, redaction: .lengthOnly)
+  )
+  defer { harness.tearDown() }
+
+  let backend = MockBackend(
+    afterTranscript: [
+      MockBackend.ToolCallEntry(toolName: "search", arguments: "{\"q\":\"swift\"}"),
+      MockBackend.ToolResultEntry(toolName: "search", result: "{\"hits\":1}"),
+    ]
+  )
+  let session = TerraTracedSession(backend: backend)
+  _ = try await session.respond(to: "Find swift docs [length-only]", promptCapture: .includeContent)
+
+  let span = try #require(
+    harness.finishedSpans().last(where: {
+      $0.name == "gen_ai.inference"
+        && $0.attributes["terra.fm.tool_call_count"]?.description == "1"
+    })
+  )
+
+  let toolCall = try #require(span.events.first { $0.name == "tool_call" })
+  let toolResult = try #require(span.events.first { $0.name == "tool_result" })
+
+  #expect(toolCall.attributes["terra.fm.tool.arguments"]?.description == "[redacted: 13 chars]")
+  #expect(toolResult.attributes["terra.fm.tool.result"]?.description == "[redacted: 10 chars]")
+  #expect(span.attributes["terra.fm.tool_call_count"]?.description == "1")
+}
+
+@available(macOS 26.0, iOS 26.0, *)
+@Test("Tool content under drop policy omits content")
+func testToolContentRedactionUnderDropPolicyOmitsContent() async throws {
+  Terra.lockTestingIsolation()
+  defer { Terra.unlockTestingIsolation() }
+
+  let harness = SpanHarness(
+    privacy: .init(contentPolicy: .always, redaction: .drop)
+  )
+  defer { harness.tearDown() }
+
+  let backend = MockBackend(
+    afterTranscript: [
+      MockBackend.ToolCallEntry(toolName: "search", arguments: "{\"q\":\"swift\"}"),
+      MockBackend.ToolResultEntry(toolName: "search", result: "{\"hits\":1}"),
+    ]
+  )
+  let session = TerraTracedSession(backend: backend)
+  _ = try await session.respond(to: "Find swift docs [drop]", promptCapture: .includeContent)
+
+  let span = try #require(
+    harness.finishedSpans().last(where: {
+      $0.name == "gen_ai.inference"
+        && $0.attributes["terra.fm.tool_call_count"]?.description == "1"
+    })
+  )
+
+  let toolCall = try #require(span.events.first { $0.name == "tool_call" })
+  let toolResult = try #require(span.events.first { $0.name == "tool_result" })
+
+  // Under .drop, the tool content attribute must be absent entirely (no length, no hash).
+  #expect(toolCall.attributes["terra.fm.tool.arguments"] == nil)
+  #expect(toolResult.attributes["terra.fm.tool.result"] == nil)
+
+  // Aggregate counters still surface — only content is dropped.
   #expect(span.attributes["terra.fm.tools.called"]?.description == "search")
   #expect(span.attributes["terra.fm.tool_call_count"]?.description == "1")
 }
@@ -243,8 +373,15 @@ func foundationModelsProviderMetadata() async throws {
 @Suite("TerraFoundationModels stub", .serialized)
 struct TerraFoundationModelsStubTests {
 @Test("TerraFoundationModels stub compiles without FoundationModels framework")
-func foundationModelsNotAvailable() {
-  #expect(true)
+func foundationModelsNotAvailable() async {
+  let session = TerraTracedSession(modelIdentifier: "apple/stub-model")
+  let alias = Terra.TracedSession(modelIdentifier: "apple/alias-model")
+  #expect(session.modelIdentifier == "apple/stub-model")
+  #expect(alias.modelIdentifier == "apple/alias-model")
+
+  await #expect(throws: TerraFoundationModelsUnavailableError.self) {
+    _ = try await session.respond(to: "hello")
+  }
 }
 }
 

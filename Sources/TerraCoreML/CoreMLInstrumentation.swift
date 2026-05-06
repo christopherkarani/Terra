@@ -15,6 +15,14 @@ import TerraSystemProfiler
 /// Spans created by swizzling include `terra.auto_instrumented = true` and will be skipped if
 /// a Terra span is already active (dedup guard).
 public enum CoreMLInstrumentation {
+  /// Span attribute key recording the number of batch entries processed by a
+  /// Core ML batch prediction. Documented in `Docs/telemetry-schema.json`.
+  ///
+  /// - Note: Lives next to the swizzle code rather than `TerraCoreML.Keys`
+  ///   because the batch swizzle is the only Terra emitter of this key — no
+  ///   manual API surfaces it.
+  package static let predictionBatchCountAttributeKey = "terra.coreml.prediction.batch_count"
+
   private enum InternalConstants {
     static let synchronousCaptureTimeoutNanoseconds: UInt64 = 2_000_000_000
   }
@@ -95,6 +103,15 @@ public enum CoreMLInstrumentation {
     swizzleAsyncModelLoad()
     swizzlePrediction()
     swizzlePredictionWithOptions()
+    // P0-6: batch prediction swizzles. Apple does not expose a separate
+    // selector for the iOS 17+/macOS 14+ async `predictions(from:options:)
+    // async throws` overload — that surface bridges through the synchronous
+    // `predictionsFromBatch:options:error:` selector, so swizzling the two
+    // synchronous selectors below covers async batch callers too. (See
+    // CoreML.framework/Headers/MLModel.h: there is no
+    // `predictionsFromBatch:options:completionHandler:` selector.)
+    swizzleBatchPrediction()
+    swizzleBatchPredictionWithOptions()
   }
 
   // MARK: - Swizzling
@@ -218,7 +235,10 @@ public enum CoreMLInstrumentation {
       let durationMS = CoreMLInstrumentation.elapsedMs(since: startedAt)
       span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMS))
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
-        span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
+        span.setAttributes(TerraMetalProfiler.estimatedCoreMLRouteAttributes(
+          predictionDurationMS: durationMS,
+          route: "gpu"
+        ))
       }
       CoreMLInstrumentation.attachAssociatedDiagnostics(to: span, model: model)
       let endMemory = TerraSystemProfiler.isInstalled
@@ -279,7 +299,10 @@ public enum CoreMLInstrumentation {
       let durationMS = CoreMLInstrumentation.elapsedMs(since: startedAt)
       span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMS))
       if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
-        span.setAttributes(TerraMetalProfiler.attributes(computeTimeMS: durationMS))
+        span.setAttributes(TerraMetalProfiler.estimatedCoreMLRouteAttributes(
+          predictionDurationMS: durationMS,
+          route: "gpu"
+        ))
       }
       CoreMLInstrumentation.attachAssociatedDiagnostics(to: span, model: model)
       let endMemory = TerraSystemProfiler.isInstalled
@@ -297,6 +320,181 @@ public enum CoreMLInstrumentation {
     }
 
     method_setImplementation(original, imp_implementationWithBlock(block))
+  }
+
+  // MARK: - Batch prediction swizzles (P0-6)
+
+  private static func swizzleBatchPrediction() {
+    // ObjC selector: -[MLModel predictionsFromBatch:error:]
+    let selector = NSSelectorFromString("predictionsFromBatch:error:")
+    guard
+      let cls = NSClassFromString("MLModel"),
+      let original = class_getInstanceMethod(cls, selector)
+    else { return }
+
+    typealias Impl = @convention(c) (AnyObject, Selector, MLBatchProvider, NSErrorPointer) -> MLBatchProvider?
+
+    let originalIMP = method_getImplementation(original)
+    let originalFn = unsafeBitCast(originalIMP, to: Impl.self)
+
+    let block: @convention(block) (AnyObject, MLBatchProvider, NSErrorPointer) -> MLBatchProvider? = {
+      (self_, batch, errorPtr) in
+      guard let model = self_ as? MLModel else {
+        return originalFn(self_, selector, batch, errorPtr)
+      }
+
+      let modelName = CoreMLInstrumentation.resolveModelName(model)
+
+      guard CoreMLInstrumentation.shouldTrace(modelName) else {
+        return originalFn(self_, selector, batch, errorPtr)
+      }
+
+      // See note in `swizzlePrediction`: dedup is context-based, not atomic by design.
+      guard OpenTelemetry.instance.contextProvider.activeSpan == nil else {
+        return originalFn(self_, selector, batch, errorPtr)
+      }
+
+      let span = CoreMLInstrumentation.buildSpan(modelName: modelName, model: model)
+      let batchCount = batch.count
+      span.setAttribute(
+        key: CoreMLInstrumentation.predictionBatchCountAttributeKey,
+        value: .int(batchCount)
+      )
+
+      let startedAt = ContinuousClock.now
+      let startMemory = TerraSystemProfiler.isInstalled
+        ? TerraSystemProfiler.captureMemorySnapshot()
+        : nil
+      OpenTelemetry.instance.contextProvider.setActiveSpan(span)
+
+      let result = originalFn(self_, selector, batch, errorPtr)
+      let durationMS = CoreMLInstrumentation.elapsedMs(since: startedAt)
+      span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMS))
+      if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
+        span.setAttributes(TerraMetalProfiler.estimatedCoreMLRouteAttributes(
+          predictionDurationMS: durationMS,
+          route: "gpu"
+        ))
+      }
+      CoreMLInstrumentation.attachAssociatedDiagnostics(to: span, model: model)
+      let endMemory = TerraSystemProfiler.isInstalled
+        ? TerraSystemProfiler.captureMemorySnapshot()
+        : nil
+      span.setAttributes(TerraSystemProfiler.memoryDeltaAttributes(start: startMemory, end: endMemory))
+
+      if result == nil, let errorPtr = errorPtr, let error = errorPtr.pointee {
+        span.status = .error(description: error.localizedDescription)
+      }
+
+      span.end()
+      OpenTelemetry.instance.contextProvider.removeContextForSpan(span)
+      return result
+    }
+
+    method_setImplementation(original, imp_implementationWithBlock(block))
+  }
+
+  private static func swizzleBatchPredictionWithOptions() {
+    // ObjC selector: -[MLModel predictionsFromBatch:options:error:]
+    let selector = NSSelectorFromString("predictionsFromBatch:options:error:")
+    guard
+      let cls = NSClassFromString("MLModel"),
+      let original = class_getInstanceMethod(cls, selector)
+    else { return }
+
+    typealias Impl = @convention(c) (AnyObject, Selector, MLBatchProvider, MLPredictionOptions, NSErrorPointer) -> MLBatchProvider?
+
+    let originalIMP = method_getImplementation(original)
+    let originalFn = unsafeBitCast(originalIMP, to: Impl.self)
+
+    let block: @convention(block) (AnyObject, MLBatchProvider, MLPredictionOptions, NSErrorPointer) -> MLBatchProvider? = {
+      (self_, batch, options, errorPtr) in
+      guard let model = self_ as? MLModel else {
+        return originalFn(self_, selector, batch, options, errorPtr)
+      }
+
+      let modelName = CoreMLInstrumentation.resolveModelName(model)
+
+      guard CoreMLInstrumentation.shouldTrace(modelName) else {
+        return originalFn(self_, selector, batch, options, errorPtr)
+      }
+
+      // See note in `swizzlePrediction`: dedup is context-based, not atomic by design.
+      guard OpenTelemetry.instance.contextProvider.activeSpan == nil else {
+        return originalFn(self_, selector, batch, options, errorPtr)
+      }
+
+      let span = CoreMLInstrumentation.buildSpan(modelName: modelName, model: model)
+      let batchCount = batch.count
+      span.setAttribute(
+        key: CoreMLInstrumentation.predictionBatchCountAttributeKey,
+        value: .int(batchCount)
+      )
+
+      let startedAt = ContinuousClock.now
+      let startMemory = TerraSystemProfiler.isInstalled
+        ? TerraSystemProfiler.captureMemorySnapshot()
+        : nil
+      OpenTelemetry.instance.contextProvider.setActiveSpan(span)
+
+      let result = originalFn(self_, selector, batch, options, errorPtr)
+      let durationMS = CoreMLInstrumentation.elapsedMs(since: startedAt)
+      span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMS))
+      if TerraMetalProfiler.isInstalled, CoreMLInstrumentation.modelLikelyUsesGPU(model) {
+        span.setAttributes(TerraMetalProfiler.estimatedCoreMLRouteAttributes(
+          predictionDurationMS: durationMS,
+          route: "gpu"
+        ))
+      }
+      CoreMLInstrumentation.attachAssociatedDiagnostics(to: span, model: model)
+      let endMemory = TerraSystemProfiler.isInstalled
+        ? TerraSystemProfiler.captureMemorySnapshot()
+        : nil
+      span.setAttributes(TerraSystemProfiler.memoryDeltaAttributes(start: startMemory, end: endMemory))
+
+      if result == nil, let errorPtr = errorPtr, let error = errorPtr.pointee {
+        span.status = .error(description: error.localizedDescription)
+      }
+
+      span.end()
+      OpenTelemetry.instance.contextProvider.removeContextForSpan(span)
+      return result
+    }
+
+    method_setImplementation(original, imp_implementationWithBlock(block))
+  }
+
+  // MARK: - Testing hooks (P0-6)
+
+  /// Drives the same span-emission code path the batch-prediction swizzle uses,
+  /// without requiring a real `MLModel` or `.mlmodelc` test fixture. Used by
+  /// `TerraCoreMLTests` to verify span name, attribute set, and the new
+  /// `terra.coreml.prediction.batch_count` attribute under success and error
+  /// paths.
+  package static func _emitBatchPredictionSpanForTesting(
+    modelName: String,
+    computeUnitsLabel: String,
+    durationMs: Double,
+    batchCount: Int,
+    error: NSError?
+  ) {
+    let span = OpenTelemetry.instance.tracerProvider
+      .get(instrumentationName: Terra.instrumentationName)
+      .spanBuilder(spanName: "gen_ai.inference")
+      .setSpanKind(spanKind: .internal)
+      .setAttribute(key: Terra.Keys.GenAI.operationName, value: "inference")
+      .setAttribute(key: Terra.Keys.GenAI.requestModel, value: modelName)
+      .setAttribute(key: Terra.Keys.GenAI.providerName, value: "on_device")
+      .setAttribute(key: Terra.Keys.Terra.runtime, value: "coreml")
+      .setAttribute(key: Terra.Keys.Terra.autoInstrumented, value: true)
+      .setAttribute(key: TerraCoreML.Keys.computeUnits, value: computeUnitsLabel)
+      .setAttribute(key: predictionBatchCountAttributeKey, value: .int(batchCount))
+      .startSpan()
+    span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMs))
+    if let error {
+      span.status = .error(description: "\(error.domain)(code:\(error.code))")
+    }
+    span.end()
   }
 
   // MARK: - Span construction
@@ -399,7 +597,7 @@ public enum CoreMLInstrumentation {
     let semaphore = DispatchSemaphore(value: 0)
     let summaryBox = LockedSummaryBox()
 
-    Task.detached(priority: .utility) {
+    let task = Task.detached(priority: .utility) {
       let captured = await computePlanSummaryCapture(url, configuration)
       summaryBox.store(captured)
       semaphore.signal()
@@ -409,6 +607,7 @@ public enum CoreMLInstrumentation {
       timeout: .now() + .nanoseconds(Int(synchronousCaptureTimeoutNanoseconds))
     )
     guard waitResult == .success, let summary = summaryBox.load() else {
+      task.cancel()
       return makeTimedOutSummary()
     }
     return summary

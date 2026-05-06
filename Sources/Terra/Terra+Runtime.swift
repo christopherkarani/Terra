@@ -100,7 +100,6 @@ final class Runtime {
 
   func markStopped() {
     lock.lock()
-    defer { lock.unlock() }
     lifecycleStateValue = .stopped
     privacyValue = .default
     tracerProviderOverride = nil
@@ -108,6 +107,8 @@ final class Runtime {
     let key = Runtime.loadOrCreateAnonymizationKey()
     anonymizationKey = key
     anonymizationKeyID = Runtime.deriveAnonymizationKeyID(from: key)
+    lock.unlock()
+    metrics.configure(meterProvider: nil)
   }
 
   private init() {
@@ -310,6 +311,12 @@ final class TerraMetrics {
   private let lock = NSLock()
   private var inferenceCount: LongCounter?
   private var inferenceDurationMs: DoubleHistogram?
+
+  var isConfigured: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return inferenceCount != nil || inferenceDurationMs != nil
+  }
 
   func configure(meterProvider: (any MeterProvider)?) {
     lock.lock()

@@ -1,6 +1,10 @@
 #if canImport(CoreML)
 import CoreML
+import Foundation
+import ObjectiveC
 import OpenTelemetryApi
+import OpenTelemetrySdk
+import InMemoryExporter
 import Testing
 @testable import TerraCoreML
 @testable import TerraCore
@@ -9,6 +13,22 @@ import Testing
 
 @Suite("TerraCoreML top-level", .serialized)
 struct TerraCoreMLTopLevelTests {
+private final class CancellationProbe: @unchecked Sendable {
+  private let lock = NSLock()
+  private var cancelled = false
+
+  func markCancelled() {
+    lock.lock()
+    cancelled = true
+    lock.unlock()
+  }
+
+  var wasCancelled: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return cancelled
+  }
+}
 
 @Test("Keys.runtime has expected value")
 func keysRuntimeValue() {
@@ -129,6 +149,148 @@ func synchronousComputePlanCaptureTimesOut() {
   #expect(summary.captureStatus == .loadFailed)
   #expect(summary.errorType == "terra.coreml.compute_plan.capture_timeout")
   #expect(summary.probeSource == "mlcomputeplan")
+}
+
+@Test("synchronous compute-plan capture cancels underlying task on timeout")
+func synchronousComputePlanCaptureCancelsUnderlyingTaskOnTimeout() async throws {
+  let previousCapture = CoreMLInstrumentation.computePlanSummaryCapture
+  let previousTimeout = CoreMLInstrumentation.synchronousCaptureTimeoutNanoseconds
+  defer {
+    CoreMLInstrumentation.computePlanSummaryCapture = previousCapture
+    CoreMLInstrumentation.synchronousCaptureTimeoutNanoseconds = previousTimeout
+  }
+
+  let probe = CancellationProbe()
+  CoreMLInstrumentation.computePlanSummaryCapture = { _, _ in
+    while !Task.isCancelled {
+      try? await Task.sleep(nanoseconds: 5_000_000)
+    }
+    probe.markCancelled()
+    return TerraCoreMLComputePlanSummary(
+      captureStatus: .captured,
+      modelStructure: "program",
+      estimatedPrimaryDevice: "ane",
+      supportedDevices: ["ane"],
+      nodeCount: 1,
+      captureDurationMS: 200,
+      operationEstimates: [],
+      errorType: nil,
+      probeStatus: TerraCoreMLComputePlanSummary.CaptureStatus.captured.rawValue,
+      probeSource: "test"
+    )
+  }
+  CoreMLInstrumentation.synchronousCaptureTimeoutNanoseconds = 5_000_000
+
+  _ = CoreMLInstrumentation.captureSummarySynchronously(
+    contentsOf: URL(fileURLWithPath: "/tmp/model.mlmodelc"),
+    configuration: MLModelConfiguration()
+  )
+  for _ in 0..<100 where !probe.wasCancelled {
+    try await Task.sleep(nanoseconds: 10_000_000)
+  }
+
+  #expect(probe.wasCancelled)
+}
+
+// MARK: - P0-6 Batch prediction swizzling
+
+@Test("Batch prediction selectors are recognized on MLModel class")
+func batchPredictionSelectorsExistOnMLModelClass() {
+  // Sanity: the swizzle code looks up these selectors via class_getInstanceMethod.
+  // If Apple ever renames or removes them we want the test suite to fail fast.
+  let cls: AnyClass = NSClassFromString("MLModel")!
+  let batchNoOptions = NSSelectorFromString("predictionsFromBatch:error:")
+  let batchWithOptions = NSSelectorFromString("predictionsFromBatch:options:error:")
+
+  #expect(class_getInstanceMethod(cls, batchNoOptions) != nil)
+  #expect(class_getInstanceMethod(cls, batchWithOptions) != nil)
+}
+
+@Test("Batch prediction key has expected schema name")
+func batchPredictionKeyHasExpectedName() {
+  // Locks in the wire format documented in Docs/telemetry-schema.json.
+  #expect(CoreMLInstrumentation.predictionBatchCountAttributeKey == "terra.coreml.prediction.batch_count")
+}
+
+@Test("testBatchPredictionsSelectorIsSwizzledAndSpanIsEmitted")
+func testBatchPredictionsSelectorIsSwizzledAndSpanIsEmitted() {
+  let previousTracer = OpenTelemetry.instance.tracerProvider
+  let exporter = InMemoryExporter()
+  let provider = TracerProviderSdk()
+  provider.addSpanProcessor(SimpleSpanProcessor(spanExporter: exporter))
+  OpenTelemetry.registerTracerProvider(tracerProvider: provider)
+  defer {
+    OpenTelemetry.registerTracerProvider(tracerProvider: previousTracer)
+  }
+
+  // Drive the same code path the swizzle uses for batch predictions, without
+  // requiring a real `.mlmodelc` fixture in the repository. This exercises
+  // span name, attribute set, and the new batch_count attribute.
+  CoreMLInstrumentation._emitBatchPredictionSpanForTesting(
+    modelName: "test_batch_model",
+    computeUnitsLabel: "all",
+    durationMs: 12.5,
+    batchCount: 8,
+    error: nil
+  )
+
+  provider.forceFlush()
+  let spans = exporter.getFinishedSpanItems()
+  let span = try! #require(
+    spans.first(where: {
+      $0.name == "gen_ai.inference"
+        && $0.attributes[Terra.Keys.GenAI.requestModel]?.description == "test_batch_model"
+    })
+  )
+  #expect(span.attributes[CoreMLInstrumentation.predictionBatchCountAttributeKey]?.description == "8")
+  #expect(span.attributes[Terra.Keys.Terra.runtime]?.description == "coreml")
+  #expect(span.attributes[Terra.Keys.Terra.autoInstrumented]?.description == "true")
+  #expect(span.attributes[TerraCoreML.Keys.computeUnits]?.description == "all")
+  #expect(span.attributes["terra.coreml.prediction.duration_ms"]?.description == "12.5")
+  #expect(span.status == .ok || span.status == .unset)
+}
+
+@Test("testBatchPredictionsErrorPathRecordsSpanWithStatus")
+func testBatchPredictionsErrorPathRecordsSpanWithStatus() {
+  let previousTracer = OpenTelemetry.instance.tracerProvider
+  let exporter = InMemoryExporter()
+  let provider = TracerProviderSdk()
+  provider.addSpanProcessor(SimpleSpanProcessor(spanExporter: exporter))
+  OpenTelemetry.registerTracerProvider(tracerProvider: provider)
+  defer {
+    OpenTelemetry.registerTracerProvider(tracerProvider: previousTracer)
+  }
+
+  let nsError = NSError(
+    domain: "com.example.batch",
+    code: 99,
+    userInfo: [NSLocalizedDescriptionKey: "batch failed at item 3"]
+  )
+
+  CoreMLInstrumentation._emitBatchPredictionSpanForTesting(
+    modelName: "errored_batch_model",
+    computeUnitsLabel: "cpu_only",
+    durationMs: 5.0,
+    batchCount: 16,
+    error: nsError
+  )
+
+  provider.forceFlush()
+  let spans = exporter.getFinishedSpanItems()
+  let span = try! #require(
+    spans.first(where: {
+      $0.name == "gen_ai.inference"
+        && $0.attributes[Terra.Keys.GenAI.requestModel]?.description == "errored_batch_model"
+    })
+  )
+  #expect(span.attributes[CoreMLInstrumentation.predictionBatchCountAttributeKey]?.description == "16")
+  if case let .error(description) = span.status {
+    #expect(description == "com.example.batch(code:99)")
+    #expect(description.contains("/Users") == false)
+    #expect(description.contains("item 3") == false)
+  } else {
+    Issue.record("Expected error status, got \(span.status)")
+  }
 }
 }
 #endif

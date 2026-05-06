@@ -18,6 +18,15 @@ import TerraSystemProfiler
 ///
 /// - SeeAlso: ``PowerMetricsCollector``
 public struct PowerSummary: Sendable, TelemetryAttributeConvertible {
+  /// Collection outcome for the powermetrics session that produced this summary.
+  public enum Status: String, Sendable, Codable, Hashable {
+    case notStarted = "not_started"
+    case completed
+    case noSamples = "no_samples"
+    case permissionDenied = "permission_denied"
+    case failed
+  }
+
   /// Average CPU power consumption in watts, computed over all samples.
   public let averageCpuWatts: Double
 
@@ -32,6 +41,12 @@ public struct PowerSummary: Sendable, TelemetryAttributeConvertible {
 
   /// Number of samples aggregated in this summary.
   public let sampleCount: Int
+
+  /// Outcome of the collection session.
+  public let status: Status
+
+  /// Human-readable diagnostic from powermetrics stderr or process failure.
+  public let diagnosticMessage: String?
 
   /// Converts the power summary into OpenTelemetry span attributes.
   ///
@@ -48,6 +63,7 @@ public struct PowerSummary: Sendable, TelemetryAttributeConvertible {
       "terra.power.ane_watts": .double(averageAneWatts),
       "terra.power.package_watts": .double(averagePackageWatts),
       "terra.power.sample_count": .int(sampleCount),
+      "terra.power.collection_status": .string(status.rawValue),
     ]
   }
 
@@ -56,14 +72,21 @@ public struct PowerSummary: Sendable, TelemetryAttributeConvertible {
   /// - Parameter samples: Array of ``PowerSample`` instances to aggregate.
   /// - Returns: ``PowerSummary`` with averaged values; if `samples` is empty,
   ///   returns a summary with all averages set to `0` and `sampleCount` of `0`.
-  public static func from(_ samples: [PowerSample]) -> PowerSummary {
+  public static func from(
+    _ samples: [PowerSample],
+    status explicitStatus: Status? = nil,
+    diagnosticMessage: String? = nil
+  ) -> PowerSummary {
+    let status = explicitStatus ?? (samples.isEmpty ? .noSamples : .completed)
     guard !samples.isEmpty else {
       return PowerSummary(
         averageCpuWatts: 0,
         averageGpuWatts: 0,
         averageAneWatts: 0,
         averagePackageWatts: 0,
-        sampleCount: 0
+        sampleCount: 0,
+        status: status,
+        diagnosticMessage: diagnosticMessage
       )
     }
 
@@ -80,7 +103,9 @@ public struct PowerSummary: Sendable, TelemetryAttributeConvertible {
       averageGpuWatts: gpu / count,
       averageAneWatts: ane / count,
       averagePackageWatts: pkg / count,
-      sampleCount: samples.count
+      sampleCount: samples.count,
+      status: status,
+      diagnosticMessage: diagnosticMessage
     )
   }
 }

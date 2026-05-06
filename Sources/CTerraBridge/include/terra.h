@@ -63,6 +63,7 @@ typedef enum {
     TERRA_REDACT_DROP        = 0,
     TERRA_REDACT_LENGTH_ONLY = 1,
     TERRA_REDACT_HMAC_SHA256 = 2,
+    TERRA_REDACT_SHA256      = 3,
 } terra_redaction_strategy_t;
 
 /* ── Status code ───────────────────────────────────────────────────────── */

@@ -187,6 +187,19 @@ struct TerraMLXTests {
     #expect(span.attributes[Terra.Keys.GenAI.usageOutputTokens]?.description == "128")
   }
 
+  @Test("recordTokenCount updates Terra-managed current span without OpenTelemetry active context")
+  func recordTokenCountUpdatesTerraManagedCurrentSpan() async throws {
+    let h = SpanTestHarness()
+    defer { h.tearDown() }
+
+    let span = Terra.startSpan(name: "manual-mlx")
+    TerraMLX.recordTokenCount(42)
+    span.end()
+
+    let finished = try #require(h.finishedSpans().first(where: { $0.name == "manual-mlx" }))
+    #expect(finished.attributes[Terra.Keys.GenAI.usageOutputTokens]?.description == "42")
+  }
+
   // MARK: - TerraMLX.recordFirstToken Tests
 
   @Test("recordFirstToken adds first_token event on active span")
@@ -202,6 +215,38 @@ struct TerraMLXTests {
     let span = try #require(h.finishedSpans().first)
     let hasFirstTokenEvent = span.events.contains { $0.name == "terra.first_token" }
     #expect(hasFirstTokenEvent)
+  }
+
+  @Test("recordFirstToken updates Terra-managed current span without OpenTelemetry active context")
+  func recordFirstTokenUpdatesTerraManagedCurrentSpan() async throws {
+    let h = SpanTestHarness()
+    defer { h.tearDown() }
+
+    let span = Terra.startSpan(name: "manual-mlx")
+    TerraMLX.recordFirstToken()
+    span.end()
+
+    let finished = try #require(h.finishedSpans().first(where: { $0.name == "manual-mlx" }))
+    #expect(finished.events.contains { $0.name == "terra.first_token" })
+  }
+
+  @Test("tracedStream finalizes streaming metrics")
+  func tracedStreamFinalizesStreamingMetrics() async throws {
+    let h = SpanTestHarness()
+    defer { h.tearDown() }
+
+    _ = try await TerraMLX.tracedStream(model: "mlx-stream-test") { trace in
+      trace.firstToken()
+      trace.chunk(tokens: 2)
+      trace.outputTokens(2)
+      return "done"
+    }
+
+    let span = try #require(h.finishedSpans().first)
+    #expect(span.name == Terra.SpanNames.inference)
+    #expect(span.attributes[Terra.Keys.Terra.runtime]?.description == "mlx")
+    #expect(span.attributes[Terra.Keys.Terra.streamOutputTokens]?.description == "2")
+    #expect(span.events.contains { $0.name == "terra.first_token" })
   }
 
   // MARK: - Terra.MLX alias

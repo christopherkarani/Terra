@@ -546,15 +546,16 @@ extension Terra {
           if !attributes.values.isEmpty {
             scope.setAttributes(attributes.openTelemetryAttributes)
           }
-          let result = try await body(AgentTrace(scope: scope))
-          let snapshot = context.snapshot()
-          scope.setAttributes([
-            "terra.agent.tools_used": .string(snapshot.toolsUsed.sorted().joined(separator: ",")),
-            "terra.agent.models_used": .string(snapshot.modelsUsed.sorted().joined(separator: ",")),
-            "terra.agent.inference_count": .int(snapshot.inferenceCount),
-            "terra.agent.tool_call_count": .int(snapshot.toolCallCount),
-          ])
-          return result
+          defer {
+            let snapshot = context.snapshot()
+            scope.setAttributes([
+              "terra.agent.tools_used": .string(snapshot.toolsUsed.sorted().joined(separator: ",")),
+              "terra.agent.models_used": .string(snapshot.modelsUsed.sorted().joined(separator: ",")),
+              "terra.agent.inference_count": .int(snapshot.inferenceCount),
+              "terra.agent.tool_call_count": .int(snapshot.toolCallCount),
+            ])
+          }
+          return try await body(AgentTrace(scope: scope))
         }
       }
     }

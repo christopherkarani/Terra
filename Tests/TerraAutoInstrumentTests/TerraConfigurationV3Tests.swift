@@ -34,6 +34,29 @@ import Testing
     #expect(config.features.contains(.sessions))
   }
 
+  @Test func automaticProfilingPresetsDoNotClaimExternalProfilerCollection() {
+    #expect(Terra.Configuration.Profiling.standard == [.memory, .thermal])
+    #expect(Terra.Configuration.Profiling.extended == [.memory, .thermal, .metal])
+    #expect(Terra.Configuration.Profiling.all == [.memory, .thermal, .metal, .espresso])
+    #expect(!Terra.Configuration.Profiling.extended.contains(.power))
+    #expect(!Terra.Configuration.Profiling.extended.contains(.ane))
+    #expect(!Terra.Configuration.Profiling.all.contains(.power))
+    #expect(!Terra.Configuration.Profiling.all.contains(.ane))
+  }
+
+  @Test func explicitPowerAndANERequestsReportManualInstallRequirement() {
+    var config = Terra.Configuration(preset: .quickstart)
+    config.profiling = [.memory, .power, .ane]
+
+    let diagnostics = Terra.profilingDiagnostics(for: config)
+
+    #expect(diagnostics.memory.status == .installed)
+    #expect(diagnostics.power.status == .requiresOptInTarget)
+    #expect(diagnostics.ane.status == .requiresOptInTarget)
+    #expect(diagnostics.power.message?.contains("TerraPowerProfiler") == true)
+    #expect(diagnostics.ane.message?.contains("TerraANEProfiler") == true)
+  }
+
   @Test func destinationLocalDashboard() {
     let config = Terra.Configuration(preset: .quickstart)
     if case .localDashboard = config.destination { } else { Issue.record("Expected .localDashboard") }

@@ -15,13 +15,25 @@ final class TerraSessionSpanProcessor: SpanProcessor {
   }
 
   func onStart(parentContext: SpanContext?, span: ReadableSpan) {
-    guard Terra.SpanNames.isTerraSpanName(span.name) else { return }
+    // Filter broadened (P1-7): match by tracer scope first so user-named
+    // workflow spans (e.g. `Terra.workflow(name: "request-workflow")`) still
+    // receive session metadata, then fall back to the canonical span-name
+    // allowlist for spans produced by upstream Terra integrations that may
+    // borrow a foreign tracer.
+    guard Self.isTerraOwnedSpan(span) else { return }
 
     let session = sessionManager.getSession()
     span.setAttribute(key: SemanticConventions.Session.id.rawValue, value: session.id)
     if let previousId = session.previousId {
       span.setAttribute(key: SemanticConventions.Session.previousId.rawValue, value: previousId)
     }
+  }
+
+  private static func isTerraOwnedSpan(_ span: ReadableSpan) -> Bool {
+    if span.instrumentationScopeInfo.name == Terra.instrumentationName {
+      return true
+    }
+    return Terra.SpanNames.isTerraSpanName(span.name)
   }
 
   func onEnd(span: ReadableSpan) {}

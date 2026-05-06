@@ -17,17 +17,24 @@ public final class OTLPHTTPServer {
     public var maxBodyBytes: Int
     public var headerReadTimeout: TimeInterval
     public var bodyReadTimeout: TimeInterval
+    /// Absolute wall-clock deadline for receiving the entire request body once
+    /// the head has been parsed. Defends against drip-feed denial-of-service
+    /// where a peer never lets the per-chunk timer fire (P0-5). Values <= 0
+    /// disable the deadline.
+    public var absoluteBodyDeadline: TimeInterval
 
     public init(
       maxHeaderBytes: Int = 32 * 1024,
       maxBodyBytes: Int = 10 * 1024 * 1024,
       headerReadTimeout: TimeInterval = 5,
-      bodyReadTimeout: TimeInterval = 15
+      bodyReadTimeout: TimeInterval = 15,
+      absoluteBodyDeadline: TimeInterval = 30
     ) {
       self.maxHeaderBytes = maxHeaderBytes
       self.maxBodyBytes = maxBodyBytes
       self.headerReadTimeout = headerReadTimeout
       self.bodyReadTimeout = bodyReadTimeout
+      self.absoluteBodyDeadline = absoluteBodyDeadline
     }
   }
 
@@ -46,6 +53,7 @@ public final class OTLPHTTPServer {
   private var listener: NWListener?
   private var activeConnections: [ObjectIdentifier: NWConnection] = [:]
   private var readTimeoutTimers: [ObjectIdentifier: DispatchSourceTimer] = [:]
+  private var absoluteBodyTimers: [ObjectIdentifier: DispatchSourceTimer] = [:]
   private var decodeTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
   public var port: UInt16 {
@@ -142,7 +150,7 @@ public final class OTLPHTTPServer {
 
   private func receiveHeaders(on connection: NWConnection, connectionID: ObjectIdentifier, buffer: Data) {
     if buffer.count > limits.maxHeaderBytes {
-      sendError(on: connection, status: .headerTooLarge, message: "Request headers too large")
+      sendError(on: connection, status: .headerTooLarge, message: HTTPStatus.headerTooLarge.reason)
       return
     }
 
@@ -150,15 +158,15 @@ public final class OTLPHTTPServer {
       for: connectionID,
       connection: connection,
       timeout: limits.headerReadTimeout,
-      message: "Timed out while reading request headers"
+      message: HTTPStatus.requestTimeout.reason
     )
 
     let remaining = max(1, limits.maxHeaderBytes - buffer.count)
     connection.receive(minimumIncompleteLength: 1, maximumLength: remaining) { [weak self] data, _, isComplete, error in
       guard let self else { return }
 
-      if let error {
-        self.sendError(on: connection, status: .internalServerError, message: "Network error: \(error.localizedDescription)")
+      if error != nil {
+        self.sendError(on: connection, status: .internalServerError, message: HTTPStatus.internalServerError.reason)
         return
       }
 
@@ -180,7 +188,7 @@ public final class OTLPHTTPServer {
       }
 
       if isComplete {
-        self.sendError(on: connection, status: .badRequest, message: "Incomplete HTTP request")
+        self.sendError(on: connection, status: .badRequest, message: HTTPStatus.badRequest.reason)
         return
       }
 
@@ -200,7 +208,7 @@ public final class OTLPHTTPServer {
       sendError(on: connection, status: error.status, message: error.message, extraHeaders: error.extraHeaders)
     case .success(let head):
       if head.contentLength > limits.maxBodyBytes {
-        sendError(on: connection, status: .payloadTooLarge, message: "Payload exceeds max body size")
+        sendError(on: connection, status: .payloadTooLarge, message: HTTPStatus.payloadTooLarge.reason)
         return
       }
       if initialBody.count >= head.contentLength {
@@ -208,6 +216,7 @@ public final class OTLPHTTPServer {
         handleBody(body, head: head, on: connection, connectionID: connectionID)
         return
       }
+      armAbsoluteBodyDeadline(for: connectionID, connection: connection)
       receiveBody(
         on: connection,
         connectionID: connectionID,
@@ -235,7 +244,7 @@ public final class OTLPHTTPServer {
       for: connectionID,
       connection: connection,
       timeout: limits.bodyReadTimeout,
-      message: "Timed out while reading request body"
+      message: HTTPStatus.requestTimeout.reason
     )
 
     let remaining = expectedLength - buffer.count
@@ -243,8 +252,8 @@ public final class OTLPHTTPServer {
     connection.receive(minimumIncompleteLength: 1, maximumLength: maxRead) { [weak self] data, _, isComplete, error in
       guard let self else { return }
 
-      if let error {
-        self.sendError(on: connection, status: .internalServerError, message: "Network error: \(error.localizedDescription)")
+      if error != nil {
+        self.sendError(on: connection, status: .internalServerError, message: HTTPStatus.internalServerError.reason)
         return
       }
 
@@ -258,7 +267,7 @@ public final class OTLPHTTPServer {
       }
 
       if isComplete {
-        self.sendError(on: connection, status: .badRequest, message: "Unexpected end of request body")
+        self.sendError(on: connection, status: .badRequest, message: HTTPStatus.badRequest.reason)
         return
       }
 
@@ -279,6 +288,7 @@ public final class OTLPHTTPServer {
     connectionID: ObjectIdentifier
   ) {
     cancelReadTimeout(for: connectionID)
+    cancelAbsoluteBodyDeadline(for: connectionID)
     let task = Task { [weak self] in
       guard let self else { return }
       do {
@@ -299,7 +309,8 @@ public final class OTLPHTTPServer {
       } catch {
         self.queue.async {
           guard self.activeConnections[connectionID] != nil else { return }
-          self.sendError(on: connection, status: .badRequest, message: "Invalid OTLP payload")
+          // Generic message — do not surface decoder internals to the client.
+          self.sendError(on: connection, status: .badRequest, message: HTTPStatus.badRequest.reason)
         }
       }
     }
@@ -363,6 +374,7 @@ public final class OTLPHTTPServer {
 
   private func cleanupConnection(id: ObjectIdentifier) {
     cancelReadTimeout(for: id)
+    cancelAbsoluteBodyDeadline(for: id)
     decodeTasks[id]?.cancel()
     decodeTasks.removeValue(forKey: id)
     if let connection = activeConnections.removeValue(forKey: id) {
@@ -372,6 +384,13 @@ public final class OTLPHTTPServer {
 
   private func cancelReadTimeout(for id: ObjectIdentifier) {
     if let timer = readTimeoutTimers.removeValue(forKey: id) {
+      timer.setEventHandler {}
+      timer.cancel()
+    }
+  }
+
+  private func cancelAbsoluteBodyDeadline(for id: ObjectIdentifier) {
+    if let timer = absoluteBodyTimers.removeValue(forKey: id) {
       timer.setEventHandler {}
       timer.cancel()
     }
@@ -396,6 +415,27 @@ public final class OTLPHTTPServer {
     timer.resume()
   }
 
+  /// Arms a single absolute deadline for the entire request body. Even if the
+  /// per-chunk read timer keeps resetting because bytes trickle in, this timer
+  /// guarantees the connection is closed once the absolute budget is spent.
+  /// Scheduled on `queue`, so it does not block other connections.
+  private func armAbsoluteBodyDeadline(
+    for id: ObjectIdentifier,
+    connection: NWConnection
+  ) {
+    guard limits.absoluteBodyDeadline > 0 else { return }
+    cancelAbsoluteBodyDeadline(for: id)
+    let timer = DispatchSource.makeTimerSource(queue: queue)
+    timer.schedule(deadline: .now() + limits.absoluteBodyDeadline)
+    timer.setEventHandler { [weak self] in
+      guard let self else { return }
+      guard self.activeConnections[id] != nil else { return }
+      self.sendError(on: connection, status: .requestTimeout, message: HTTPStatus.requestTimeout.reason)
+    }
+    absoluteBodyTimers[id] = timer
+    timer.resume()
+  }
+
   private func otlpSuccessBody() -> Data {
     #if canImport(OpenTelemetryProtocolExporterCommon) || canImport(OpenTelemetryProtocolExporterGrpc) || canImport(OpenTelemetryProtocolExporterHttp) || canImport(OpenTelemetryProtocolExporterHTTP)
     let response = Opentelemetry_Proto_Collector_Trace_V1_ExportTraceServiceResponse()
@@ -412,18 +452,37 @@ public final class OTLPHTTPServer {
 
   private func parseRequestHead(_ data: Data) -> Result<HTTPRequestHead, HTTPParseError> {
     guard let headerString = String(data: data, encoding: .utf8) else {
-      return .failure(.badRequest("Invalid header encoding"))
+      return .failure(.badRequest)
     }
 
-    let normalized = headerString.replacingOccurrences(of: "\r\n", with: "\n")
-    let lines = normalized.split(separator: "\n", omittingEmptySubsequences: true)
+    // RFC 7230 §3.5: header lines MUST end in CRLF. Reject any bare LF or
+    // bare CR that is not part of CRLF — these are classic smuggling
+    // primitives because intermediaries normalize them inconsistently.
+    let bytes = Array(headerString.utf8)
+    var index = 0
+    while index < bytes.count {
+      let byte = bytes[index]
+      if byte == 0x0D { // CR
+        guard index + 1 < bytes.count, bytes[index + 1] == 0x0A else {
+          return .failure(.badRequest)
+        }
+        index += 2
+        continue
+      }
+      if byte == 0x0A { // bare LF
+        return .failure(.badRequest)
+      }
+      index += 1
+    }
+
+    let lines = headerString.components(separatedBy: "\r\n").filter { !$0.isEmpty }
     guard let requestLine = lines.first else {
-      return .failure(.badRequest("Missing request line"))
+      return .failure(.badRequest)
     }
 
     let requestParts = requestLine.split(whereSeparator: { $0 == " " || $0 == "\t" })
     guard requestParts.count == 3 else {
-      return .failure(.badRequest("Malformed request line: \(requestLine)"))
+      return .failure(.badRequest)
     }
 
     let method = String(requestParts[0])
@@ -431,7 +490,7 @@ public final class OTLPHTTPServer {
     let version = String(requestParts[2])
 
     guard version == "HTTP/1.1" || version == "HTTP/1.0" else {
-      return .failure(.badRequest("Unsupported HTTP version"))
+      return .failure(.badRequest)
     }
 
     guard method.uppercased() == "POST" else {
@@ -446,17 +505,30 @@ public final class OTLPHTTPServer {
 
     for line in lines.dropFirst() {
       guard let separatorIndex = line.firstIndex(of: ":") else {
-        return .failure(.badRequest("Malformed header line"))
+        return .failure(.badRequest)
       }
       let name = line[..<separatorIndex].trimmingCharacters(in: .whitespacesAndNewlines)
       let value = line[line.index(after: separatorIndex)...]
         .trimmingCharacters(in: .whitespacesAndNewlines)
       if name.isEmpty {
-        return .failure(.badRequest("Malformed header name"))
+        return .failure(.badRequest)
       }
       let key = name.lowercased()
       if let existing = headers[key] {
-        headers[key] = existing + ", " + value
+        if key == "content-length" {
+          // RFC 7230 §3.3.2: identical duplicate Content-Length values are
+          // allowed. Mismatched values are smuggling-grade ambiguity.
+          guard existing.trimmingCharacters(in: .whitespacesAndNewlines) == value else {
+            return .failure(.badRequest)
+          }
+        } else if Self.commaListAllowedHeaders.contains(key) {
+          headers[key] = existing + ", " + value
+        } else {
+          // Default-deny duplicate non-list headers (Host, Authorization,
+          // Content-Type, etc.). Concatenating these is a known smuggling
+          // primitive; reject instead.
+          return .failure(.badRequest)
+        }
       } else {
         headers[key] = value
       }
@@ -466,8 +538,26 @@ public final class OTLPHTTPServer {
       return .failure(.expectationFailed)
     }
 
-    if let transferEncoding = headers["transfer-encoding"], transferEncoding.lowercased().contains("chunked") {
-      return .failure(.lengthRequired)
+    let hasTransferEncoding = headers["transfer-encoding"] != nil
+    let hasContentLength = headers["content-length"] != nil
+
+    if hasTransferEncoding {
+      // RFC 7230 §3.3.3: a request with both Transfer-Encoding and
+      // Content-Length is the canonical request-smuggling primitive — close
+      // the connection immediately.
+      if hasContentLength {
+        return .failure(.badRequest)
+      }
+      // Any non-identity Transfer-Encoding is unsupported here. Per RFC 7230
+      // §3.3.1, the correct status is 501 Not Implemented (not 411).
+      let value = headers["transfer-encoding"]?.lowercased() ?? ""
+      let isIdentityOnly = value
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .allSatisfy { $0 == "identity" }
+      if !isIdentityOnly {
+        return .failure(.notImplemented)
+      }
     }
 
     guard let contentLengthValue = headers["content-length"] else {
@@ -475,13 +565,42 @@ public final class OTLPHTTPServer {
     }
 
     let trimmedLength = contentLengthValue.trimmingCharacters(in: .whitespacesAndNewlines)
-    let lengthToken = trimmedLength.split(separator: ",", maxSplits: 1).first.map { String($0) } ?? trimmedLength
-    guard let contentLength = Int(lengthToken.trimmingCharacters(in: .whitespacesAndNewlines)), contentLength >= 0 else {
-      return .failure(.badRequest("Invalid Content-Length"))
+    guard !trimmedLength.contains(","),
+          let contentLength = Int(trimmedLength),
+          contentLength >= 0 else {
+      return .failure(.badRequest)
     }
 
     return .success(HTTPRequestHead(headers: headers, contentLength: contentLength))
   }
+
+  /// Headers whose canonical form permits comma-separated list values (RFC
+  /// 7230 §3.2.2). Duplicates of these headers may safely be concatenated.
+  /// Every other header is treated as singleton; duplicates are rejected to
+  /// prevent smuggling via inconsistent intermediary behavior.
+  private static let commaListAllowedHeaders: Set<String> = [
+    "accept",
+    "accept-charset",
+    "accept-encoding",
+    "accept-language",
+    "allow",
+    "cache-control",
+    "connection",
+    "content-encoding",
+    "content-language",
+    "expect",
+    "forwarded",
+    "if-match",
+    "if-none-match",
+    "pragma",
+    "te",
+    "trailer",
+    "upgrade",
+    "vary",
+    "via",
+    "warning",
+    "x-forwarded-for",
+  ]
 }
 
 private struct HTTPRequestHead {
@@ -503,14 +622,18 @@ private struct HTTPStatus {
   static let expectationFailed = HTTPStatus(code: 417, reason: "Expectation Failed")
   static let headerTooLarge = HTTPStatus(code: 431, reason: "Request Header Fields Too Large")
   static let internalServerError = HTTPStatus(code: 500, reason: "Internal Server Error")
+  static let notImplemented = HTTPStatus(code: 501, reason: "Not Implemented")
 }
 
+/// HTTP head parse failures. Each case maps to a generic, non-echoing status
+/// reason — error response bodies must never leak request data (P0-5).
 private enum HTTPParseError: Error {
-  case badRequest(String)
+  case badRequest
   case notFound
   case methodNotAllowed
   case lengthRequired
   case expectationFailed
+  case notImplemented
 
   var status: HTTPStatus {
     switch self {
@@ -524,23 +647,12 @@ private enum HTTPParseError: Error {
       return .lengthRequired
     case .expectationFailed:
       return .expectationFailed
+    case .notImplemented:
+      return .notImplemented
     }
   }
 
-  var message: String {
-    switch self {
-    case .badRequest(let message):
-      return message
-    case .notFound:
-      return "Unsupported path"
-    case .methodNotAllowed:
-      return "Unsupported method"
-    case .lengthRequired:
-      return "Content-Length required"
-    case .expectationFailed:
-      return "Expect: 100-continue not supported"
-    }
-  }
+  var message: String { status.reason }
 
   var extraHeaders: [String: String] {
     switch self {

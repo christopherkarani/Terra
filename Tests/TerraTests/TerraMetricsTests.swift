@@ -33,11 +33,23 @@ final class TerraMetricsTests: XCTestCase {
     let metrics = TerraMetrics()
 
     metrics.configure(meterProvider: meterProvider)
+    XCTAssertTrue(metrics.isConfigured)
     metrics.recordInference(durationMs: 12.5)
 
     // Passing nil should clear instruments without crashing.
     metrics.configure(meterProvider: nil)
+    XCTAssertFalse(metrics.isConfigured)
     metrics.recordInference(durationMs: 10.0)
+  }
+
+  func testRuntimeMarkStoppedClearsConfiguredMetrics() {
+    let meterProvider = MeterProviderSdk.builder().build()
+    Runtime.shared.metrics.configure(meterProvider: meterProvider)
+    XCTAssertTrue(Runtime.shared.metrics.isConfigured)
+
+    Runtime.shared.markStopped()
+
+    XCTAssertFalse(Runtime.shared.metrics.isConfigured)
   }
 
   func testRecordInference_doesNotCrashWithoutConfiguration() {

@@ -67,24 +67,27 @@ public struct Trace {
     var end = ordered[0].endTime
     var roots: [SpanData] = []
     var hasError = false
+    let spanIDs = Set(ordered.map(\.spanId))
     for span in ordered {
       if span.startTime < start { start = span.startTime }
       if span.endTime > end { end = span.endTime }
-      if span.parentSpanId == nil { roots.append(span) }
+      if span.parentSpanId == nil || !spanIDs.contains(span.parentSpanId!) {
+        roots.append(span)
+      }
       if span.status.isError { hasError = true }
     }
 
-    self.id = fileName
+    id = fileName
     self.fileTimestamp = fileTimestamp
     self.traceID = traceID
     self.spans = spans
-    self.orderedSpans = ordered
-    self.rootSpans = roots
-    self.startTime = start
-    self.endTime = end
-    self.duration = end.timeIntervalSince(start)
+    orderedSpans = ordered
+    rootSpans = roots
+    startTime = start
+    endTime = end
+    duration = end.timeIntervalSince(start)
     self.hasError = hasError
-    self.displayName = roots.first?.name ?? ordered.first?.name ?? traceID.hexString
+    displayName = roots.first?.name ?? ordered.first?.name ?? traceID.hexString
   }
 }
 

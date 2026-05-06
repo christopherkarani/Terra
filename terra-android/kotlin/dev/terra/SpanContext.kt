@@ -51,7 +51,7 @@ data class SpanContext(
     fun spanIdHex(): String =
         "%016x".format(spanId)
 
-    /** True if this context has a valid (non-zero) trace ID. */
+    /** True if this context has a non-zero trace ID and non-zero span ID. */
     val isValid: Boolean
-        get() = traceIdHi != 0L || traceIdLo != 0L
+        get() = (traceIdHi != 0L || traceIdLo != 0L) && spanId != 0L
 }

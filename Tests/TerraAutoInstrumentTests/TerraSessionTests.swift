@@ -435,7 +435,10 @@ struct TerraSessionTests {
     let span = try #require(harness.finishedSpans().first(where: { $0.name == Terra.SpanNames.modelLoad }))
     #expect(span.attributes[TerraCoreML.Keys.computePlanCaptureStatus]?.description == "captured")
     #expect(span.attributes[TerraCoreML.Keys.computePlanEstimatedPrimaryDevice]?.description == "ane")
-    #expect(span.attributes[TerraCoreML.Keys.computePlanEstimatedOperations]?.description.contains("program.main.op0.conv") == true)
+    let operationTelemetry = try #require(span.attributes[TerraCoreML.Keys.computePlanEstimatedOperations]?.description)
+    #expect(operationTelemetry.contains("sha256:"))
+    #expect(operationTelemetry.contains("program_operation"))
+    #expect(!operationTelemetry.contains("program.main.op0.conv"))
   }
 
   @Test("TerraSession model load duration includes compute-plan capture time")
@@ -597,8 +600,12 @@ struct TerraSessionTests {
     }))
     #expect(span.attributes[Terra.Keys.Terra.thermalState]?.description == "critical")
     #expect(span.attributes["terra.coreml.error_type"]?.description == String(reflecting: InferenceFailure.self))
-    #expect(span.attributes["terra.coreml.input_summary"]?.description.contains("\"tokens\"") == true)
-    #expect(span.attributes["terra.coreml.input_summary"]?.description.contains("[1,16]") == true)
+    let inputSummary = span.attributes["terra.coreml.input_summary"]?.description ?? ""
+    #expect(!inputSummary.contains("\"tokens\""))
+    #expect(!inputSummary.contains("\"mask\""))
+    #expect(inputSummary.contains("sha256:"))
+    #expect(inputSummary.contains("[1,16]"))
+    #expect(inputSummary.count <= 2048)
   }
 
   @Test("TerraSession spans persist and reload as a complete session trace")

@@ -8,6 +8,7 @@
 
 #include <jni.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include "terra.h"
 

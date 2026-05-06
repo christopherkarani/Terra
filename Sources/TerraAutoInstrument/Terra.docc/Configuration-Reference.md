@@ -420,12 +420,13 @@ Requires `TerraMetalProfiler` integration.
 ### Power Profiling (macOS)
 
 ```swift
-config.profiling = .extended  // Includes power
-// or
 config.profiling = [.power]
 ```
 
-Requires `TerraPowerProfiler` integration.
+The Terra umbrella records the `.power` flag for downstream wrappers, but it
+does not install `TerraPowerProfiler` directly. Import `TerraPowerProfiler` and
+start the collector explicitly when a diagnostic build needs `powermetrics`
+data.
 
 ### Espresso Capture (macOS)
 
@@ -443,7 +444,9 @@ Captures GPU compute metrics via Espresso framework.
 config.profiling = [.memory, .thermal, .ane]
 ```
 
-Requires `TerraANEProfiler` integration (non-App-Store).
+The Terra umbrella records the `.ane` flag for downstream wrappers, but it does
+not install `TerraANEProfiler` directly. Import `TerraANEProfiler` and run it
+explicitly in non-App-Store diagnostic builds.
 
 Captures:
 

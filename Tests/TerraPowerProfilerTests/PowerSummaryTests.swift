@@ -19,6 +19,7 @@ struct PowerSummaryTests {
     #expect(summary.averageAneWatts == 1.0)
     #expect(summary.averagePackageWatts == 6.0)
     #expect(summary.sampleCount == 2)
+    #expect(summary.status == .completed)
   }
 
   @Test("empty samples produce zero summary")
@@ -26,6 +27,7 @@ struct PowerSummaryTests {
     let summary = PowerSummary.from([])
     #expect(summary.averageCpuWatts == 0)
     #expect(summary.sampleCount == 0)
+    #expect(summary.status == .noSamples)
   }
 
   @Test("telemetry attributes output")
@@ -41,5 +43,6 @@ struct PowerSummaryTests {
     #expect(attrs["terra.power.ane_watts"] == AttributeValue.double(0.5))
     #expect(attrs["terra.power.package_watts"] == AttributeValue.double(3.5))
     #expect(attrs["terra.power.sample_count"] == AttributeValue.int(1))
+    #expect(attrs["terra.power.collection_status"] == AttributeValue.string("completed"))
   }
 }

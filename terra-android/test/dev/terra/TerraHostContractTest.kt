@@ -36,6 +36,7 @@ class TerraHostContractTest {
         assertEquals(ContentPolicy.OPT_IN, config.contentPolicy)
         assertEquals(RedactionStrategy.HMAC_SHA256, config.redactionStrategy)
         assertEquals("host-secret", config.hmacKey)
+        assertEquals(3, RedactionStrategy.SHA256.ordinal)
     }
 
     @Test
@@ -91,5 +92,8 @@ class TerraHostContractTest {
     @Test
     fun `zero span context is invalid`() {
         assertFalse(SpanContext(0L, 0L, 0L).isValid)
+        assertFalse(SpanContext(0L, 1L, 0L).isValid)
+        assertFalse(SpanContext(0L, 0L, 1L).isValid)
+        assertTrue(SpanContext(0L, 1L, 1L).isValid)
     }
 }

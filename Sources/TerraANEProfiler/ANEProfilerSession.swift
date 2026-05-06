@@ -14,20 +14,50 @@ import CTerraANEBridge
 /// let attrs = metrics.telemetryAttributes
 /// ```
 public enum ANEProfilerSession {
+  public enum StartResult: String, Sendable, Equatable {
+    case startedCollecting = "started_collecting"
+    case alreadyActive = "already_active"
+    case probeOnly = "probe_only"
+    case unavailable
+  }
+
   private static let lock = NSLock()
-  private static var isActive = false
+  private static var active = false
+
+  /// Returns true only while a metric-collection session is active.
+  public static var isActive: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return active
+  }
 
   /// Starts a new ANE profiling session.
   ///
   /// Resets ANE metrics and begins tracking. Nested calls are ignored while a session
   /// is active.
   public static func start() {
+    _ = startWithStatus()
+  }
+
+  /// Starts a new ANE profiling session and reports whether metrics can be collected.
+  @discardableResult
+  public static func startWithStatus() -> StartResult {
     lock.lock()
     defer { lock.unlock() }
 
-    guard !isActive else { return }
+    guard !active else { return .alreadyActive }
+    switch ANEHardwareProfiler.mode {
+    case .collecting:
+      break
+    case .probeOnly:
+      return .probeOnly
+    case .unavailable:
+      return .unavailable
+    }
+
     terra_ane_reset_metrics()
-    isActive = true
+    active = true
+    return .startedCollecting
   }
 
   /// Stops the current profiling session and returns captured metrics.
@@ -38,11 +68,27 @@ public enum ANEProfilerSession {
     lock.lock()
     defer { lock.unlock() }
 
-    guard isActive else {
+    guard active else {
       return ANEHardwareMetrics(from: terra_ane_get_metrics())
     }
 
-    isActive = false
+    active = false
     return ANEHardwareMetrics(from: terra_ane_get_metrics())
+  }
+
+  /// Stops the current profiling session if active, otherwise no-op.
+  ///
+  /// Designed for shutdown paths that need to drain ANE state without caring
+  /// whether a caller previously started collection. Safe to call repeatedly.
+  public static func stopIfActive() {
+    lock.lock()
+    let wasActive = active
+    if wasActive { active = false }
+    lock.unlock()
+
+    if wasActive {
+      // Drop the metrics — the caller did not request them.
+      _ = terra_ane_get_metrics()
+    }
   }
 }

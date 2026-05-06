@@ -117,6 +117,8 @@ pub enum RedactionStrategy {
     LengthOnly,
     /// Hash content with HMAC-SHA256.
     HmacSha256,
+    /// Hash content with legacy SHA256 without an HMAC key.
+    Sha256,
 }
 
 impl RedactionStrategy {
@@ -125,6 +127,7 @@ impl RedactionStrategy {
             Self::Drop => ffi::TERRA_REDACT_DROP,
             Self::LengthOnly => ffi::TERRA_REDACT_LENGTH_ONLY,
             Self::HmacSha256 => ffi::TERRA_REDACT_HMAC_SHA256,
+            Self::Sha256 => ffi::TERRA_REDACT_SHA256,
         }
     }
 }
