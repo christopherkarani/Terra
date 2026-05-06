@@ -3,11 +3,11 @@
 ## Terra Production Push - 2026-05-06
 
 - [x] Refresh repo, GitHub PR, CI, release, and memory state.
-- [ ] Preserve task notes and get `swiftformat` clean enough to rebase.
-- [ ] Rebase `swiftformat` onto current `origin/main`.
-- [ ] Resolve conflicts while preserving `main` Zig lifecycle parity and PR #25 audit/remediation fixes.
-- [ ] Run focused post-conflict Swift/Zig lifecycle verification.
-- [ ] Run local release validation gates.
+- [x] Preserve task notes and get `swiftformat` clean enough to rebase.
+- [x] Rebase `swiftformat` onto current `origin/main`.
+- [x] Resolve conflicts while preserving `main` Zig lifecycle parity and PR #25 audit/remediation fixes.
+- [x] Run focused post-conflict Swift/Zig lifecycle verification.
+- [x] Run local release validation gates.
 - [ ] Push branch and get PR #25 conflict-free, non-draft, and green in CI.
 - [ ] Merge PR #25 to `main`.
 - [ ] Revalidate `main`.
@@ -20,6 +20,15 @@
 2. Rebase onto `origin/main` and resolve only the known overlap in package metadata, OpenTelemetry/Zig lifecycle handling, lifecycle tests, Zig backend tests, and task notes.
 3. Treat green local full validation, green GitHub CI, mergeability, post-merge validation, and published release pages as required gates before calling production done.
 4. Use `1.0.0` as the production release version because the branch contains breaking API/configuration changes and native package metadata already reports `1.0.0`.
+
+### Review
+
+- Rebased `swiftformat` onto current `origin/main`; conflict resolution preserved `main` Zig lifecycle parity and PR #25 validation/runtime fixes.
+- Focused post-conflict lifecycle verification passed: `swift test --disable-automatic-resolution --filter 'ZigBackendIntegrationTests|TerraLifecycleAPITests|TerraLifecycleErrorMappingTests'`.
+- Fixed local full-suite blockers found during validation: invalid span guidance no longer aborts the process with debug assertions, and the TerraSession compute-plan test now asserts privacy-preserving hashed operation telemetry.
+- `git diff --check` passed.
+- `JAVA_HOME=/opt/homebrew/opt/openjdk@21 PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH Scripts/validate.sh --quick` passed.
+- `JAVA_HOME=/opt/homebrew/opt/openjdk@21 ANDROID_HOME=/opt/homebrew/share/android-commandlinetools PATH=/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/share/android-commandlinetools/platform-tools:$PATH TERRA_SWIFTPM_TIMEOUT_SECONDS=600 Scripts/validate.sh` passed, including SwiftPM, 404 Swift tests, Android native libraries, Gradle unit tests, and release AAR assembly.
 
 ## Production Readiness Check - 2026-05-06
 

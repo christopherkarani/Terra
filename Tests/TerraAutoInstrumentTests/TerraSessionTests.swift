@@ -435,7 +435,10 @@ struct TerraSessionTests {
     let span = try #require(harness.finishedSpans().first(where: { $0.name == Terra.SpanNames.modelLoad }))
     #expect(span.attributes[TerraCoreML.Keys.computePlanCaptureStatus]?.description == "captured")
     #expect(span.attributes[TerraCoreML.Keys.computePlanEstimatedPrimaryDevice]?.description == "ane")
-    #expect(span.attributes[TerraCoreML.Keys.computePlanEstimatedOperations]?.description.contains("program.main.op0.conv") == true)
+    let operationTelemetry = try #require(span.attributes[TerraCoreML.Keys.computePlanEstimatedOperations]?.description)
+    #expect(operationTelemetry.contains("sha256:"))
+    #expect(operationTelemetry.contains("program_operation"))
+    #expect(!operationTelemetry.contains("program.main.op0.conv"))
   }
 
   @Test("TerraSession model load duration includes compute-plan capture time")

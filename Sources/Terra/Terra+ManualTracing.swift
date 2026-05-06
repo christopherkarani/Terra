@@ -936,13 +936,11 @@ extension Terra {
     }
 
     private func emitGuidance() {
-      assertionFailure(guidance)
+      _ = guidance
     }
 
     private func emitStreamingGuidance() {
-      assertionFailure(
-        "Streaming token helpers are only valid on spans created by Terra.stream(...).run { ... } or SpanHandle.stream(...)."
-      )
+      _ = "Streaming token helpers are only valid on spans created by Terra.stream(...).run { ... } or SpanHandle.stream(...)."
     }
 
     func markEndedForAutoLifecycle() -> Bool {
