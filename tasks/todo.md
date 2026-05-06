@@ -29,6 +29,8 @@
 - `git diff --check` passed.
 - `JAVA_HOME=/opt/homebrew/opt/openjdk@21 PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH Scripts/validate.sh --quick` passed.
 - `JAVA_HOME=/opt/homebrew/opt/openjdk@21 ANDROID_HOME=/opt/homebrew/share/android-commandlinetools PATH=/opt/homebrew/opt/openjdk@21/bin:/opt/homebrew/share/android-commandlinetools/platform-tools:$PATH TERRA_SWIFTPM_TIMEOUT_SECONDS=600 Scripts/validate.sh` passed, including SwiftPM, 404 Swift tests, Android native libraries, Gradle unit tests, and release AAR assembly.
+- Pushed rebased branch `swiftformat` to PR #25; GitHub reports the PR as mergeable and conflict-free.
+- Remote CI is blocked outside the repo: all four jobs failed before starting with the annotation "The job was not started because your account is locked due to a billing issue." PR #25 remains draft, unmerged, and unreleased until GitHub Actions can run green.
 
 ## Production Readiness Check - 2026-05-06
 
