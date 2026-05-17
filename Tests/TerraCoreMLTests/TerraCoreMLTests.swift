@@ -104,6 +104,20 @@ func sanitizeModelNameBoundsLength() {
   #expect(sanitized?.count == 256)
 }
 
+@Test("sanitized CoreML errors omit localized descriptions")
+func sanitizedErrorDescriptionOmitsLocalizedDescription() {
+  let error = NSError(
+    domain: "com.example.coreml",
+    code: 7,
+    userInfo: [NSLocalizedDescriptionKey: "secret prompt and /Users/local/model path"]
+  )
+
+  let description = CoreMLInstrumentation.sanitizedErrorDescription(error)
+  #expect(description == "com.example.coreml(code:7)")
+  #expect(!description.contains("secret"))
+  #expect(!description.contains("/Users"))
+}
+
 @Test("CoreML attributes never include prompt or response content keys")
 func coreMLAttributesExcludeContent() {
   let attrs = TerraCoreML.attributes(computeUnits: .all)

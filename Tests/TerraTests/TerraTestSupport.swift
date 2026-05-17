@@ -46,6 +46,7 @@ private final class ClosureOnlyContextManager: ContextManager {
 
 final class TerraTestSupport {
   private let previousTracerProvider: any TracerProvider
+  private var didTearDown = false
 
   let tracerProvider: TracerProviderSdk
   let spanExporter: InMemoryExporter
@@ -67,6 +68,12 @@ final class TerraTestSupport {
   }
 
   deinit {
+    tearDown()
+  }
+
+  func tearDown() {
+    guard !didTearDown else { return }
+    didTearDown = true
     OpenTelemetry.registerTracerProvider(tracerProvider: previousTracerProvider)
     Terra.unlockTestingIsolation()
   }

@@ -12,6 +12,7 @@ struct TerraLlamaWrapperTests {
   @Test("TerraLlama traced sets provider metadata")
   func providerMetadata() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = await TerraLlama.traced(model: "llama-3.2") { trace in

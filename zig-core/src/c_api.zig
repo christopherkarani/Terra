@@ -9,6 +9,9 @@ const span_mod = @import("span.zig");
 const models = @import("models.zig");
 const privacy = @import("privacy.zig");
 const transport_mod = @import("transport.zig");
+const mqtt_transport = @import("mqtt_transport.zig");
+const coap_transport = @import("coap_transport.zig");
+const uart_transport = @import("uart_transport.zig");
 const scheduler_mod = @import("scheduler.zig");
 const storage_mod = @import("storage.zig");
 const clock = @import("clock.zig");
@@ -33,6 +36,9 @@ const CStorageWriteFn = ?*const fn ([*]const u8, u32, ?*anyopaque) callconv(.c) 
 const CStorageReadFn = ?*const fn ([*]u8, u32, ?*anyopaque) callconv(.c) u32;
 const CStorageDiscardOldestFn = ?*const fn (u32, ?*anyopaque) callconv(.c) void;
 const CStorageAvailableBytesFn = ?*const fn (?*anyopaque) callconv(.c) u64;
+const CMqttPublishFn = ?*const fn ([*:0]const u8, [*]const u8, u32, u8, ?*anyopaque) callconv(.c) c_int;
+const CUdpSendFn = ?*const fn ([*]const u8, u32, ?*anyopaque) callconv(.c) c_int;
+const CUartWriteFn = ?*const fn ([*]const u8, u32, ?*anyopaque) callconv(.c) c_int;
 
 const CTerraTransportVTable = extern struct {
     send_fn: CSendFn = null,
@@ -53,6 +59,27 @@ const CTerraStorageVTable = extern struct {
     discard_oldest_fn: CStorageDiscardOldestFn = null,
     available_bytes_fn: CStorageAvailableBytesFn = null,
     context: ?*anyopaque = null,
+};
+
+const CTerraMqttTransportConfig = extern struct {
+    broker_host: ?[*:0]const u8 = null,
+    broker_port: u16 = 1883,
+    topic: ?[*:0]const u8 = null,
+    client_id: ?[*:0]const u8 = null,
+    qos: u8 = mqtt_transport.DEFAULT_QOS,
+    publish_fn: CMqttPublishFn = null,
+    publish_ctx: ?*anyopaque = null,
+};
+
+const CTerraCoapTransportConfig = extern struct {
+    udp_send_fn: CUdpSendFn = null,
+    udp_ctx: ?*anyopaque = null,
+    next_message_id: u16 = 1,
+};
+
+const CTerraUartTransportConfig = extern struct {
+    uart_write_fn: CUartWriteFn = null,
+    uart_ctx: ?*anyopaque = null,
 };
 
 const CTerraConfig = extern struct {
@@ -149,6 +176,84 @@ fn toTransportVTable(vtable: CTerraTransportVTable) transport_mod.TransportVTabl
         .flush_fn = vtable.flush_fn orelse transport_mod.noop_transport.flush_fn,
         .shutdown_fn = vtable.shutdown_fn orelse transport_mod.noop_transport.shutdown_fn,
         .context = vtable.context,
+    };
+}
+
+fn noopCTransportVTable() CTerraTransportVTable {
+    return .{
+        .send_fn = transport_mod.noop_transport.send_fn,
+        .flush_fn = transport_mod.noop_transport.flush_fn,
+        .shutdown_fn = transport_mod.noop_transport.shutdown_fn,
+        .context = null,
+    };
+}
+
+fn mqttCSend(data: [*]const u8, len: u32, ctx: ?*anyopaque) callconv(.c) c_int {
+    const cfg: *CTerraMqttTransportConfig = @ptrCast(@alignCast(ctx orelse return -1));
+    const publish = cfg.publish_fn orelse return -1;
+    if (cfg.qos > mqtt_transport.QOS_EXACTLY_ONCE) return -1;
+
+    const topic = cfg.topic orelse mqtt_transport.DEFAULT_TOPIC.ptr;
+    if (topic[0] == 0) return -1;
+
+    return publish(topic, data, len, cfg.qos, cfg.publish_ctx);
+}
+
+fn mqttCFlush(_: ?*anyopaque) callconv(.c) void {}
+fn mqttCShutdown(_: ?*anyopaque) callconv(.c) void {}
+
+fn coapCSend(data: [*]const u8, len: u32, ctx: ?*anyopaque) callconv(.c) c_int {
+    const cfg: *CTerraCoapTransportConfig = @ptrCast(@alignCast(ctx orelse return -1));
+    const udp_send = cfg.udp_send_fn orelse return -1;
+
+    const message_id = @atomicRmw(u16, &cfg.next_message_id, .Add, 1, .seq_cst);
+    var frame_buf: [2048]u8 = undefined;
+    const frame = coap_transport.buildTraceFrame(data[0..len], message_id, &frame_buf) orelse return -1;
+    return udp_send(frame.ptr, @intCast(frame.len), cfg.udp_ctx);
+}
+
+fn coapCFlush(_: ?*anyopaque) callconv(.c) void {}
+fn coapCShutdown(_: ?*anyopaque) callconv(.c) void {}
+
+fn uartCSend(data: [*]const u8, len: u32, ctx: ?*anyopaque) callconv(.c) c_int {
+    const cfg: *CTerraUartTransportConfig = @ptrCast(@alignCast(ctx orelse return -1));
+    const write = cfg.uart_write_fn orelse return -1;
+
+    var frame_buf: [uart_transport.FRAME_OVERHEAD + uart_transport.MAX_PAYLOAD_SIZE]u8 = undefined;
+    const frame = uart_transport.buildFrame(data[0..len], &frame_buf) orelse return -1;
+    return write(frame.ptr, @intCast(frame.len), cfg.uart_ctx);
+}
+
+fn uartCFlush(_: ?*anyopaque) callconv(.c) void {}
+fn uartCShutdown(_: ?*anyopaque) callconv(.c) void {}
+
+pub export fn terra_transport_mqtt(config: ?*CTerraMqttTransportConfig) callconv(.c) CTerraTransportVTable {
+    const cfg = config orelse return noopCTransportVTable();
+    return .{
+        .send_fn = mqttCSend,
+        .flush_fn = mqttCFlush,
+        .shutdown_fn = mqttCShutdown,
+        .context = cfg,
+    };
+}
+
+pub export fn terra_transport_coap(config: ?*CTerraCoapTransportConfig) callconv(.c) CTerraTransportVTable {
+    const cfg = config orelse return noopCTransportVTable();
+    return .{
+        .send_fn = coapCSend,
+        .flush_fn = coapCFlush,
+        .shutdown_fn = coapCShutdown,
+        .context = cfg,
+    };
+}
+
+pub export fn terra_transport_uart(config: ?*CTerraUartTransportConfig) callconv(.c) CTerraTransportVTable {
+    const cfg = config orelse return noopCTransportVTable();
+    return .{
+        .send_fn = uartCSend,
+        .flush_fn = uartCFlush,
+        .shutdown_fn = uartCShutdown,
+        .context = cfg,
     };
 }
 
@@ -571,11 +676,12 @@ fn findStringAttr(rec: *const SpanRecord, key: []const u8) ?[]const u8 {
 }
 
 test "C API span strings survive temporary caller buffers" {
-    const inst = terra_init(null).?;
+    const raw = CTerraConfig{ .content_policy = 1 };
+    const inst = terra_init(&raw).?;
     defer _ = terra_shutdown(inst);
 
     var model = cStringBuffer(64, "borrowed-model");
-    const span = terra_begin_inference_span_ctx(inst, null, &model, false).?;
+    const span = terra_begin_inference_span_ctx(inst, null, &model, true).?;
     poisonCStringBuffer(model[0..], "borrowed-model".len);
 
     var key = cStringBuffer(64, "dynamic.key");
@@ -668,6 +774,97 @@ test "terra_set_service_info" {
 
     const result = terra_set_service_info(inst, "my-app", "2.0.0");
     try std.testing.expectEqual(TERRA_OK, result);
+}
+
+test "C API MQTT transport helper forwards payload through caller callback" {
+    const TestCtx = struct {
+        var called: bool = false;
+        var qos: u8 = 0;
+        var len: u32 = 0;
+        var topic: ?[]const u8 = null;
+    };
+    TestCtx.called = false;
+    TestCtx.qos = 0;
+    TestCtx.len = 0;
+    TestCtx.topic = null;
+
+    var cfg = CTerraMqttTransportConfig{
+        .topic = "/terra/robot/traces",
+        .qos = 1,
+        .publish_fn = struct {
+            fn publish(topic: [*:0]const u8, _: [*]const u8, len: u32, qos: u8, _: ?*anyopaque) callconv(.c) c_int {
+                TestCtx.called = true;
+                TestCtx.qos = qos;
+                TestCtx.len = len;
+                TestCtx.topic = std.mem.sliceTo(topic, 0);
+                return 0;
+            }
+        }.publish,
+    };
+
+    const vt = terra_transport_mqtt(&cfg);
+    try std.testing.expect(vt.send_fn != null);
+    try std.testing.expectEqual(@as(c_int, 0), vt.send_fn.?("otlp".ptr, 4, vt.context));
+    try std.testing.expect(TestCtx.called);
+    try std.testing.expectEqual(@as(u8, 1), TestCtx.qos);
+    try std.testing.expectEqual(@as(u32, 4), TestCtx.len);
+    try std.testing.expectEqualStrings("/terra/robot/traces", TestCtx.topic.?);
+}
+
+test "C API CoAP transport helper frames payload and increments message id" {
+    const TestCtx = struct {
+        var called: bool = false;
+        var first_len: u32 = 0;
+        var first_message_id: u16 = 0;
+    };
+    TestCtx.called = false;
+    TestCtx.first_len = 0;
+    TestCtx.first_message_id = 0;
+
+    var cfg = CTerraCoapTransportConfig{
+        .udp_send_fn = struct {
+            fn send(data: [*]const u8, len: u32, _: ?*anyopaque) callconv(.c) c_int {
+                TestCtx.called = true;
+                TestCtx.first_len = len;
+                const header = coap_transport.Header.fromBytes(data[0..4].*);
+                TestCtx.first_message_id = header.message_id;
+                return 0;
+            }
+        }.send,
+        .next_message_id = 41,
+    };
+
+    const vt = terra_transport_coap(&cfg);
+    try std.testing.expectEqual(@as(c_int, 0), vt.send_fn.?("otlp".ptr, 4, vt.context));
+    try std.testing.expect(TestCtx.called);
+    try std.testing.expect(TestCtx.first_len > 4);
+    try std.testing.expectEqual(@as(u16, 41), TestCtx.first_message_id);
+    try std.testing.expectEqual(@as(u16, 42), cfg.next_message_id);
+}
+
+test "C API UART transport helper frames payload with magic and CRC" {
+    const TestCtx = struct {
+        var called: bool = false;
+        var parsed_len: usize = 0;
+    };
+    TestCtx.called = false;
+    TestCtx.parsed_len = 0;
+
+    var cfg = CTerraUartTransportConfig{
+        .uart_write_fn = struct {
+            fn write(data: [*]const u8, len: u32, _: ?*anyopaque) callconv(.c) c_int {
+                TestCtx.called = true;
+                const parsed = uart_transport.parseFrame(data[0..len]) orelse return -1;
+                TestCtx.parsed_len = parsed.payload.len;
+                return 0;
+            }
+        }.write,
+    };
+
+    const vt = terra_transport_uart(&cfg);
+    try std.testing.expectEqual(@as(c_int, 0), vt.send_fn.?("otlp".ptr, 4, vt.context));
+    try std.testing.expect(TestCtx.called);
+    try std.testing.expectEqual(@as(usize, 4), TestCtx.parsed_len);
 }
 
 test "all 6 span types via C API" {

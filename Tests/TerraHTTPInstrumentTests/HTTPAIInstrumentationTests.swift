@@ -85,6 +85,16 @@ struct HTTPAIInstrumentationTests {
     #expect(HTTPAIInstrumentation.parsedRequestBody(for: request) == nil)
   }
 
+  @Test("Sanitized URL strips query credentials and fragments")
+  func sanitizedURLStripsSecrets() throws {
+    let url = try #require(URL(string: "https://user:pass@generativelanguage.googleapis.com/v1beta/models/gemini:generateContent?key=secret#frag"))
+
+    #expect(
+      HTTPAIInstrumentation.sanitizedURLString(url)
+        == "https://generativelanguage.googleapis.com/v1beta/models/gemini:generateContent"
+    )
+  }
+
   // P0-4: shouldRecordPayload must be wired so URLSessionInstrumentation buffers
   // response bodies. Without this, gen_ai.usage.* are never populated for
   // session-delegate clients.

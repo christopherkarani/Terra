@@ -142,6 +142,7 @@ struct TerraPrivacyAuditTests {
     _ body: @Sendable () async throws -> Void
   ) async throws -> [SpanData] {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(
       .init(
         privacy: privacy,
@@ -159,6 +160,7 @@ struct TerraPrivacyAuditTests {
     _ body: @Sendable () async throws -> Void
   ) async throws -> SpanData {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(
       .init(
         privacy: privacy,

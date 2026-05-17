@@ -5,7 +5,7 @@ import TerraCore
 /// The macro supports explicit metadata arguments and auto-detects common parameter names:
 /// - prompt aliases: `prompt`/`input`/`query`/`text`/`message`/`subject`
 /// - max token aliases: `maxTokens`/`maxOutputTokens`/`max_tokens`
-/// - optional metadata: `temperature`/`provider`/`stream`
+/// - optional metadata: `temperature`/`provider`/`streaming`
 ///
 /// Usage:
 /// ```swift
@@ -27,13 +27,13 @@ public macro Traced(
 ) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
 
 @attached(body)
-public macro Traced(agent: String, id: String? = nil, runtime: Terra.RuntimeID? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+public macro Traced(agent: String, id: String? = nil, provider: Terra.ProviderID? = nil, runtime: Terra.RuntimeID? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
 
 @attached(body)
-public macro Traced(tool: String, callId: String? = nil, type: String? = nil, runtime: Terra.RuntimeID? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+public macro Traced(tool: String, callId: String? = nil, type: String? = nil, provider: Terra.ProviderID? = nil, runtime: Terra.RuntimeID? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
 
 @attached(body)
-public macro Traced(embedding: String, count: Int? = nil, inputCount: Int? = nil, runtime: Terra.RuntimeID? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+public macro Traced(embedding: String, count: Int? = nil, inputCount: Int? = nil, provider: Terra.ProviderID? = nil, runtime: Terra.RuntimeID? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
 
 @attached(body)
-public macro Traced(safety: String, subject: String? = nil, runtime: Terra.RuntimeID? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")
+public macro Traced(safety: String, subject: String? = nil, provider: Terra.ProviderID? = nil, runtime: Terra.RuntimeID? = nil) = #externalMacro(module: "TerraTracedMacroPlugin", type: "TracedMacro")

@@ -58,4 +58,5 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS terra_ros2_bridge_core terra_ros2_node DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 ament_package()

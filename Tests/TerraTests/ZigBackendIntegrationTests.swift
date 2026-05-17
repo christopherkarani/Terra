@@ -56,6 +56,28 @@ struct ZigBackendIntegrationTests {
         #expect(Terra._lifecycleState == .stopped)
     }
 
+    @Test func staleZigTracerAndSpanAreNoOpsAfterShutdown() {
+        Terra.lockTestingIsolation()
+        defer { Terra.unlockTestingIsolation() }
+        Terra.resetOpenTelemetryForTesting()
+        defer { Terra.resetOpenTelemetryForTesting() }
+
+        #expect(Terra.installZigBackend(serviceName: "zig-stale", serviceVersion: nil))
+        let tracer = OpenTelemetry.instance.tracerProvider.get(
+            instrumentationName: "stale-test",
+            instrumentationVersion: nil
+        )
+        let span = tracer.spanBuilder(spanName: Terra.SpanNames.inference).startSpan()
+
+        Terra.shutdownZigBackend()
+
+        span.setAttribute(key: "after.shutdown", value: "ignored")
+        span.end()
+        let postShutdownSpan = tracer.spanBuilder(spanName: Terra.SpanNames.inference).startSpan()
+        #expect(postShutdownSpan.isRecording == false)
+        postShutdownSpan.end()
+    }
+
     @Test func inferenceSpanLifecycle() {
         let inst = terra_init(nil)!
         defer { _ = terra_shutdown(inst) }
@@ -233,7 +255,7 @@ struct ZigBackendIntegrationTests {
         let rawSpan = terra_begin_inference_span_ctx(inst, nil, "serialized-span", false)!
         let span = TerraZigOTelSpan(
             zigSpan: rawSpan,
-            instance: inst,
+            instanceRef: TerraZigInstanceRef(instance: inst),
             name: "serialized-span",
             kind: .client,
             startTime: Date()
@@ -279,11 +301,12 @@ struct ZigBackendIntegrationTests {
     }
 
     @Test func configWithInvalidParamsReturnsNil() {
-        // A zeroed config (no vtables, no endpoint) is rejected as invalid
+        // Explicit invalid numeric bounds are rejected instead of normalized.
         var config = terra_config_t()
-        config.max_spans = 128
+        config.max_spans = 1
+        config.batch_size = 2
         let inst = terra_init(&config)
-        #expect(inst == nil, "terra_init should reject incomplete config")
+        #expect(inst == nil, "terra_init should reject invalid config bounds")
         #expect(terra_last_error() == Int32(TERRA_ERR_INVALID_CONFIG.rawValue))
     }
 

@@ -103,6 +103,48 @@ typedef struct {
     void             *context;
 } terra_transport_vtable_t;
 
+/* ── Robotics / embedded transport adapters ───────────────────────────── */
+
+typedef int (*terra_mqtt_publish_fn)(const char *topic,
+                                     const uint8_t *data,
+                                     uint32_t len,
+                                     uint8_t qos,
+                                     void *ctx);
+typedef int (*terra_udp_send_fn)(const uint8_t *data, uint32_t len, void *ctx);
+typedef int (*terra_uart_write_fn)(const uint8_t *data, uint32_t len, void *ctx);
+
+typedef struct {
+    const char *broker_host;  /* nullable; owned by caller */
+    uint16_t    broker_port;  /* optional metadata; connection is caller-owned */
+    const char *topic;        /* nullable; defaults to /terra/traces */
+    const char *client_id;    /* nullable; owned by caller */
+    uint8_t     qos;          /* 0, 1, or 2 */
+    terra_mqtt_publish_fn publish_fn;
+    void       *publish_ctx;
+} terra_mqtt_transport_config_t;
+
+typedef struct {
+    terra_udp_send_fn udp_send_fn;
+    void             *udp_ctx;
+    uint16_t          next_message_id;
+} terra_coap_transport_config_t;
+
+typedef struct {
+    terra_uart_write_fn uart_write_fn;
+    void               *uart_ctx;
+} terra_uart_transport_config_t;
+
+/**
+ * Build callback-backed transport vtables for robotics/embedded hosts.
+ *
+ * These helpers do not own the config memory or platform client handles. Keep
+ * the config structs alive for at least as long as the Terra instance using the
+ * returned vtable.
+ */
+terra_transport_vtable_t terra_transport_mqtt(terra_mqtt_transport_config_t *config);
+terra_transport_vtable_t terra_transport_coap(terra_coap_transport_config_t *config);
+terra_transport_vtable_t terra_transport_uart(terra_uart_transport_config_t *config);
+
 /* ── Scheduler VTable ──────────────────────────────────────────────────── */
 
 typedef void (*terra_scheduler_callback_fn)(void *ctx);

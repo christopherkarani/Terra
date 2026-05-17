@@ -6,6 +6,7 @@ struct TerraClosureAPITests {
   @Test("Inference closure-only overload returns body result")
   func inferenceClosureOnlyOverload() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let value = await Terra.inference(model: "local/model") {
@@ -20,6 +21,7 @@ struct TerraClosureAPITests {
   @Test("Inference trace overload allows custom telemetry")
   func inferenceTraceOverload() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let value = await Terra.inference(model: "local/model") { trace in
@@ -35,6 +37,7 @@ struct TerraClosureAPITests {
   @Test("Nested closure-first spans preserve parent-child relationships")
   func nestedSpanParentChild() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = await Terra.agent(name: "planner") {
@@ -51,6 +54,7 @@ struct TerraClosureAPITests {
   @Test("CancellationError is rethrown and not marked as span failure")
   func cancellationNotRecordedAsFailure() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     await #expect(throws: CancellationError.self) {
@@ -66,6 +70,7 @@ struct TerraClosureAPITests {
   @Test("stream/tool/embedding/safety closure-first overloads create spans")
   func remainingFactoryOverloads() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = await Terra.stream(model: "local/model") { "ok" }

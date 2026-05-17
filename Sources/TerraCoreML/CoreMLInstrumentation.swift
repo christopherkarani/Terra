@@ -247,7 +247,7 @@ public enum CoreMLInstrumentation {
       span.setAttributes(TerraSystemProfiler.memoryDeltaAttributes(start: startMemory, end: endMemory))
 
       if result == nil, let errorPtr = errorPtr, let error = errorPtr.pointee {
-        span.status = .error(description: error.localizedDescription)
+        span.status = .error(description: CoreMLInstrumentation.sanitizedErrorDescription(error))
       }
 
       span.end()
@@ -311,7 +311,7 @@ public enum CoreMLInstrumentation {
       span.setAttributes(TerraSystemProfiler.memoryDeltaAttributes(start: startMemory, end: endMemory))
 
       if result == nil, let errorPtr = errorPtr, let error = errorPtr.pointee {
-        span.status = .error(description: error.localizedDescription)
+        span.status = .error(description: CoreMLInstrumentation.sanitizedErrorDescription(error))
       }
 
       span.end()
@@ -383,7 +383,7 @@ public enum CoreMLInstrumentation {
       span.setAttributes(TerraSystemProfiler.memoryDeltaAttributes(start: startMemory, end: endMemory))
 
       if result == nil, let errorPtr = errorPtr, let error = errorPtr.pointee {
-        span.status = .error(description: error.localizedDescription)
+        span.status = .error(description: CoreMLInstrumentation.sanitizedErrorDescription(error))
       }
 
       span.end()
@@ -453,7 +453,7 @@ public enum CoreMLInstrumentation {
       span.setAttributes(TerraSystemProfiler.memoryDeltaAttributes(start: startMemory, end: endMemory))
 
       if result == nil, let errorPtr = errorPtr, let error = errorPtr.pointee {
-        span.status = .error(description: error.localizedDescription)
+        span.status = .error(description: CoreMLInstrumentation.sanitizedErrorDescription(error))
       }
 
       span.end()
@@ -492,7 +492,7 @@ public enum CoreMLInstrumentation {
       .startSpan()
     span.setAttribute(key: "terra.coreml.prediction.duration_ms", value: .double(durationMs))
     if let error {
-      span.status = .error(description: "\(error.domain)(code:\(error.code))")
+      span.status = .error(description: sanitizedErrorDescription(error))
     }
     span.end()
   }
@@ -545,6 +545,10 @@ public enum CoreMLInstrumentation {
       return filtered
     }
     return String(filtered.prefix(256))
+  }
+
+  internal static func sanitizedErrorDescription(_ error: NSError) -> String {
+    "\(error.domain)(code:\(error.code))"
   }
 
   private static func elapsedMs(since start: ContinuousClock.Instant) -> Double {

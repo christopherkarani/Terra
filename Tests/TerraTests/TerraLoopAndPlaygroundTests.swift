@@ -6,6 +6,7 @@ struct TerraLoopAndPlaygroundTests {
   @Test("Workflow transcript writes buffered messages back on success")
   func workflowTranscriptWritesBufferedMessagesBackOnSuccess() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     var messages = [Terra.ChatMessage(role: "user", content: "Plan the fix.")]
@@ -30,6 +31,7 @@ struct TerraLoopAndPlaygroundTests {
     enum ExpectedError: Error { case failed }
 
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     var messages = [Terra.ChatMessage(role: "user", content: "Plan the fix.")]
@@ -48,6 +50,7 @@ struct TerraLoopAndPlaygroundTests {
   @Test("Composable operations expose the active Terra span handle directly")
   func composableOperationsExposeUnderlyingSpanHandleDirectly() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let hasSpan = try await Terra.infer("local-model", prompt: "Hello").run { span in
@@ -60,6 +63,7 @@ struct TerraLoopAndPlaygroundTests {
   @Test("Playground scenarios are listed and runnable")
   func playgroundScenariosAreListedAndRunnable() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let playground = Terra.playground()

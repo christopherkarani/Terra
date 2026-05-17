@@ -210,6 +210,7 @@ final class TerraAPIParityTests {
   ) async throws -> SpanData {
     Terra.resetOpenTelemetryForTesting()
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     try await call()
@@ -221,6 +222,7 @@ final class TerraAPIParityTests {
   ) async throws -> SpanData {
     Terra.resetOpenTelemetryForTesting()
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     await #expect(throws: ExpectedError.self) {

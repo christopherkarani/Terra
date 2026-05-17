@@ -39,9 +39,23 @@ struct BridgeMetrics {
     std::string last_error;
 };
 
+struct BridgeMetadata {
+    std::string robot_id;
+    std::string vehicle_id;
+    std::string mission_id;
+    std::string component_name = "terra_ros2_node";
+    std::string autonomy_phase;
+    std::string content_policy = "never";
+    std::string redaction_strategy = "hmac_sha256";
+    std::string transport_protocol = "otlp_http";
+};
+
 class TerraRos2BridgeCore {
 public:
-    TerraRos2BridgeCore(terra_t *terra, std::shared_ptr<TraceForwarder> forwarder);
+    TerraRos2BridgeCore(
+        terra_t *terra,
+        std::shared_ptr<TraceForwarder> forwarder,
+        BridgeMetadata metadata = {});
 
     bool ingest_trace_batch(const uint8_t *data, std::size_t size);
     BridgeMetrics snapshot_metrics() const;
@@ -54,6 +68,7 @@ private:
 
     terra_t *terra_;
     std::shared_ptr<TraceForwarder> forwarder_;
+    BridgeMetadata metadata_;
     std::atomic<uint64_t> payloads_received_{0};
     std::atomic<uint64_t> payloads_forwarded_{0};
     std::atomic<uint64_t> payloads_failed_{0};

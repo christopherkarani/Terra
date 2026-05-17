@@ -16,6 +16,7 @@ struct TerraManualTracingTests {
   @Test("Workflow exports an active span and preserves the return value")
   func workflowExportsAnActiveSpanAndPreservesTheReturnValue() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let value = try await Terra.workflow(name: "request-workflow", id: "issue-42") { span in
@@ -45,6 +46,7 @@ struct TerraManualTracingTests {
   @Test("Nested workflow spans expose parent context")
   func nestedWorkflowSpansExposeParentContext() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     try await Terra.workflow(name: "outer", id: "issue-7") { outer in
@@ -70,6 +72,7 @@ struct TerraManualTracingTests {
   @Test("startSpan activates the current task context for later Terra operations")
   func startSpanActivatesTheCurrentTaskContextForLaterOperations() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let span = Terra.startSpan(name: "manual-root", id: "issue-9")
@@ -103,6 +106,7 @@ struct TerraManualTracingTests {
   @Test("Workflow API keeps child inference and tool spans under one root")
   func workflowAPIKeepsChildSpansUnderOneRoot() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let value = try await Terra.workflow(name: "planner-loop", id: "issue-42") { workflow in
@@ -136,6 +140,7 @@ struct TerraManualTracingTests {
   @Test("Workflow root records errors and rollups when body throws")
   func workflowRootRecordsErrorsAndRollupsWhenBodyThrows() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     await #expect(throws: ExpectedWorkflowError.self) {
@@ -158,6 +163,7 @@ struct TerraManualTracingTests {
   @Test("SpanHandle detached helper preserves parent trace context")
   func spanHandleDetachedHelperPreservesParentTraceContext() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let span = Terra.startSpan(name: "manual-root", id: "issue-11")
@@ -179,6 +185,7 @@ struct TerraManualTracingTests {
   @Test("SpanHandle detached helper continues when parent span already ended")
   func spanHandleDetachedHelperContinuesWhenParentEnded() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let span = Terra.startSpan(name: "manual-root", id: "issue-12")
@@ -201,6 +208,7 @@ struct TerraManualTracingTests {
   @Test("Explicit ended parent does not fall back to ambient workflow")
   func explicitEndedParentDoesNotFallBackToAmbientWorkflow() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let endedParent = Terra.startSpan(name: "ended-parent", id: "issue-ended-parent")
@@ -223,6 +231,7 @@ struct TerraManualTracingTests {
   @Test("Deferred tool handoff keeps later tool work under the workflow root after inference")
   func deferredToolHandoffKeepsLaterToolUnderWorkflowRootAfterInference() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let value = try await Terra.workflow(name: "planner-handoff", id: "issue-44") { workflow in
@@ -247,6 +256,7 @@ struct TerraManualTracingTests {
   @Test("Deferred tool handoff keeps later tool work under the workflow root after streaming")
   func deferredToolHandoffKeepsLaterToolUnderWorkflowRootAfterStreaming() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let value = try await Terra.workflow(name: "stream-handoff", id: "issue-45") { workflow in
@@ -279,6 +289,7 @@ struct TerraManualTracingTests {
   @Test("Tool handoff fails once the long-lived parent has already ended")
   func toolHandoffFailsWhenLongLivedParentAlreadyEnded() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let manual = Terra.startSpan(name: "manual-root", id: "issue-46")
@@ -295,6 +306,7 @@ struct TerraManualTracingTests {
   @Test("Workflow infer messages overload records structured prompt attributes")
   func workflowInferMessagesOverloadRecordsStructuredPromptAttributes() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let result = try await Terra.workflow(name: "planner-loop", id: "issue-43") { workflow in

@@ -6,6 +6,7 @@ struct TerraEnvironmentDiagnosticsTests {
   @Test("diagnoseEnvironment returns structured runtime and platform probes")
   func diagnoseEnvironmentReturnsStructuredProbes() {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let report = Terra.diagnoseEnvironment()

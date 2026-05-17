@@ -168,6 +168,10 @@ public enum HTTPAIInstrumentation {
                 HTTPAIStreamingObserver.shared.attachProperties(to: &request, span: span, parsedRequest: parsedRequest)
             },
             createdRequest: { request, span in
+                if let sanitizedURL = sanitizedURLString(request.url) {
+                    span.setAttribute(key: "http.url", value: sanitizedURL)
+                    span.setAttribute(key: "url.full", value: sanitizedURL)
+                }
                 let parsedRequest = parsedRequestBody(for: request)
                 if parsedRequest?.stream == true {
                     HTTPAIStreamingObserver.shared.installIfNeeded()
@@ -390,6 +394,18 @@ public enum HTTPAIInstrumentation {
         let parsed = AIRequestParser.parse(body: body, url: request.url)
         parsedRequestCache.setObject(ParsedRequestBox(parsed), forKey: key)
         return parsed
+    }
+
+    package static func sanitizedURLString(_ url: URL?) -> String? {
+        guard let url else { return nil }
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        components.user = nil
+        components.password = nil
+        components.query = nil
+        components.fragment = nil
+        return components.string
     }
 
     private static func applyRequestAttributes(_ parsed: ParsedRequest, to spanBuilder: SpanBuilder) {

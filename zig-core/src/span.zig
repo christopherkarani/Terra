@@ -114,8 +114,9 @@ pub const Span = struct {
         if (self.ended) return;
         self.status = code;
         if (description) |desc| {
-            const copy_len = @min(desc.len, @as(usize, 256));
-            @memcpy(self.status_description_buf[0..copy_len], desc[0..copy_len]);
+            const status_desc = if (self.canCaptureContent()) desc else "";
+            const copy_len = @min(status_desc.len, @as(usize, 256));
+            @memcpy(self.status_description_buf[0..copy_len], status_desc[0..copy_len]);
             self.status_description_len = @intCast(copy_len);
         }
     }
@@ -157,19 +158,27 @@ pub const Span = struct {
     // ── Error ───────────────────────────────────────────────────────────
     pub fn recordError(self: *Span, error_type: []const u8, error_message: []const u8, set_status: bool) void {
         if (self.ended) return;
+        const should_capture_message = self.canCaptureContent();
 
         var attrs_buf: [3]Attribute = undefined;
         var attr_count: usize = 0;
 
         attrs_buf[attr_count] = .{ .key = "exception.type", .value = .{ .string = error_type } };
         attr_count += 1;
-        attrs_buf[attr_count] = .{ .key = "exception.message", .value = .{ .string = error_message } };
-        attr_count += 1;
+        if (should_capture_message) {
+            attrs_buf[attr_count] = .{ .key = "exception.message", .value = .{ .string = error_message } };
+            attr_count += 1;
+        }
 
         self.addEventAttrs("exception", self.clock_fn(self.clock_ctx), attrs_buf[0..attr_count]);
 
         if (set_status) {
-            self.setStatus(.err, error_message);
+            self.status = .err;
+            const status_desc = if (should_capture_message) error_message else error_type;
+            const len = @min(status_desc.len, self.status_description_buf.len - 1);
+            @memcpy(self.status_description_buf[0..len], status_desc[0..len]);
+            self.status_description_len = len;
+            self.status_description_buf[len] = 0;
         }
     }
 
@@ -219,6 +228,10 @@ pub const Span = struct {
             .key = owned_key,
             .value = models.tryOwnValue(&self.string_storage, attr.value) orelse return null,
         };
+    }
+
+    fn canCaptureContent(self: *const Span) bool {
+        return privacy.shouldCapture(self.content_policy_at_creation, self.include_content);
     }
 };
 
@@ -379,7 +392,12 @@ test "Span setStatus with description" {
     var s = Span.init("test", TraceID.generate(), SpanID.zero, testing_clock.read, clk.context(), .never, false);
     s.setStatus(.err, "something went wrong");
     try std.testing.expectEqual(StatusCode.err, s.status);
-    try std.testing.expectEqualStrings("something went wrong", s.status_description_buf[0..s.status_description_len]);
+    try std.testing.expectEqual(@as(u8, 0), s.status_description_len);
+
+    var capturing = Span.init("test", TraceID.generate(), SpanID.zero, testing_clock.read, clk.context(), .opt_in, true);
+    capturing.setStatus(.err, "something went wrong");
+    try std.testing.expectEqual(StatusCode.err, capturing.status);
+    try std.testing.expectEqualStrings("something went wrong", capturing.status_description_buf[0..capturing.status_description_len]);
 }
 
 test "Span recordError 3-param" {
@@ -389,7 +407,9 @@ test "Span recordError 3-param" {
 
     try std.testing.expectEqual(@as(u8, 1), s.event_count);
     try std.testing.expectEqualStrings("exception", s.events[0].name);
+    try std.testing.expectEqual(@as(usize, 1), s.events[0].attributes.len);
     try std.testing.expectEqual(StatusCode.err, s.status);
+    try std.testing.expectEqualStrings("RuntimeError", s.status_description_buf[0..s.status_description_len]);
 }
 
 test "Span recordError without set_status" {
@@ -417,7 +437,7 @@ test "Span toRecord" {
 
 test "Span owns dynamic attribute event and error strings" {
     var clk = testing_clock{};
-    var s = Span.init("test", TraceID.generate(), SpanID.zero, testing_clock.read, clk.context(), .never, false);
+    var s = Span.init("test", TraceID.generate(), SpanID.zero, testing_clock.read, clk.context(), .opt_in, true);
 
     var key = [_]u8{ 'd', 'y', 'n', '.', 'k', 'e', 'y' };
     var value = [_]u8{ 'd', 'y', 'n', '.', 'v', 'a', 'l', 'u', 'e' };

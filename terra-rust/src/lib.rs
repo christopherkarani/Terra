@@ -284,8 +284,9 @@ pub struct Terra {
     handle: *mut ffi::terra_t,
 }
 
-// The Zig core uses internal locks for thread safety.
-// The raw pointer is only accessed through the C API which is thread-safe.
+// The owning instance handle is safe to move/share because instance lifecycle
+// and exporter state are synchronized in the C ABI. Individual span handles are
+// not a concurrent mutation primitive; callers must synchronize shared spans.
 unsafe impl Send for Terra {}
 unsafe impl Sync for Terra {}
 

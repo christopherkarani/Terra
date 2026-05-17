@@ -77,22 +77,37 @@ public struct TracedMacro: BodyMacro {
     let tryKeyword = isThrows ? "try " : ""
     let awaitKeyword = "await "
     let originalStatements = body.statements.map { "\($0)" }.joined(separator: "\n")
+    let traceName = "__terraTrace"
+    let typedThrowsType = typedThrowsType(from: funcDecl.signature.effectSpecifiers?.throwsClause)
 
-    let wrappedCode: CodeBlockItemSyntax
+    let invocation: String
     if hasNonVoidReturn {
-      wrappedCode = """
-        return \(raw: tryKeyword)\(raw: awaitKeyword)\(raw: callExpression).run { trace in
-          _ = trace
-          \(raw: originalStatements)
+      invocation = """
+        return \(tryKeyword)\(awaitKeyword)\(callExpression).run { \(traceName) in
+          _ = \(traceName)
+          \(originalStatements)
         }
         """
     } else {
-      wrappedCode = """
-        \(raw: tryKeyword)\(raw: awaitKeyword)\(raw: callExpression).run { trace in
-          _ = trace
-          \(raw: originalStatements)
+      invocation = """
+        \(tryKeyword)\(awaitKeyword)\(callExpression).run { \(traceName) in
+          _ = \(traceName)
+          \(originalStatements)
         }
         """
+    }
+
+    let wrappedCode: CodeBlockItemSyntax
+    if let typedThrowsType {
+      wrappedCode = """
+        do {
+          \(raw: invocation)
+        } catch {
+          throw error as! \(raw: typedThrowsType)
+        }
+        """
+    } else {
+      wrappedCode = "\(raw: invocation)"
     }
 
     return [wrappedCode]
@@ -123,6 +138,16 @@ public struct TracedMacro: BodyMacro {
       return .safety
     }
     throw MacroError.missingOperationArgument
+  }
+
+  private static func typedThrowsType(from throwsClause: ThrowsClauseSyntax?) -> String? {
+    guard let throwsClause else { return nil }
+    let text = throwsClause.description.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard text.hasPrefix("throws("), text.hasSuffix(")") else { return nil }
+    let start = text.index(text.startIndex, offsetBy: "throws(".count)
+    let end = text.index(before: text.endIndex)
+    let type = text[start..<end].trimmingCharacters(in: .whitespacesAndNewlines)
+    return type.isEmpty ? nil : type
   }
 
   private static func makeBaseCallExpression(

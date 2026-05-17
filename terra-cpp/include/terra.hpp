@@ -1,8 +1,10 @@
 /*
  * terra.hpp — Modern C++17 header-only SDK for Terra Zig Core
  *
- * RAII wrappers around the terra.h C ABI. Thread-safe by delegation
- * to the underlying C library. Non-copyable, moveable handle types.
+ * RAII wrappers around the terra.h C ABI. Instance lifecycle and exporter
+ * state are synchronized by the underlying C library; individual Span objects
+ * should not be mutated concurrently without caller-side synchronization.
+ * Non-copyable, moveable handle types.
  *
  * Usage:
  *   auto inst = terra::Instance::init();

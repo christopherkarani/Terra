@@ -11,6 +11,7 @@ struct TerraTraceableTests {
   @Test("Inference auto-extracts token usage and response model from TerraTraceable return")
   func autoExtractionFromTraceableResult() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = await Terra.inference(model: "model@request").execute { _ in

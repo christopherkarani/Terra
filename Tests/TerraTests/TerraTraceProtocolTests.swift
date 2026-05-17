@@ -6,6 +6,7 @@ struct TerraTraceProtocolTests {
   @Test("All trace context types conform to Terra.Trace")
   func traceConformance() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     @Sendable
@@ -42,6 +43,7 @@ struct TerraTraceProtocolTests {
   @Test("recordError writes exception telemetry")
   func recordErrorOnTrace() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     enum ExpectedError: Error { case failed }
@@ -59,6 +61,7 @@ struct TerraTraceProtocolTests {
   @Test("recordError omits exception message under redacted privacy")
   func recordErrorOnTraceRespectsPrivacy() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(
       .init(
         privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256),

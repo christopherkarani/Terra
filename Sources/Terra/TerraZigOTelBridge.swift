@@ -11,6 +11,31 @@ enum TerraZigContext {
   @TaskLocal static var activeSpanContext: terra_span_context_t?
 }
 
+final class TerraZigInstanceRef: @unchecked Sendable {
+  private let lock = NSLock()
+  private var instance: OpaquePointer?
+
+  init(instance: OpaquePointer) {
+    self.instance = instance
+  }
+
+  func withInstance<R>(_ body: (OpaquePointer) -> R?) -> R? {
+    lock.lock()
+    let current = instance
+    lock.unlock()
+    guard let current else { return nil }
+    return body(current)
+  }
+
+  func takeForShutdown() -> OpaquePointer? {
+    lock.lock()
+    defer { lock.unlock() }
+    let current = instance
+    instance = nil
+    return current
+  }
+}
+
 // MARK: - TerraZigTracerProvider
 
 /// An OTel `TracerProvider` backed by the Zig core `terra_t*` instance.
@@ -18,10 +43,10 @@ enum TerraZigContext {
 /// Returns `TerraZigTracer` instances that create spans through the Zig C ABI
 /// instead of the Swift OTel SDK pipeline.
 final class TerraZigTracerProvider: TracerProvider {
-  private let instance: OpaquePointer  // terra_t*
+  private let instanceRef: TerraZigInstanceRef
 
-  init(instance: OpaquePointer) {
-    self.instance = instance
+  init(instanceRef: TerraZigInstanceRef) {
+    self.instanceRef = instanceRef
   }
 
   func get(
@@ -30,7 +55,7 @@ final class TerraZigTracerProvider: TracerProvider {
     schemaUrl: String?,
     attributes: [String: AttributeValue]?
   ) -> any Tracer {
-    TerraZigTracer(instance: instance)
+    TerraZigTracer(instanceRef: instanceRef)
   }
 }
 
@@ -38,14 +63,14 @@ final class TerraZigTracerProvider: TracerProvider {
 
 /// An OTel `Tracer` that creates `TerraZigSpanBuilder` instances.
 final class TerraZigTracer: Tracer {
-  private let instance: OpaquePointer  // terra_t*
+  private let instanceRef: TerraZigInstanceRef
 
-  init(instance: OpaquePointer) {
-    self.instance = instance
+  init(instanceRef: TerraZigInstanceRef) {
+    self.instanceRef = instanceRef
   }
 
   func spanBuilder(spanName: String) -> SpanBuilder {
-    TerraZigSpanBuilder(instance: instance, spanName: spanName)
+    TerraZigSpanBuilder(instanceRef: instanceRef, spanName: spanName)
   }
 }
 
@@ -56,7 +81,7 @@ final class TerraZigTracer: Tracer {
 /// Maps OTel span names to the appropriate `terra_begin_*_span_ctx()` call.
 /// Falls back to inference span for unrecognized span names.
 final class TerraZigSpanBuilder: SpanBuilder {
-  private let instance: OpaquePointer  // terra_t*
+  private let instanceRef: TerraZigInstanceRef
   private let spanName: String
   private var spanKind: SpanKind = .internal
   private var attributes: [String: AttributeValue] = [:]
@@ -67,8 +92,8 @@ final class TerraZigSpanBuilder: SpanBuilder {
   private var isActiveOnStart = false
   private var links: [(SpanContext, [String: AttributeValue])] = []
 
-  init(instance: OpaquePointer, spanName: String) {
-    self.instance = instance
+  init(instanceRef: TerraZigInstanceRef, spanName: String) {
+    self.instanceRef = instanceRef
     self.spanName = spanName
   }
 
@@ -160,8 +185,10 @@ final class TerraZigSpanBuilder: SpanBuilder {
     // Resolve parent context: explicit parent > TaskLocal > no parent
     var parentCtx: terra_span_context_t? = resolveParentContext()
 
-    let zigSpan: OpaquePointer? = withOptionalPointer(to: &parentCtx) { parentPtr in
-      beginSpan(parentCtx: parentPtr, model: model, includeContent: includeContent)
+    let zigSpan: OpaquePointer? = instanceRef.withInstance { instance in
+      withOptionalPointer(to: &parentCtx) { parentPtr in
+        beginSpan(instance: instance, parentCtx: parentPtr, model: model, includeContent: includeContent)
+      }
     }
 
     guard let zigSpan else {
@@ -171,7 +198,7 @@ final class TerraZigSpanBuilder: SpanBuilder {
 
     let span = TerraZigOTelSpan(
       zigSpan: zigSpan,
-      instance: instance,
+      instanceRef: instanceRef,
       name: spanName,
       kind: spanKind,
       startTime: startTime ?? Date()
@@ -231,6 +258,7 @@ final class TerraZigSpanBuilder: SpanBuilder {
   }
 
   private func beginSpan(
+    instance: OpaquePointer,
     parentCtx: UnsafePointer<terra_span_context_t>?,
     model: String,
     includeContent: Bool
@@ -323,7 +351,7 @@ final class TerraZigSpanBuilder: SpanBuilder {
 /// The span is ended by calling `terra_span_end`.
 final class TerraZigOTelSpan: Span, @unchecked Sendable {
   private let zigSpan: OpaquePointer   // terra_span_t*
-  private let instance: OpaquePointer  // terra_t*
+  private let instanceRef: TerraZigInstanceRef
   private let lock = NSLock()
   private var ended = false
   private var currentStatus: Status = .unset
@@ -351,13 +379,13 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
 
   init(
     zigSpan: OpaquePointer,
-    instance: OpaquePointer,
+    instanceRef: TerraZigInstanceRef,
     name: String,
     kind: SpanKind,
     startTime: Date
   ) {
     self.zigSpan = zigSpan
-    self.instance = instance
+    self.instanceRef = instanceRef
     self.name = name
     self.kind = kind
 
@@ -520,7 +548,10 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
       return true
     }
     if shouldEnd {
-      terra_span_end(instance, zigSpan)
+      _ = instanceRef.withInstance { instance in
+        terra_span_end(instance, zigSpan)
+        return true
+      }
     }
   }
 
@@ -556,7 +587,10 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     guard !ended else { return }
-    body()
+    _ = instanceRef.withInstance { _ in
+      body()
+      return true
+    }
   }
 }
 
@@ -624,7 +658,9 @@ extension Terra {
       return false
     }
 
+    let instanceRef = TerraZigInstanceRef(instance: instance)
     _zigInstance = instance
+    _zigInstanceRef = instanceRef
     Runtime.shared.markRunning()
 
     // Configure service metadata
@@ -642,7 +678,7 @@ extension Terra {
     }
 
     // Register the Zig-backed tracer provider as the global OTel provider
-    let zigProvider = TerraZigTracerProvider(instance: instance)
+    let zigProvider = TerraZigTracerProvider(instanceRef: instanceRef)
     OpenTelemetry.registerTracerProvider(tracerProvider: zigProvider)
 
     return true
@@ -650,13 +686,16 @@ extension Terra {
 
   package static func shutdownZigBackend() {
     zigBackendLock.lock()
-    guard let instance = _zigInstance else {
+    guard let instanceRef = _zigInstanceRef else {
       zigBackendLock.unlock()
       return
     }
+    let instance = instanceRef.takeForShutdown()
     _zigInstance = nil
+    _zigInstanceRef = nil
     zigBackendLock.unlock()
 
+    guard let instance else { return }
     Runtime.shared.markShuttingDown()
     _ = terra_shutdown(instance)
     Runtime.shared.markStopped()
@@ -665,6 +704,7 @@ extension Terra {
   /// The raw Zig instance pointer, if the Zig backend was installed.
   /// Used internally for shutdown and test support.
   package private(set) static var _zigInstance: OpaquePointer? = nil
+  private static var _zigInstanceRef: TerraZigInstanceRef?
 }
 
 // MARK: - Helpers

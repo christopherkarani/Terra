@@ -89,6 +89,18 @@ struct TelemetryPrivacyFallbackTests {
         value: "search"
       ) == TelemetryPrivacy.redactedValue
     )
+    #expect(
+      TelemetryPrivacy.displayValue(
+        forKey: "exception.message",
+        value: "raw model prompt leaked through an error"
+      ) == TelemetryPrivacy.redactedValue
+    )
+    #expect(
+      TelemetryPrivacy.displayValue(
+        forKey: "http.url",
+        value: "https://provider.example/v1?key=secret"
+      ) == TelemetryPrivacy.redactedValue
+    )
   }
 
   @Test("Schema URL absent: parser returns nil and caller can fall back")
@@ -126,6 +138,9 @@ struct TelemetryPrivacyFallbackTests {
       "terra.anonymization.key_id",
       "terra.fm.tool.arguments",
       "terra.fm.tool.result",
+      "exception.message",
+      "http.url",
+      "url.full",
     ]
 
     let fallback = TelemetryPrivacy.fallbackSensitiveAttributeKeys

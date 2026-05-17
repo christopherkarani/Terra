@@ -62,7 +62,7 @@ int main() {
 
             {
                 auto tool = inst.begin_tool("web-search", &agent_ctx);
-                tool.set("terra.tool.input", "latest AI papers");
+                tool.set("terra.tool.input_length", 16);
                 tool.set_status(terra::StatusCode::Ok);
             }
 

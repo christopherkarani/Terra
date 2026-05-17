@@ -114,3 +114,11 @@ ABI core (`TERRA_USE_ZIG_CORE`) is currently packaged only for macOS via
 `Vendor/libtera.xcframework`. See [Docs/PLATFORM-COMPATIBILITY.md](Docs/PLATFORM-COMPATIBILITY.md)
 for the full support matrix, the `libtera` vs `libterra` artifact naming
 story, and instructions for enabling additional Apple platform slices.
+
+## Robotics Pilots
+
+Drone and robotics teams can pilot Terra through the ROS 2 bridge and the
+callback-backed C ABI transports for UART, MQTT, and CoAP. Start with
+[Docs/ROBOTICS-PILOT.md](Docs/ROBOTICS-PILOT.md) and
+[terra-ros2/README.md](terra-ros2/README.md). Terra observes AI/autonomy
+workflows; it is not flight-control middleware or safety-certified software.

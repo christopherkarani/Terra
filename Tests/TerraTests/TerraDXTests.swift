@@ -24,6 +24,7 @@ struct TerraDXTests {
   @Test("Diagnose reports local setup issues with actionable fixes")
   func diagnoseReportsActionableIssues() {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let report = Terra.diagnose()
@@ -52,6 +53,7 @@ struct TerraDXTests {
   @Test("Active spans can be visualized as ASCII and JSON")
   func activeSpansCanBeVisualized() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let outputs = try await Terra.workflow(name: "root", id: "trace-1") { _ in
@@ -70,6 +72,7 @@ struct TerraDXTests {
     enum ExpectedFailure: Error { case boom }
 
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
     let log = HookLog()
 
@@ -101,6 +104,7 @@ struct TerraDXTests {
   @Test("Instrumented services wrap execution in Terra spans")
   func instrumentedServicesWrapExecutionInTerraSpans() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     struct LocalPlanner: Terra.TerraInstrumentable {
@@ -125,6 +129,7 @@ struct TerraDXTests {
   @Test("Workflow handle creates nested child spans and preserves the root")
   func workflowHandleCreatesNestedChildSpansAndPreservesTheRoot() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     try await Terra.workflow(name: "process-request") { workflow in

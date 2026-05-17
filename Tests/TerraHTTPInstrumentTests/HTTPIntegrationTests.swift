@@ -52,7 +52,7 @@ final class HTTPIntegrationTests: XCTestCase {
     config.protocolClasses = [MockURLProtocol.self]
     let session = URLSession(configuration: config)
 
-    var request = URLRequest(url: URL(string: "https://example.ai/v1/chat/completions")!)
+    var request = URLRequest(url: URL(string: "https://example.ai/v1/chat/completions?key=secret-token")!)
     request.httpMethod = "POST"
     request.httpBody = Data(#"{"model":"request-model","max_tokens":42}"#.utf8)
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -73,7 +73,9 @@ final class HTTPIntegrationTests: XCTestCase {
     let span = try XCTUnwrap(spans.first(where: { $0.name.contains("chat") }))
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestModel]?.description, "request-model")
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestMaxTokens]?.description, "42")
-    XCTAssertNil(span.attributes["url.full"])
+    XCTAssertEqual(span.attributes["http.url"]?.description, "https://example.ai/v1/chat/completions")
+    XCTAssertEqual(span.attributes["url.full"]?.description, "https://example.ai/v1/chat/completions")
+    XCTAssertFalse(span.attributes.values.contains { $0.description.contains("secret-token") })
   }
 
   // P0-4: receivedResponse must populate gen_ai.response.model and usage

@@ -27,6 +27,9 @@ enum TelemetryPrivacy {
     "terra.fm.tool.result",
     "terra.fm.tool.name",
     "terra.service.input_length",
+    "exception.message",
+    "http.url",
+    "url.full",
   ]
 
   static func displayValue(forKey key: String, value: String) -> String {

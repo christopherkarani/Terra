@@ -83,5 +83,17 @@ struct EspressoLogParserTests {
     #expect(summary.computeBoundCount == 0)
     #expect(summary.averageWorkUnitEfficiency == 0)
   }
+
+  @Test("terminate force-kills processes that ignore SIGTERM")
+  func terminateForceKillsUnresponsiveProcess() throws {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sh")
+    process.arguments = ["-c", "trap '' TERM; sleep 10"]
+    try process.run()
+
+    EspressoLogCapture.terminate(process, timeout: 0.05)
+
+    #expect(!process.isRunning)
+  }
 }
 #endif

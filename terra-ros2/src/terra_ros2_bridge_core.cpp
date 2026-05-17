@@ -105,8 +105,9 @@ bool CurlTraceForwarder::post_traces(const uint8_t *data, std::size_t size, std:
 
 TerraRos2BridgeCore::TerraRos2BridgeCore(
     terra_t *terra,
-    std::shared_ptr<TraceForwarder> forwarder)
-    : terra_(terra), forwarder_(std::move(forwarder)) {}
+    std::shared_ptr<TraceForwarder> forwarder,
+    BridgeMetadata metadata)
+    : terra_(terra), forwarder_(std::move(forwarder)), metadata_(std::move(metadata)) {}
 
 bool TerraRos2BridgeCore::ingest_trace_batch(const uint8_t *data, std::size_t size) {
     payloads_received_.fetch_add(1, std::memory_order_relaxed);
@@ -192,9 +193,26 @@ void TerraRos2BridgeCore::record_forward_span(
     }
 
     terra_span_set_string(span, "terra.ros2.component", "otlp-forwarder");
+    terra_span_set_string(span, "terra.component.name", metadata_.component_name.c_str());
+    terra_span_set_string(span, "terra.transport.protocol", metadata_.transport_protocol.c_str());
+    terra_span_set_string(span, "terra.privacy.content_policy", metadata_.content_policy.c_str());
+    terra_span_set_string(span, "terra.privacy.redaction_strategy", metadata_.redaction_strategy.c_str());
     terra_span_set_int(span, "terra.ros2.payload_bytes", static_cast<int64_t>(size));
     terra_span_set_double(span, "terra.ros2.forward.duration_ms", duration_ms);
     terra_span_set_bool(span, "terra.ros2.forward.success", success);
+
+    if (!metadata_.robot_id.empty()) {
+        terra_span_set_string(span, "terra.robot.id", metadata_.robot_id.c_str());
+    }
+    if (!metadata_.vehicle_id.empty()) {
+        terra_span_set_string(span, "terra.vehicle.id", metadata_.vehicle_id.c_str());
+    }
+    if (!metadata_.mission_id.empty()) {
+        terra_span_set_string(span, "terra.mission.id", metadata_.mission_id.c_str());
+    }
+    if (!metadata_.autonomy_phase.empty()) {
+        terra_span_set_string(span, "terra.autonomy.phase", metadata_.autonomy_phase.c_str());
+    }
 
     if (success) {
         terra_span_set_status(span, TERRA_STATUS_OK, "forwarded");

@@ -53,6 +53,7 @@ jobs:
           python3 Scripts/validate-doc-snippets.py
           if [ -f Scripts/validate-telemetry-schema.py ]; then python3 Scripts/validate-telemetry-schema.py; fi
           if [ -f Scripts/validate-bindings.py ]; then python3 Scripts/validate-bindings.py; fi
+          bash Scripts/validate-ros2-package.sh
 
       - name: SwiftPM manifest
         run: Scripts/validate-swiftpm.sh --manifest-only
@@ -151,6 +152,28 @@ jobs:
             -DTERRA_LIB_PATH="$GITHUB_WORKSPACE/zig-core/zig-out/lib/libterra.a"
           cmake --build .build/terra-cpp
           ctest --test-dir .build/terra-cpp --output-on-failure
+
+  website-audit:
+    name: Website dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: website
+
+      - name: Audit high-risk dependencies
+        run: npm audit --audit-level=high
+        working-directory: website
 
   android:
     name: Android bindings

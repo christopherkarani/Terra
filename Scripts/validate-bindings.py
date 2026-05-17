@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -84,6 +86,14 @@ BINDING_FILES = {
     "Python": ["terra-python/terra.py"],
     "Kotlin": ["terra-android/kotlin/dev/terra/Terra.kt", "terra-android/kotlin/dev/terra/TerraConfig.kt", "terra-android/kotlin/dev/terra/TerraSpan.kt", "terra-android/kotlin/dev/terra/StreamingScope.kt"],
     "C++": ["terra-cpp/include/terra.hpp"],
+}
+
+VENDORED_LIBRARY = "Vendor/libtera.xcframework/macos-arm64_x86_64/libtera.a"
+
+REQUIRED_VENDORED_SYMBOLS = {
+    "_terra_transport_mqtt",
+    "_terra_transport_coap",
+    "_terra_transport_uart",
 }
 
 COMMON_FEATURES = {
@@ -458,6 +468,35 @@ def validate_header_parity(findings: list[Finding]) -> None:
             findings.append(Finding(f"{candidate}: header does not match zig-core/include/terra.h"))
 
 
+def validate_vendored_symbols(findings: list[Finding]) -> None:
+    library = ROOT / VENDORED_LIBRARY
+    if not library.is_file():
+        findings.append(Finding(f"{VENDORED_LIBRARY}: vendored static library is missing"))
+        return
+
+    nm = shutil.which("nm")
+    if nm is None:
+        findings.append(Finding("nm is required to validate vendored libtera symbols"))
+        return
+
+    result = subprocess.run(
+        [nm, "-gU", str(library)],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        findings.append(Finding(f"{VENDORED_LIBRARY}: nm failed: {result.stderr.strip()}"))
+        return
+
+    exported = set(re.findall(r"\b_terra_[A-Za-z0-9_]+\b", result.stdout))
+    missing = sorted(REQUIRED_VENDORED_SYMBOLS - exported)
+    if missing:
+        findings.append(Finding(f"{VENDORED_LIBRARY}: missing exported symbols: {', '.join(missing)}"))
+
+
 def feature_matrix() -> dict[str, dict[str, bool]]:
     all_features = {**SPAN_FEATURES, **COMMON_FEATURES}
     texts = {binding: read_binding_text(binding) for binding in BINDING_FILES}
@@ -656,6 +695,7 @@ def main() -> int:
     findings: list[Finding] = []
     validate_constants(findings)
     validate_header_parity(findings)
+    validate_vendored_symbols(findings)
     matrix = validate_feature_matrix(findings)
     validate_span_context_contract(findings)
     validate_golden_fixtures(findings)

@@ -38,6 +38,7 @@ python3 Scripts/validate-doc-snippets.py
 
 run_if_present "Telemetry schema" "Scripts/validate-telemetry-schema.py"
 run_if_present "Binding conformance" "Scripts/validate-bindings.py"
+run_if_present "ROS 2 package" "Scripts/validate-ros2-package.sh"
 
 if [[ -d .agents/skills ]]; then
   section "Project skill scripts"

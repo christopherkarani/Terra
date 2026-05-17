@@ -10,6 +10,7 @@ struct TerraAgentContextTests {
   @Test("Inference and tool calls inside workflow are accumulated on workflow span")
   func accumulationInsideWorkflow() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = try await Terra.workflow(name: "planner") { workflow in
@@ -29,6 +30,7 @@ struct TerraAgentContextTests {
   @Test("Structured Task inherits workflow context")
   func structuredTaskInheritsContext() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = try await Terra.workflow(name: "planner") { workflow in
@@ -48,6 +50,7 @@ struct TerraAgentContextTests {
   @Test("Detached Task does not inherit workflow context")
   func detachedTaskDoesNotInheritContext() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = try await Terra.workflow(name: "planner") { _ in
@@ -67,6 +70,7 @@ struct TerraAgentContextTests {
   @Test("SpanHandle detached helper preserves workflow context")
   func detachedHelperPreservesContext() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = try await Terra.workflow(name: "planner") { workflow in
@@ -91,6 +95,7 @@ struct TerraAgentContextTests {
   @Test("Agent rollups are emitted when body throws")
   func agentRollupsAreEmittedWhenBodyThrows() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     await #expect(throws: ExpectedAgentError.self) {

@@ -58,6 +58,9 @@ comptime {
     _ = &c_api.terra_last_error_message;
     _ = &c_api.terra_spans_dropped;
     _ = &c_api.terra_transport_degraded;
+    _ = &c_api.terra_transport_mqtt;
+    _ = &c_api.terra_transport_coap;
+    _ = &c_api.terra_transport_uart;
     _ = &c_api.terra_get_version;
     _ = &c_api.terra_record_inference_duration;
     _ = &c_api.terra_record_token_count;

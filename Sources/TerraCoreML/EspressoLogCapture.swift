@@ -1,4 +1,5 @@
 #if os(macOS)
+import Darwin
 import Foundation
 import OpenTelemetryApi
 import TerraSystemProfiler
@@ -63,14 +64,26 @@ public enum EspressoLogCapture {
       return EspressoLogParser.summarize([])
     }
 
-    proc.terminate()
-    proc.waitUntilExit()
+    terminate(proc, timeout: 2.0)
 
     outputPipe.fileHandleForReading.readabilityHandler = nil
     buffer.append(outputPipe.fileHandleForReading.readDataToEndOfFile())
     let output = buffer.string()
     let entries = EspressoLogParser.parse(output)
     return EspressoLogParser.summarize(entries)
+  }
+
+  package static func terminate(_ proc: Process, timeout: TimeInterval) {
+    proc.terminate()
+
+    let deadline = Date().addingTimeInterval(timeout)
+    while proc.isRunning, Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.01)
+    }
+
+    guard proc.isRunning else { return }
+    kill(proc.processIdentifier, SIGKILL)
+    proc.waitUntilExit()
   }
 }
 

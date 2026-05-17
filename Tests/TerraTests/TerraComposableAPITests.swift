@@ -19,6 +19,7 @@ struct TerraComposableAPITests {
   @Test("Uniform call type supports collection transforms")
   func uniformCallTypeSupportsCollectionTransforms() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let transformedCalls: [Terra.Operation] = [
@@ -50,6 +51,7 @@ struct TerraComposableAPITests {
   @Test("Scalar-based attr API records call and trace attributes")
   func scalarAttrRecordsAttributes() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let value = await Terra
@@ -81,6 +83,7 @@ struct TerraComposableAPITests {
   @Test("Call metadata builder supports conditionals and loops")
   func callMetadataBuilderSupportsConditionalsAndLoops() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let includeFlag = true
@@ -108,6 +111,7 @@ struct TerraComposableAPITests {
   @Test("Trace metadata builder preserves ordering")
   func traceMetadataBuilderPreservesOrdering() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = await Terra
@@ -127,6 +131,7 @@ struct TerraComposableAPITests {
   @Test("Metadata builder empty closures are no-op")
   func metadataBuilderEmptyClosuresAreNoOp() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     _ = await Terra
@@ -143,6 +148,7 @@ struct TerraComposableAPITests {
   @Test("Operation under(parent) overrides the ambient Terra parent span")
   func operationUnderOverridesAmbientParent() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     try await Terra.workflow(name: "outer") { outer in
@@ -167,6 +173,7 @@ struct TerraComposableAPITests {
   @Test("Composable trace.recordError respects privacy gating")
   func composableTraceRecordErrorRespectsPrivacy() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(
       .init(
         privacy: .init(contentPolicy: .optIn, redaction: .hashHMACSHA256),

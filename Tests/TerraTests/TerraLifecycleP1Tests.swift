@@ -22,6 +22,7 @@ final class TerraLifecycleP1Tests: XCTestCase {
 
   func testWorkflowDetachFromAmbient_doesNotInheritOTelActiveSpan() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     // Start an ambient OTel span outside Terra so the global context provider has an active span.
@@ -69,6 +70,7 @@ final class TerraLifecycleP1Tests: XCTestCase {
 
   func testWorkflowDefaultStrategy_isAttachToAmbient_andBackCompat() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     let ambientTracer = support.tracerProvider.get(instrumentationName: "ambient-app")
@@ -93,6 +95,7 @@ final class TerraLifecycleP1Tests: XCTestCase {
 
   func testSpanRegistry_isPurgedOnShutdown() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     // Start a manual workflow root span; do not end it.
@@ -109,6 +112,7 @@ final class TerraLifecycleP1Tests: XCTestCase {
 
   func testSpanRegistry_lifecycleResetIsIdempotent() async throws {
     let support = TerraTestSupport()
+    defer { support.tearDown() }
     Terra.install(.init(tracerProvider: support.tracerProvider, registerProvidersAsGlobal: false))
 
     // Reset twice on an already-empty registry; must not crash.

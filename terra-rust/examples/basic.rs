@@ -67,7 +67,7 @@ fn main() {
         terra.begin_tool_span("web_search", Some(&agent_ctx), true)
     {
         tool_span.set_string("terra.tool.name", "web_search");
-        tool_span.set_string("terra.tool.input", "latest Rust async patterns");
+        tool_span.set_int("terra.tool.input_length", 26);
         tool_span.set_status(StatusCode::Ok, "");
         tool_span.end();
     }

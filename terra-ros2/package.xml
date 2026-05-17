@@ -12,6 +12,7 @@
   <depend>rclcpp</depend>
   <depend>std_msgs</depend>
   <depend>libcurl</depend>
+  <exec_depend>ros2launch</exec_depend>
   <test_depend>ament_cmake_gtest</test_depend>
 
   <export>

@@ -22,23 +22,52 @@ public:
             this->declare_parameter<std::string>("otlp_endpoint", "http://127.0.0.1:4318");
         const int metrics_interval_ms =
             this->declare_parameter<int>("metrics_interval_ms", 5000);
+        const std::string robot_id =
+            this->declare_parameter<std::string>("robot_id", "");
+        const std::string vehicle_id =
+            this->declare_parameter<std::string>("vehicle_id", "");
+        const std::string mission_id =
+            this->declare_parameter<std::string>("mission_id", "");
+        const std::string component_name =
+            this->declare_parameter<std::string>("component_name", "terra_ros2_node");
+        const std::string autonomy_phase =
+            this->declare_parameter<std::string>("autonomy_phase", "");
+        const std::string content_policy =
+            this->declare_parameter<std::string>("content_policy", "never");
+        const std::string redaction_strategy =
+            this->declare_parameter<std::string>("redaction_strategy", "hmac_sha256");
 
         // Initialize Terra with default config
         terra_config_t config = {};
-        config.service_name = "terra-ros2";
+        config.service_name = component_name.c_str();
         config.service_version = "1.0.0";
         config.otlp_endpoint = otlp_endpoint.c_str();
+        config.content_policy = parse_content_policy(content_policy);
+        config.redaction_strategy = parse_redaction_strategy(redaction_strategy);
         terra_ = terra_init(&config);
 
         if (!terra_) {
             RCLCPP_ERROR(this->get_logger(), "Failed to initialize Terra instance");
         } else {
             RCLCPP_INFO(this->get_logger(), "Terra instance initialized");
+            if (!mission_id.empty()) {
+                terra_set_session_id(terra_, mission_id.c_str());
+            }
         }
+
+        terra_ros2::BridgeMetadata metadata;
+        metadata.robot_id = robot_id;
+        metadata.vehicle_id = vehicle_id;
+        metadata.mission_id = mission_id;
+        metadata.component_name = component_name;
+        metadata.autonomy_phase = autonomy_phase;
+        metadata.content_policy = content_policy;
+        metadata.redaction_strategy = redaction_strategy;
 
         bridge_ = std::make_unique<terra_ros2::TerraRos2BridgeCore>(
             terra_,
-            std::make_shared<terra_ros2::CurlTraceForwarder>(otlp_endpoint));
+            std::make_shared<terra_ros2::CurlTraceForwarder>(otlp_endpoint),
+            metadata);
 
         // Subscribe to trace data (raw bytes as UInt8MultiArray)
         trace_sub_ = this->create_subscription<std_msgs::msg::UInt8MultiArray>(
@@ -66,6 +95,19 @@ public:
     }
 
 private:
+    static terra_content_policy_t parse_content_policy(const std::string &value) {
+        if (value == "opt_in") return TERRA_CONTENT_OPT_IN;
+        if (value == "always") return TERRA_CONTENT_ALWAYS;
+        return TERRA_CONTENT_NEVER;
+    }
+
+    static terra_redaction_strategy_t parse_redaction_strategy(const std::string &value) {
+        if (value == "drop") return TERRA_REDACT_DROP;
+        if (value == "length_only") return TERRA_REDACT_LENGTH_ONLY;
+        if (value == "sha256") return TERRA_REDACT_SHA256;
+        return TERRA_REDACT_HMAC_SHA256;
+    }
+
     void trace_callback(const std_msgs::msg::UInt8MultiArray::SharedPtr msg) {
         if (!bridge_) return;
 

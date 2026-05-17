@@ -13,6 +13,7 @@ final class TerraPrivacyE2ETests: XCTestCase {
 
   override func tearDown() {
     support.reset()
+    support.tearDown()
     support = nil
     super.tearDown()
   }

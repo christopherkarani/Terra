@@ -255,6 +255,16 @@
       "description": "Length of service input content captured for privacy-safe detail views."
     },
     {
+      "key": "terra.tool.input_length",
+      "type": "int",
+      "unit": "characters",
+      "owner_module": "Terra",
+      "stability": "experimental",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": [16],
+      "description": "Length of tool input content captured for privacy-safe detail views without storing raw tool payloads."
+    },
+    {
       "key": "terra.prompt.hmac_sha256",
       "type": "string",
       "unit": "hmac-sha256",
@@ -1135,6 +1145,36 @@
       "description": "Serialized Foundation Models tool result when capture policy permits."
     },
     {
+      "key": "exception.message",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "stable",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": ["redacted error detail"],
+      "description": "OpenTelemetry exception message. Treat as sensitive because provider/runtime errors can include prompts, payloads, paths, or credentials."
+    },
+    {
+      "key": "http.url",
+      "type": "string",
+      "unit": "url",
+      "owner_module": "TerraHTTPInstrument",
+      "stability": "stable",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": ["https://provider.example/v1/chat/completions"],
+      "description": "Legacy HTTP semantic-convention URL. Redacted in viewers because imported spans can include query credentials."
+    },
+    {
+      "key": "url.full",
+      "type": "string",
+      "unit": "url",
+      "owner_module": "TerraHTTPInstrument",
+      "stability": "stable",
+      "viewer_behavior": "privacy_sensitive_detail",
+      "examples": ["https://provider.example/v1/chat/completions"],
+      "description": "Stable HTTP semantic-convention full URL. Redacted in viewers because imported spans can include query credentials."
+    },
+    {
       "key": "terra.mlx.device",
       "type": "string",
       "unit": "none",
@@ -1673,6 +1713,116 @@
       "viewer_behavior": "workflow_summary",
       "examples": [true],
       "description": "True when the workflow span was forced to be a root span instead of nesting under the ambient OpenTelemetry context."
+    },
+    {
+      "key": "terra.robot.id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "terra_ros2",
+      "stability": "experimental",
+      "viewer_behavior": "resource_group",
+      "examples": ["lab-drone-01"],
+      "description": "Stable robot identity used to group traces from robotics and drone deployments."
+    },
+    {
+      "key": "terra.vehicle.id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "terra_ros2",
+      "stability": "experimental",
+      "viewer_behavior": "resource_group",
+      "examples": ["px4-sitl-01"],
+      "description": "Vehicle, airframe, or controller identity for robotics trace grouping."
+    },
+    {
+      "key": "terra.mission.id",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "terra_ros2",
+      "stability": "experimental",
+      "viewer_behavior": "session_summary",
+      "examples": ["bench-run-001"],
+      "description": "Mission or run identifier used to correlate spans within a robotics session."
+    },
+    {
+      "key": "terra.component.name",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "terra_ros2",
+      "stability": "experimental",
+      "viewer_behavior": "span_summary",
+      "examples": ["companion-ai"],
+      "description": "Robotics component or node name responsible for the emitted telemetry."
+    },
+    {
+      "key": "terra.autonomy.phase",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "terra_ros2",
+      "stability": "experimental",
+      "viewer_behavior": "span_summary",
+      "examples": ["perception", "planning", "inspection"],
+      "description": "Current autonomy phase associated with a robotics span."
+    },
+    {
+      "key": "terra.transport.protocol",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "experimental",
+      "viewer_behavior": "transport_summary",
+      "examples": ["otlp_http", "mqtt", "coap", "uart"],
+      "description": "Transport protocol used to forward Terra trace payloads."
+    },
+    {
+      "key": "terra.privacy.redaction_strategy",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "Terra",
+      "stability": "experimental",
+      "viewer_behavior": "privacy_summary",
+      "examples": ["hmac_sha256", "length_only"],
+      "description": "Redaction strategy active for a robotics or embedded telemetry span."
+    },
+    {
+      "key": "terra.ros2.component",
+      "type": "string",
+      "unit": "none",
+      "owner_module": "terra_ros2",
+      "stability": "experimental",
+      "viewer_behavior": "span_detail",
+      "examples": ["otlp-forwarder"],
+      "description": "Internal ROS 2 bridge component emitting the span."
+    },
+    {
+      "key": "terra.ros2.payload_bytes",
+      "type": "int",
+      "unit": "bytes",
+      "owner_module": "terra_ros2",
+      "stability": "experimental",
+      "viewer_behavior": "transport_summary",
+      "examples": [512],
+      "description": "Size of the ROS 2 trace payload forwarded to the OTLP collector."
+    },
+    {
+      "key": "terra.ros2.forward.duration_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "terra_ros2",
+      "stability": "experimental",
+      "viewer_behavior": "transport_summary",
+      "examples": [4.5],
+      "description": "Duration spent forwarding a ROS 2 trace payload to the OTLP collector."
+    },
+    {
+      "key": "terra.ros2.forward.success",
+      "type": "bool",
+      "unit": "none",
+      "owner_module": "terra_ros2",
+      "stability": "experimental",
+      "viewer_behavior": "transport_summary",
+      "examples": [true],
+      "description": "Whether the ROS 2 bridge successfully forwarded the payload."
     }
   ]
 }
