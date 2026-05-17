@@ -168,11 +168,11 @@
 - [x] Resolve conflicts while preserving `main` Zig lifecycle parity and PR #25 audit/remediation fixes.
 - [x] Run focused post-conflict Swift/Zig lifecycle verification.
 - [x] Run local release validation gates.
-- [ ] Push branch and get PR #25 conflict-free, non-draft, and green in CI or documented manual release exception.
-- [ ] Merge PR #25 to `main`.
-- [ ] Revalidate `main`.
-- [ ] Publish GitHub releases for `0.3.2` backfill and `1.0.0`.
-- [ ] Record final production result and residual blockers.
+- [x] Push branch and get PR #25 conflict-free, non-draft, and green in CI or documented manual release exception.
+- [x] Merge PR #25 to `main`.
+- [x] Revalidate `main`.
+- [x] Publish GitHub releases for `0.3.2` backfill and `1.0.0`.
+- [x] Record final production result and residual blockers.
 
 ### Plan
 
@@ -192,6 +192,12 @@
 - Pushed rebased branch `swiftformat` to PR #25; GitHub reports the PR as mergeable and conflict-free.
 - Remote CI is blocked outside the repo: all four jobs failed before starting with the annotation "The job was not started because your account is locked due to a billing issue."
 - Manual release exception approved on 2026-05-06 because Terra must ship now and the billing issue cannot be addressed. Use the passing full local validation as the release gate, then run the same validation again on clean `main` after merge.
+- PR #25 was marked ready for review and merged to `main` at `09d116887eee0dc39015e2c1c40180e6d5cc0abc`.
+- Post-merge full local validation passed on clean `main` with the same Java/Android SDK environment as the branch gate.
+- Downstream proof passed in `/tmp/terra-swarm-downstream-proof`: a temporary package depending on merged Terra and the real local Swarm package resolved `swift-syntax` to `602.0.0` and built `TerraSwarmProof`.
+- Backfilled GitHub release page: https://github.com/christopherkarani/Terra/releases/tag/0.3.2
+- Published annotated tag and GitHub release: https://github.com/christopherkarani/Terra/releases/tag/1.0.0
+- Residual blocker: GitHub Actions remains unavailable until the account billing lock is resolved; release shipped under the documented manual local-validation exception.
 
 ## Production Readiness Check - 2026-05-06
 
