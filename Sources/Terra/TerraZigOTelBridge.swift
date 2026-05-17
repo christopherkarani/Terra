@@ -21,8 +21,8 @@ final class TerraZigInstanceRef: @unchecked Sendable {
 
   func withInstance<R>(_ body: (OpaquePointer) -> R?) -> R? {
     lock.lock()
+    defer { lock.unlock() }
     let current = instance
-    lock.unlock()
     guard let current else { return nil }
     return body(current)
   }

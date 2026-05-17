@@ -1,5 +1,57 @@
 # Terra Codebase Audit And DX Review
 
+## Review Follow-up Fixes And Main Merge - 2026-05-17
+
+- [x] Fix Swift/Zig instance reference locking so shutdown cannot free the native instance during an in-flight native call.
+- [x] Fix typed-throws macro parsing to use `ThrowsClauseSyntax.type` instead of string matching.
+- [x] Add focused regression coverage for the lifecycle lock and typed throws whitespace.
+- [x] Run targeted Swift validation plus practical repo validation.
+- [ ] Commit, push, and merge `codex/assess-terra-for-drones` into `main`.
+
+### Plan
+
+1. Patch the two review findings directly in the changed files.
+2. Prove each with the narrowest regression test: one lifecycle synchronization test and one macro expansion spelling test.
+3. Run focused suites first, then quick validation.
+4. Push the branch, merge to the real default branch `main`, push `main`, and confirm the final branch state.
+
+### Review
+
+- Fixed both code-review findings: `TerraZigInstanceRef.withInstance` now holds the instance lock while the native pointer is in use, and typed throws parsing now reads `ThrowsClauseSyntax.type` instead of matching rendered text.
+- Added regression coverage for shutdown waiting on an in-flight native use and for `throws (MyError)` macro expansion.
+- Verification passed: `swift test --filter 'ZigBackendIntegrationTests|TracedMacroExpansionTests'`, `git diff --check`, and `bash Scripts/validate.sh --quick`.
+
+## Fresh Deep Production Readiness Audit - 2026-05-17
+
+- [x] Establish baseline git status and preserve user-owned worktree changes.
+- [x] Read repo instructions, memory, lessons, Package.swift, README, docs, scripts, examples, bindings, and release/task notes before conclusions.
+- [ ] Inventory all major surfaces: Swift SDK, macros, TraceKit, HTTP instrumentation, FoundationModels, CoreML, MLX, Llama, profilers, Zig bridge/backend, Rust/Python/Android/C++/ROS2 bindings, examples, CI/scripts, docs, and release artifacts.
+- [ ] Identify front-facing APIs exported by modules, macros, public types, public initializers, environment flags, CLI/scripts, bindings, and examples.
+- [ ] Public Swift API and source compatibility review.
+- [ ] Macro expansion behavior and privacy guarantee review.
+- [ ] Zig backend and Swift/Zig FFI correctness review.
+- [ ] Memory leaks, lifetime bugs, ownership issues, and unsafe pointer handling review.
+- [ ] Concurrency, Sendable, actor/task propagation, cancellation, and lifecycle safety review.
+- [ ] Privacy/redaction guarantees across all integration paths.
+- [ ] TraceKit storage/rendering/OTLP correctness review.
+- [ ] Profiler correctness and process lifecycle handling review.
+- [ ] Binding/package drift review across Rust, Python, Android, C++, vendored headers, ROS2, and release artifacts.
+- [ ] Tests, CI, docs, examples, and release readiness review.
+- [ ] Run practical validation and record exact pass/fail/blocker evidence.
+- [ ] Write final findings-first report with severity, line evidence, missing tests, readiness scores, risk matrix, uncertainty, and remediation order.
+
+### Plan
+
+1. Baseline and inventory: record branch/status, read manifest/docs/task notes/scripts, map products/targets/modules/bindings, and list public or developer-facing surfaces.
+2. Parallel review: split broad areas into focused reviewers for Swift API/concurrency, macros, Zig/FFI/memory, privacy/security, TraceKit/profilers, and docs/bindings/release artifacts.
+3. TDD audit lens: for each defect, identify the missing failing test, fixture, or validation gate that would have caught it before release.
+4. Verification: run the strongest practical local suite (`swift package describe --type json`, Swift tests or targeted filters, `Scripts/validate.sh --quick`, Zig, Rust, Python, C++/ROS2, Android/Kotlin where tooling exists) and record blockers exactly.
+5. Report: produce findings first by P0/P1/P2/P3, with file/line evidence, why it matters, repro/reasoning, missing test, suggested fix direction, readiness scores, subsystem risk matrix, uncertainty, and remediation order.
+
+### Review
+
+- In progress. This is a read-only audit except for this task-note checklist.
+
 ## Deep Audit Remediation - 2026-05-17
 
 - [x] Preserve existing robotics/transport worktree changes and include them in the final commit as requested.

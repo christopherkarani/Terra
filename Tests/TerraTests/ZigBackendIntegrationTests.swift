@@ -2,9 +2,37 @@
 
 import Testing
 import CTerraBridge
+import Dispatch
 import Foundation
 import OpenTelemetryApi
 @testable import TerraCore
+
+private final class LockedPointerBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pointer: OpaquePointer?
+
+    func store(_ pointer: OpaquePointer?) {
+        lock.lock()
+        self.pointer = pointer
+        lock.unlock()
+    }
+
+    func load() -> OpaquePointer? {
+        lock.lock()
+        defer { lock.unlock() }
+        return pointer
+    }
+}
+
+private func isSuccess(_ result: DispatchTimeoutResult) -> Bool {
+    if case .success = result { return true }
+    return false
+}
+
+private func isTimedOut(_ result: DispatchTimeoutResult) -> Bool {
+    if case .timedOut = result { return true }
+    return false
+}
 
 @Suite("Zig Backend Integration", .serialized)
 struct ZigBackendIntegrationTests {
@@ -76,6 +104,43 @@ struct ZigBackendIntegrationTests {
         let postShutdownSpan = tracer.spanBuilder(spanName: Terra.SpanNames.inference).startSpan()
         #expect(postShutdownSpan.isRecording == false)
         postShutdownSpan.end()
+    }
+
+    @Test func zigInstanceRefBlocksShutdownUntilInFlightUseFinishes() {
+        let inst = terra_init(nil)!
+        let ref = TerraZigInstanceRef(instance: inst)
+        let entered = DispatchSemaphore(value: 0)
+        let releaseUse = DispatchSemaphore(value: 0)
+        let useFinished = DispatchSemaphore(value: 0)
+        let shutdownFinished = DispatchSemaphore(value: 0)
+        let inFlightPointer = LockedPointerBox()
+        let shutdownPointer = LockedPointerBox()
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = ref.withInstance { current in
+                inFlightPointer.store(current)
+                entered.signal()
+                _ = releaseUse.wait(timeout: .now() + 2)
+                return true
+            }
+            useFinished.signal()
+        }
+
+        #expect(isSuccess(entered.wait(timeout: .now() + 1)))
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            shutdownPointer.store(ref.takeForShutdown())
+            shutdownFinished.signal()
+        }
+
+        #expect(isTimedOut(shutdownFinished.wait(timeout: .now() + 0.05)))
+        releaseUse.signal()
+        #expect(isSuccess(useFinished.wait(timeout: .now() + 1)))
+        #expect(isSuccess(shutdownFinished.wait(timeout: .now() + 1)))
+        #expect(inFlightPointer.load() == inst)
+        #expect(shutdownPointer.load() == inst)
+
+        _ = terra_shutdown(inst)
     }
 
     @Test func inferenceSpanLifecycle() {

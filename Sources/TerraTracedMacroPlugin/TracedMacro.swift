@@ -141,13 +141,9 @@ public struct TracedMacro: BodyMacro {
   }
 
   private static func typedThrowsType(from throwsClause: ThrowsClauseSyntax?) -> String? {
-    guard let throwsClause else { return nil }
-    let text = throwsClause.description.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard text.hasPrefix("throws("), text.hasSuffix(")") else { return nil }
-    let start = text.index(text.startIndex, offsetBy: "throws(".count)
-    let end = text.index(before: text.endIndex)
-    let type = text[start..<end].trimmingCharacters(in: .whitespacesAndNewlines)
-    return type.isEmpty ? nil : type
+    guard let type = throwsClause?.type else { return nil }
+    let text = type.description.trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty ? nil : text
   }
 
   private static func makeBaseCallExpression(

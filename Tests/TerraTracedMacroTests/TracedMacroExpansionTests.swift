@@ -729,6 +729,31 @@ func macroPreservesTypedThrows() {
   )
 }
 
+@Test("Macro preserves typed throws with spaced syntax")
+func macroPreservesSpacedTypedThrows() {
+  assertMacroExpansion(
+    """
+    @Traced(model: "gpt-4")
+    func generate(prompt: String) async throws (MyError) -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    expandedSource: """
+    func generate(prompt: String) async throws (MyError) -> String {
+      do {
+        return try await Terra.infer("gpt-4", prompt: prompt).run { __terraTrace in
+          _ = __terraTrace
+          try await doGenerate(prompt)
+        }
+      } catch {
+        throw error as! MyError
+      }
+    }
+    """,
+    macros: testMacros
+  )
+}
+
 @Test("Macro requires async function")
 func macroRequiresAsyncFunction() {
   assertMacroExpansion(
