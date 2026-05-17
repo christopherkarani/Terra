@@ -6,7 +6,7 @@
 - [x] Fix typed-throws macro parsing to use `ThrowsClauseSyntax.type` instead of string matching.
 - [x] Add focused regression coverage for the lifecycle lock and typed throws whitespace.
 - [x] Run targeted Swift validation plus practical repo validation.
-- [ ] Commit, push, and merge `codex/assess-terra-for-drones` into `main`.
+- [x] Commit, push, and merge `codex/assess-terra-for-drones` into `main`.
 
 ### Plan
 
