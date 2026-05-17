@@ -302,6 +302,27 @@ struct TraceKitTopLevelTests {
     #expect(result.totalFileCount == 2)
   }
 
+  @Test("TraceLoader default maxFiles bounds newest files")
+  func loaderDefaultMaxFilesIsBounded() throws {
+    let dir = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+
+    for index in 0...TraceLoader.defaultMaxFiles {
+      let traceId = TraceId()
+      let name = index == 0 ? "oldest" : "trace-\(index)"
+      try writeSpanFile(spans: [makeSpan(name: name, traceId: traceId)], to: dir.appendingPathComponent("\(index)"))
+    }
+
+    let loader = TraceLoader(locator: TraceFileLocator(tracesDirectoryURL: dir))
+    let result = try loader.loadTracesWithFailures()
+
+    #expect(result.loadedFileCount == TraceLoader.defaultMaxFiles)
+    #expect(result.totalFileCount == TraceLoader.defaultMaxFiles + 1)
+    #expect(!result.traces.contains { $0.spans.first?.name == "oldest" })
+  }
+
   @Test("TraceLoader returns empty for non-existent directory")
   func loaderReturnsEmptyForMissingDir() throws {
     let dir = FileManager.default.temporaryDirectory

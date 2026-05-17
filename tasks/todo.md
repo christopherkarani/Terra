@@ -1,5 +1,63 @@
 # Terra Codebase Audit And DX Review
 
+## Push Audit Remediation To Main - 2026-05-17
+
+- [x] Check current branch, remote `main`, and dirty worktree before landing.
+- [x] Commit the verified remediation changes.
+- [x] Push the commit to `origin/main`.
+- [x] Record pushed revision and final status.
+
+### Review
+
+- Landing target is `origin/main`; local `main` is checked out in `.tmp/release-032-clean`, so the remediation commit is pushed directly from the current branch to `main`.
+- Final pushed revision is recorded in the assistant handoff after the remote accepts the push.
+
+## Fix All Identified Audit Bugs - 2026-05-17
+
+- [x] Re-check current worktree and distinguish still-live bugs from already-remediated/false-positive audit items.
+- [x] Add focused regression tests for privacy write sites, TraceKit redaction/display, Zig C ABI boundaries, macro typed throws/rethrows, lifecycle cleanup, and test-isolation deadlock.
+- [x] Fix or prove addressed: Swift/Zig shutdown/native lifetime race.
+- [x] Fix Zig status-description 256-byte trap and unsafe test drain ABI.
+- [x] Fix manual/fluent attribute privacy enforcement and HTTP URL path redaction.
+- [x] Fix TraceKit raw snapshot/display/error privacy and in-flight timestamp handling.
+- [x] Fix macro typed-throws/rethrows behavior or reject unsupported cases with diagnostics.
+- [x] Fix session sampling retention, streaming observer state bounds, Espresso log buffer/stop semantics, TraceStore zero cap/default loading, profiler schema/docs drift, and stale docs.
+- [x] Run targeted tests first, then full practical validation.
+- [x] Record final verification and remaining external blockers.
+
+### Plan
+
+1. Write targeted tests around every audited defect before changing behavior, using the narrowest suite that proves each bug.
+2. Fix native/FFI and privacy bugs first because they are release blockers.
+3. Fix macro/source-compatibility and lifecycle/process bugs next.
+4. Clean docs/schema drift and validation coverage last.
+5. Run focused Swift/Zig tests, then `swift test`, `zig build test --summary all`, `Scripts/validate.sh --quick`, binding validation, Rust/Python/C++/website checks as practical.
+
+### Review
+
+- Fixed privacy write-site gaps in Terra manual/fluent/root/Zig bridge attribute paths. Sensitive user-supplied prompt/body/error/URL-like string attributes are now dropped or hashed according to the active privacy policy, while already-derived digest attributes are preserved as 64-character hashes.
+- Hardened HTTP instrumentation URL telemetry so `http.url` / `url.full` no longer retain request paths, query strings, credentials, or fragments.
+- Hardened TraceKit ingestion and rendering: snapshots are sanitized at ingest, content-bearing span names/status/events/links are redacted at display boundaries, in-flight spans render by start time with `in-flight` duration, zero-cap stores retain no spans, and default trace loading is bounded.
+- Fixed macro edge cases by detecting the `subject` prompt alias, rejecting typed throws and `rethrows` with diagnostics, and exporting `TerraCore` from the macro module so macro-only imports compile.
+- Fixed lifecycle and memory risks: Terra sessions cancel sampling and observers on deinit, memory sampling no longer keeps the actor alive after references drop, HTTP streaming observer state is bounded, Espresso log capture keeps a bounded tail, and test isolation waits are bounded with a configurable timeout.
+- Fixed Zig/FFI issues: status descriptions now clamp safely and clear old descriptions, the test drain ABI uses a stable extern record instead of copying raw internal structs, Swift test capture uses the stable C record, and public/vendored headers match.
+- Updated telemetry schema/docs for profiler keys and host-only URL examples.
+- Verification completed:
+  - `zig build test --summary all --cache-dir /tmp/terra-zig-cache --global-cache-dir /tmp/terra-zig-global-cache`: passed, 201/201 Zig tests.
+  - `swift package describe --type json`: passed.
+  - `cmp -s zig-core/include/terra.h Sources/CTerraBridge/include/terra.h`: passed.
+  - `python3 Scripts/validate-telemetry-schema.py Docs/telemetry-schema.json`: passed, 184 entries.
+  - `Scripts/validate.sh --quick`: passed repository hygiene, telemetry schema, binding conformance, Python bindings, Zig, C++, Rust, and SwiftPM manifest; Android Gradle is skipped in quick mode; ROS runtime checks skipped because `colcon` is not installed.
+  - Focused Swift suites passed: `TraceKitTests`, `TraceStoreTests`, `StreamRendererTests`, `TelemetrySchemaValidatorTests`, `TerraPrivacyE2ETests`, `TerraRedactionPolicyTests`, `HTTPAIInstrumentationTests`, `HTTPIntegrationTests`, `TerraTracedMacroTests`, `TerraManualTracingTests`, `TerraComposableAPITests`, `TerraFluentAPITests`, `TerraSessionTests`, `EspressoLogParserTests`, `TelemetryAttributeConvertibleTests`, `TerraMetalProfilerAttributeTests`, and `ZigBackendIntegrationTests`.
+  - `git diff --check`: passed.
+- Full `swift test` status:
+  - A default full run first exposed and reproduced a real regression in digest redaction; that regression was fixed and `TerraRedactionPolicyTests` passed afterward.
+  - Two full-package attempts then stalled during the Swift Testing phase even with `--parallel --num-workers 1`; both were stopped to avoid leaving hung test processes. The XCTest phase reached/passed the changed Terra-owned XCTest suites before the Swift Testing runner stalled.
+- Remaining blockers/uncertainty:
+  - Full-package Swift Testing still needs follow-up runner isolation work; this appears to be a global-state/test-harness interaction rather than a targeted fix regression, but it is not a full-suite pass.
+  - Android Gradle validation was not run in quick mode.
+  - ROS runtime validation was skipped because `colcon` is unavailable.
+
 ## Review Follow-up Fixes And Main Merge - 2026-05-17
 
 - [x] Fix Swift/Zig instance reference locking so shutdown cannot free the native instance during an in-flight native call.
@@ -25,20 +83,20 @@
 
 - [x] Establish baseline git status and preserve user-owned worktree changes.
 - [x] Read repo instructions, memory, lessons, Package.swift, README, docs, scripts, examples, bindings, and release/task notes before conclusions.
-- [ ] Inventory all major surfaces: Swift SDK, macros, TraceKit, HTTP instrumentation, FoundationModels, CoreML, MLX, Llama, profilers, Zig bridge/backend, Rust/Python/Android/C++/ROS2 bindings, examples, CI/scripts, docs, and release artifacts.
-- [ ] Identify front-facing APIs exported by modules, macros, public types, public initializers, environment flags, CLI/scripts, bindings, and examples.
-- [ ] Public Swift API and source compatibility review.
-- [ ] Macro expansion behavior and privacy guarantee review.
-- [ ] Zig backend and Swift/Zig FFI correctness review.
-- [ ] Memory leaks, lifetime bugs, ownership issues, and unsafe pointer handling review.
-- [ ] Concurrency, Sendable, actor/task propagation, cancellation, and lifecycle safety review.
-- [ ] Privacy/redaction guarantees across all integration paths.
-- [ ] TraceKit storage/rendering/OTLP correctness review.
-- [ ] Profiler correctness and process lifecycle handling review.
-- [ ] Binding/package drift review across Rust, Python, Android, C++, vendored headers, ROS2, and release artifacts.
-- [ ] Tests, CI, docs, examples, and release readiness review.
-- [ ] Run practical validation and record exact pass/fail/blocker evidence.
-- [ ] Write final findings-first report with severity, line evidence, missing tests, readiness scores, risk matrix, uncertainty, and remediation order.
+- [x] Inventory all major surfaces: Swift SDK, macros, TraceKit, HTTP instrumentation, FoundationModels, CoreML, MLX, Llama, profilers, Zig bridge/backend, Rust/Python/Android/C++/ROS2 bindings, examples, CI/scripts, docs, and release artifacts.
+- [x] Identify front-facing APIs exported by modules, macros, public types, public initializers, environment flags, CLI/scripts, bindings, and examples.
+- [x] Public Swift API and source compatibility review.
+- [x] Macro expansion behavior and privacy guarantee review.
+- [x] Zig backend and Swift/Zig FFI correctness review.
+- [x] Memory leaks, lifetime bugs, ownership issues, and unsafe pointer handling review.
+- [x] Concurrency, Sendable, actor/task propagation, cancellation, and lifecycle safety review.
+- [x] Privacy/redaction guarantees across all integration paths.
+- [x] TraceKit storage/rendering/OTLP correctness review.
+- [x] Profiler correctness and process lifecycle handling review.
+- [x] Binding/package drift review across Rust, Python, Android, C++, vendored headers, ROS2, and release artifacts.
+- [x] Tests, CI, docs, examples, and release readiness review.
+- [x] Run practical validation and record exact pass/fail/blocker evidence.
+- [x] Write final findings-first report with severity, line evidence, missing tests, readiness scores, risk matrix, uncertainty, and remediation order.
 
 ### Plan
 
@@ -50,7 +108,13 @@
 
 ### Review
 
-- In progress. This is a read-only audit except for this task-note checklist.
+- Audit-only review completed; no source remediation was authorized or performed. The only intentional repo edit is this task-note checklist/update.
+- Current branch/status baseline: `codex/assess-terra-for-drones...origin/codex/assess-terra-for-drones`, with `tasks/todo.md` modified by this audit note.
+- Root `AGENTS.md` and `CLAUDE.md` are not checked into this repo; the active repo instructions were provided in the user message. Project skill guidance was read from `.codex/skills/terra-sdk/SKILL.md`.
+- Six focused read-only reviewer agents covered Swift API, macros, Zig/FFI, privacy/security, memory/lifecycle, and TraceKit/profilers; docs/bindings/release drift was reviewed locally.
+- Main release blockers found: Swift/Zig shutdown can race in-flight native calls, Zig status descriptions can trap at 256 bytes, `terra_test_drain_spans` has an ABI-unsafe buffer contract used by an under-allocating Swift helper, manual/custom attribute APIs bypass privacy policy, `@Traced` weakens typed-throws/rethrows guarantees, and full `swift test` currently hangs in the test isolation semaphore.
+- Verification evidence: `swift package describe --type json` passed; `bash Scripts/validate.sh --quick` passed with ROS2 `colcon` skipped and Android skipped by quick mode; standalone `zig build test --summary all` passed 200/200; Rust `cargo test -- --test-threads=1` passed 35 tests; Python compile/unit tests passed 4 tests; website `npm audit --audit-level=high` found 0 vulnerabilities; `git diff --check` passed.
+- Verification blockers: full `swift test` built and passed the XCTest portion (111 tests) but was killed after a process sample showed `swiftpm-testing-helper` blocked in `Terra.lockTestingIsolation()` at `Sources/Terra/Terra+OpenTelemetry.swift:700`; local Android checks are blocked by missing Java runtime.
 
 ## Deep Audit Remediation - 2026-05-17
 

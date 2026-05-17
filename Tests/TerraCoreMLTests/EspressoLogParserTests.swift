@@ -84,6 +84,16 @@ struct EspressoLogParserTests {
     #expect(summary.averageWorkUnitEfficiency == 0)
   }
 
+  @Test("capture buffer keeps bounded tail")
+  func captureBufferKeepsBoundedTail() {
+    let output = EspressoLogCapture._testBufferedOutput(
+      chunks: [Data("abcdef".utf8), Data("ghijkl".utf8)],
+      maxBytes: 5
+    )
+
+    #expect(output == "hijkl")
+  }
+
   @Test("terminate force-kills processes that ignore SIGTERM")
   func terminateForceKillsUnresponsiveProcess() throws {
     let process = Process()

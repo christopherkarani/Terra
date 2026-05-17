@@ -85,16 +85,32 @@ public enum EspressoLogCapture {
     kill(proc.processIdentifier, SIGKILL)
     proc.waitUntilExit()
   }
+
+  package static func _testBufferedOutput(chunks: [Data], maxBytes: Int) -> String {
+    let buffer = EspressoPipeOutputBuffer(maxBytes: maxBytes)
+    for chunk in chunks {
+      buffer.append(chunk)
+    }
+    return buffer.string()
+  }
 }
 
 private final class EspressoPipeOutputBuffer: @unchecked Sendable {
+  private let maxBytes: Int
   private let lock = NSLock()
   private var data = Data()
+
+  init(maxBytes: Int = 1_048_576) {
+    self.maxBytes = max(1, maxBytes)
+  }
 
   func append(_ chunk: Data) {
     guard !chunk.isEmpty else { return }
     lock.lock()
     data.append(chunk)
+    if data.count > maxBytes {
+      data.removeFirst(data.count - maxBytes)
+    }
     lock.unlock()
   }
 

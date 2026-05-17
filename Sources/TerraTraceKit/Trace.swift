@@ -87,7 +87,7 @@ public struct Trace {
     endTime = end
     duration = end.timeIntervalSince(start)
     self.hasError = hasError
-    displayName = roots.first?.name ?? ordered.first?.name ?? traceID.hexString
+    displayName = TelemetryPrivacy.displaySpanName(roots.first?.name ?? ordered.first?.name ?? traceID.hexString)
   }
 }
 

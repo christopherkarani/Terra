@@ -73,8 +73,8 @@ final class HTTPIntegrationTests: XCTestCase {
     let span = try XCTUnwrap(spans.first(where: { $0.name.contains("chat") }))
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestModel]?.description, "request-model")
     XCTAssertEqual(span.attributes[Terra.Keys.GenAI.requestMaxTokens]?.description, "42")
-    XCTAssertEqual(span.attributes["http.url"]?.description, "https://example.ai/v1/chat/completions")
-    XCTAssertEqual(span.attributes["url.full"]?.description, "https://example.ai/v1/chat/completions")
+    XCTAssertEqual(span.attributes["http.url"]?.description, "https://example.ai")
+    XCTAssertEqual(span.attributes["url.full"]?.description, "https://example.ai")
     XCTAssertFalse(span.attributes.values.contains { $0.description.contains("secret-token") })
   }
 

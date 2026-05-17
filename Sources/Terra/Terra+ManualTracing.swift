@@ -786,10 +786,16 @@ extension Terra {
       case .bool(let value):
         telemetryValue = .bool(value)
       }
+      guard let sanitizedValue = Terra.privacySanitizedAttribute(key: key, value: telemetryValue) else {
+        lock.lock()
+        attributes.removeValue(forKey: key)
+        lock.unlock()
+        return
+      }
       lock.lock()
-      attributes[key] = telemetryValue
+      attributes[key] = sanitizedValue
       lock.unlock()
-      span.setAttribute(key: key, value: telemetryValue)
+      span.setAttribute(key: key, value: sanitizedValue)
       let scalar: TraceScalar
       switch value {
       case .string(let value): scalar = .string(value)
@@ -1214,7 +1220,7 @@ extension Terra {
       // Force a root span even when the OTel context provider has an ambient span.
       spanBuilder.setNoParent()
     }
-    var enrichedAttributes = attributes
+    var enrichedAttributes = Terra.privacySanitizedAttributes(attributes)
     if rootStrategy == .detachFromAmbient {
       enrichedAttributes["terra.workflow.root.detached_from_ambient"] = .bool(true)
     }

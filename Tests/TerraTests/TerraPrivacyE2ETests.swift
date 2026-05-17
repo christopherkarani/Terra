@@ -65,4 +65,39 @@ final class TerraPrivacyE2ETests: XCTestCase {
       "Expected promptLength attribute with lengthOnly redaction"
     )
   }
+
+  func testManualSensitiveAttribute_isDroppedUnderRedactedPrivacy() async throws {
+    let secretPrompt = "manual-secret-prompt-content"
+
+    let handle = Terra.startSpan(name: "manual.privacy")
+    handle.attribute(Terra.Keys.GenAI.promptContent, secretPrompt)
+    handle.end()
+
+    let span = try XCTUnwrap(support.finishedSpans().first)
+    XCTAssertNil(span.attributes[Terra.Keys.GenAI.promptContent])
+    XCTAssertFalse(
+      span.attributes.values.contains { $0.description.contains(secretPrompt) },
+      "Manual sensitive attribute leaked raw content"
+    )
+  }
+
+  func testManualSensitiveAttribute_isHashedUnderCapturingPrivacy() async throws {
+    support.tearDown()
+    support = TerraTestSupport()
+    Terra.install(.init(
+      privacy: .init(contentPolicy: .always, redaction: .hashHMACSHA256),
+      tracerProvider: support.tracerProvider,
+      registerProvidersAsGlobal: false
+    ))
+
+    let secretPrompt = "manual-secret-prompt-content"
+    let handle = Terra.startSpan(name: "manual.privacy")
+    handle.attribute(Terra.Keys.GenAI.promptContent, secretPrompt)
+    handle.end()
+
+    let span = try XCTUnwrap(support.finishedSpans().first)
+    let value = try XCTUnwrap(span.attributes[Terra.Keys.GenAI.promptContent])
+    XCTAssertFalse(value.description.contains(secretPrompt))
+    XCTAssertTrue(value.description.hasPrefix("hmac-sha256:") || value.description.hasPrefix("sha256:"))
+  }
 }

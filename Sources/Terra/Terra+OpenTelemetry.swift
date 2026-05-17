@@ -698,7 +698,13 @@ extension Terra {
   private static let testingIsolationLock = DispatchSemaphore(value: 1)
 
   package static func lockTestingIsolation() {
-    testingIsolationLock.wait()
+    let timeoutSeconds = ProcessInfo.processInfo.environment["TERRA_TEST_ISOLATION_TIMEOUT_SECONDS"]
+      .flatMap(Double.init) ?? 300
+    let timeoutMilliseconds = max(1, Int(timeoutSeconds * 1_000))
+    let deadline = DispatchTime.now() + .milliseconds(timeoutMilliseconds)
+    guard testingIsolationLock.wait(timeout: deadline) == .success else {
+      preconditionFailure("Timed out waiting for Terra test isolation lock after \(timeoutSeconds)s")
+    }
   }
 
   package static func unlockTestingIsolation() {

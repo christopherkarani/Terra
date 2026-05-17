@@ -1,4 +1,4 @@
-import TerraCore
+@_exported import TerraCore
 
 /// Wraps the function body in a traced Terra operation using `.run { ... }`.
 ///

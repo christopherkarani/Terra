@@ -13,12 +13,12 @@ public struct StreamRenderer: Sendable {
 
     return ordered.map { span in
       let timestamp = formatTimestamp(nanos: endTimeUnixNano(span))
-      let duration = formatDuration(nanos: durationUnixNano(span))
+      let duration = formatDuration(span)
       let traceShort = shortID(span.traceID)
       let spanShort = shortID(span.spanID)
       let attributes = renderAttributes(span)
 
-      var parts: [String] = [timestamp, duration, span.name, traceShort, spanShort]
+      var parts: [String] = [timestamp, duration, TelemetryPrivacy.displaySpanName(span.name), traceShort, spanShort]
       parts.append(contentsOf: attributes)
       return parts.joined(separator: " ")
     }
@@ -126,11 +126,11 @@ public struct TreeRenderer: Sendable {
 }
 
 private func treeLine(_ span: SpanRecord) -> String {
-  let duration = formatDuration(nanos: durationUnixNano(span))
+  let duration = formatDuration(span)
   let spanShort = shortID(span.spanID)
   let attributes = renderAttributes(span)
 
-  var parts: [String] = [span.name, duration, spanShort]
+  var parts: [String] = [TelemetryPrivacy.displaySpanName(span.name), duration, spanShort]
   parts.append(contentsOf: attributes)
   return parts.joined(separator: " ")
 }
@@ -191,10 +191,11 @@ private func startTimeUnixNano(_ span: SpanRecord) -> UInt64 {
 }
 
 private func endTimeUnixNano(_ span: SpanRecord) -> UInt64 {
-  span.endTimeUnixNano
+  span.endTimeUnixNano == 0 ? span.startTimeUnixNano : span.endTimeUnixNano
 }
 
 private func durationUnixNano(_ span: SpanRecord) -> UInt64 {
+  guard span.endTimeUnixNano != 0 else { return 0 }
   let start = startTimeUnixNano(span)
   let end = endTimeUnixNano(span)
   return end >= start ? (end - start) : 0
@@ -210,6 +211,10 @@ private func formatTimestamp(nanos: UInt64) -> String {
 private func formatDuration(nanos: UInt64) -> String {
   let ms = Double(nanos) / 1_000_000
   return String(format: "%.3fms", ms)
+}
+
+private func formatDuration(_ span: SpanRecord) -> String {
+  span.endTimeUnixNano == 0 ? "in-flight" : formatDuration(nanos: durationUnixNano(span))
 }
 
 private let sharedTimestampFormatter: ISO8601DateFormatter = {

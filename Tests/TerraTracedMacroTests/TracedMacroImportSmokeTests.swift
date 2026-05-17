@@ -1,5 +1,4 @@
 import Testing
-import TerraCore
 import TerraTracedMacro
 
 @Suite("TracedMacro import smoke", .serialized)

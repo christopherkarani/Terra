@@ -22,6 +22,7 @@ final class HTTPAIStreamingObserver: @unchecked Sendable {
 
   private let lock = NSLock()
   private var states: [String: State] = [:]
+  private let maxActiveStreamStates = 1_024
 
   private let streamSpanIDProperty = "io.opentelemetry.terra.http.span_id"
   private let streamEnabledProperty = "io.opentelemetry.terra.http.stream_enabled"
@@ -55,6 +56,7 @@ final class HTTPAIStreamingObserver: @unchecked Sendable {
   func register(request: URLRequest, span: any Span, parsedRequest: ParsedRequest?) {
     guard parsedRequest?.stream == true, let spanID = spanID(for: request) else { return }
     lock.lock()
+    evictOldestStateIfNeededLocked(inserting: spanID)
     states[spanID] = State(span: span, request: request, startedAt: .now)
     lock.unlock()
   }
@@ -233,6 +235,12 @@ final class HTTPAIStreamingObserver: @unchecked Sendable {
 
   private func spanID(for request: URLRequest) -> String? {
     URLProtocol.property(forKey: streamSpanIDProperty, in: request) as? String
+  }
+
+  private func evictOldestStateIfNeededLocked(inserting spanID: String) {
+    guard states[spanID] == nil, states.count >= maxActiveStreamStates else { return }
+    guard let oldest = states.min(by: { $0.value.startedAt < $1.value.startedAt })?.key else { return }
+    states.removeValue(forKey: oldest)
   }
 
   private func isStreaming(request: URLRequest) -> Bool {

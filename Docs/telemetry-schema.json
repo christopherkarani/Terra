@@ -465,6 +465,46 @@
       "description": "Estimated GPU occupancy percentage."
     },
     {
+      "key": "metal.memory_in_flight_mb",
+      "type": "double",
+      "unit": "MB",
+      "owner_module": "TerraMetalProfiler",
+      "stability": "deprecated",
+      "viewer_behavior": "legacy_hardware_signal",
+      "examples": [128.0],
+      "description": "Legacy Metal memory in flight in megabytes."
+    },
+    {
+      "key": "metal.compute_time_ms",
+      "type": "double",
+      "unit": "ms",
+      "owner_module": "TerraMetalProfiler",
+      "stability": "deprecated",
+      "viewer_behavior": "legacy_hardware_signal",
+      "examples": [3.2],
+      "description": "Legacy Metal compute duration in milliseconds."
+    },
+    {
+      "key": "process.memory.resident_bytes",
+      "type": "int",
+      "unit": "bytes",
+      "owner_module": "TerraSystemProfiler",
+      "stability": "deprecated",
+      "viewer_behavior": "legacy_hardware_signal",
+      "examples": [104857600],
+      "description": "Legacy resident memory in bytes. Prefer canonical terra.hw.rss_mb where possible."
+    },
+    {
+      "key": "process.memory.resident_mb",
+      "type": "double",
+      "unit": "MB",
+      "owner_module": "TerraSystemProfiler",
+      "stability": "deprecated",
+      "viewer_behavior": "legacy_hardware_signal",
+      "examples": [100.0],
+      "description": "Legacy resident memory in megabytes. Prefer canonical terra.hw.rss_mb where possible."
+    },
+    {
       "key": "process.memory.resident_delta_mb",
       "type": "double",
       "unit": "MB",
@@ -1161,8 +1201,8 @@
       "owner_module": "TerraHTTPInstrument",
       "stability": "stable",
       "viewer_behavior": "privacy_sensitive_detail",
-      "examples": ["https://provider.example/v1/chat/completions"],
-      "description": "Legacy HTTP semantic-convention URL. Redacted in viewers because imported spans can include query credentials."
+      "examples": ["https://provider.example"],
+      "description": "Legacy HTTP semantic-convention URL. Terra exporters strip path, query, user info, and fragment; viewers still redact imported spans because external producers can include credentials."
     },
     {
       "key": "url.full",
@@ -1171,8 +1211,8 @@
       "owner_module": "TerraHTTPInstrument",
       "stability": "stable",
       "viewer_behavior": "privacy_sensitive_detail",
-      "examples": ["https://provider.example/v1/chat/completions"],
-      "description": "Stable HTTP semantic-convention full URL. Redacted in viewers because imported spans can include query credentials."
+      "examples": ["https://provider.example"],
+      "description": "Stable HTTP semantic-convention full URL. Terra exporters strip path, query, user info, and fragment; viewers still redact imported spans because external producers can include credentials."
     },
     {
       "key": "terra.mlx.device",

@@ -12,7 +12,7 @@ struct TerraTracedMacroPluginEntry: CompilerPlugin {
 }
 
 public struct TracedMacro: BodyMacro {
-  static let modelPromptParamNames: Set<String> = ["prompt", "input", "query", "text", "message"]
+  static let modelPromptParamNames: Set<String> = ["prompt", "input", "query", "text", "message", "subject"]
   static let safetySubjectParamNames: Set<String> = ["subject", "prompt", "input", "query", "text", "message"]
   static let maxTokensParamNames: Set<String> = ["maxTokens", "maxOutputTokens", "max_tokens"]
   static let toolCallIDParamNames: Set<String> = ["callID", "callId", "toolCallID", "toolCallId"]
@@ -38,7 +38,14 @@ public struct TracedMacro: BodyMacro {
     guard isAsync else {
       throw MacroError.requiresAsyncFunction
     }
-    let isThrows = funcDecl.signature.effectSpecifiers?.throwsClause != nil
+    let throwsClause = funcDecl.signature.effectSpecifiers?.throwsClause
+    if throwsClause?.type != nil {
+      throw MacroError.unsupportedTypedThrows
+    }
+    if throwsClause?.throwsSpecifier.text == "rethrows" {
+      throw MacroError.unsupportedRethrows
+    }
+    let isThrows = throwsClause != nil
 
     let params = funcDecl.signature.parameterClause.parameters
     let detected = DetectedParameters(
@@ -78,8 +85,6 @@ public struct TracedMacro: BodyMacro {
     let awaitKeyword = "await "
     let originalStatements = body.statements.map { "\($0)" }.joined(separator: "\n")
     let traceName = "__terraTrace"
-    let typedThrowsType = typedThrowsType(from: funcDecl.signature.effectSpecifiers?.throwsClause)
-
     let invocation: String
     if hasNonVoidReturn {
       invocation = """
@@ -97,20 +102,7 @@ public struct TracedMacro: BodyMacro {
         """
     }
 
-    let wrappedCode: CodeBlockItemSyntax
-    if let typedThrowsType {
-      wrappedCode = """
-        do {
-          \(raw: invocation)
-        } catch {
-          throw error as! \(raw: typedThrowsType)
-        }
-        """
-    } else {
-      wrappedCode = "\(raw: invocation)"
-    }
-
-    return [wrappedCode]
+    return ["\(raw: invocation)"]
   }
 
   private enum Operation {
@@ -138,12 +130,6 @@ public struct TracedMacro: BodyMacro {
       return .safety
     }
     throw MacroError.missingOperationArgument
-  }
-
-  private static func typedThrowsType(from throwsClause: ThrowsClauseSyntax?) -> String? {
-    guard let type = throwsClause?.type else { return nil }
-    let text = type.description.trimmingCharacters(in: .whitespacesAndNewlines)
-    return text.isEmpty ? nil : text
   }
 
   private static func makeBaseCallExpression(
@@ -527,6 +513,8 @@ public struct TracedMacro: BodyMacro {
     case missingBody
     case requiresAsyncFunction
     case nonLiteralStreaming
+    case unsupportedTypedThrows
+    case unsupportedRethrows
 
     var description: String {
       switch self {
@@ -540,6 +528,10 @@ public struct TracedMacro: BodyMacro {
         return "@Traced currently supports async functions only because it wraps Terra traced async APIs"
       case .nonLiteralStreaming:
         return "@Traced streaming: must be the literal true or false. Use an explicit Terra.stream/Terra.infer branch for runtime streaming decisions."
+      case .unsupportedTypedThrows:
+        return "@Traced does not support typed throws yet. Use untyped throws or explicit Terra tracing until the macro can preserve typed error contracts without force-casts."
+      case .unsupportedRethrows:
+        return "@Traced does not support rethrows because the generated tracing closure is async and may throw independently."
       }
     }
   }

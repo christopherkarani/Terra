@@ -52,7 +52,7 @@ extension Terra {
     }
 
     func setAttributes(_ attributes: [String: AttributeValue]) {
-      underlyingSpan.setAttributes(attributes)
+      underlyingSpan.setAttributes(Terra.privacySanitizedAttributes(attributes))
     }
   }
 }

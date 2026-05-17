@@ -85,6 +85,50 @@ final class StreamRendererTests: XCTestCase {
     XCTAssertTrue(output.contains("terra.safety.subject.sha256=[redacted: privacy-sensitive]"))
     XCTAssertTrue(output.contains("gen_ai.request.model=gpt-test"))
   }
+
+  func testStreamRendererRedactsContentBearingSpanNames() throws {
+    let traceID = try XCTUnwrap(TraceID(hex: OTLPTestFixtures.traceIDHex))
+    let spanID = try XCTUnwrap(SpanID(hex: OTLPTestFixtures.parentSpanIDHex))
+    let span = SpanRecord(
+      traceID: traceID,
+      spanID: spanID,
+      parentSpanID: nil,
+      name: "Summarize my private notes",
+      kind: .internal,
+      status: .unset,
+      startTimeUnixNano: 10,
+      endTimeUnixNano: 20,
+      attributes: Attributes([]),
+      resource: Resource(attributes: Attributes([]))
+    )
+
+    let output = StreamRenderer().render(spans: [span]).joined(separator: "\n")
+
+    XCTAssertFalse(output.contains("Summarize my private notes"))
+    XCTAssertTrue(output.contains(TelemetryPrivacy.redactedValue))
+  }
+
+  func testStreamRendererUsesStartTimeForInFlightSpans() throws {
+    let traceID = try XCTUnwrap(TraceID(hex: OTLPTestFixtures.traceIDHex))
+    let spanID = try XCTUnwrap(SpanID(hex: OTLPTestFixtures.parentSpanIDHex))
+    let span = SpanRecord(
+      traceID: traceID,
+      spanID: spanID,
+      parentSpanID: nil,
+      name: "gen_ai.inference",
+      kind: .internal,
+      status: .unset,
+      startTimeUnixNano: 1_700_000_000_000_000_000,
+      endTimeUnixNano: 0,
+      attributes: Attributes([]),
+      resource: Resource(attributes: Attributes([]))
+    )
+
+    let output = try XCTUnwrap(StreamRenderer().render(spans: [span]).first)
+
+    XCTAssertFalse(output.hasPrefix("0 "))
+    XCTAssertTrue(output.contains("in-flight"))
+  }
 }
 
 private extension StreamRendererTests {

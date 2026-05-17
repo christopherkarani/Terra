@@ -704,24 +704,20 @@ func macroAvoidsShadowingTraceParameter() {
   )
 }
 
-@Test("Macro preserves typed throws in generated body")
-func macroPreservesTypedThrows() {
+@Test("Model macro detects subject prompt alias")
+func modelMacroDetectsSubjectPromptAlias() {
   assertMacroExpansion(
     """
     @Traced(model: "gpt-4")
-    func generate(prompt: String) async throws(MyError) -> String {
-      try await doGenerate(prompt)
+    func generate(subject: String) async throws -> String {
+      try await doGenerate(subject)
     }
     """,
     expandedSource: """
-    func generate(prompt: String) async throws(MyError) -> String {
-      do {
-        return try await Terra.infer("gpt-4", prompt: prompt).run { __terraTrace in
-          _ = __terraTrace
-          try await doGenerate(prompt)
-        }
-      } catch {
-        throw error as! MyError
+    func generate(subject: String) async throws -> String {
+      return try await Terra.infer("gpt-4", prompt: subject).run { __terraTrace in
+        _ = __terraTrace
+        try await doGenerate(subject)
       }
     }
     """,
@@ -729,8 +725,33 @@ func macroPreservesTypedThrows() {
   )
 }
 
-@Test("Macro preserves typed throws with spaced syntax")
-func macroPreservesSpacedTypedThrows() {
+@Test("Macro rejects typed throws instead of force casting errors")
+func macroRejectsTypedThrows() {
+  assertMacroExpansion(
+    """
+    @Traced(model: "gpt-4")
+    func generate(prompt: String) async throws(MyError) -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    expandedSource: """
+    func generate(prompt: String) async throws(MyError) -> String {
+      try await doGenerate(prompt)
+    }
+    """,
+    diagnostics: [
+      DiagnosticSpec(
+        message: "@Traced does not support typed throws yet. Use untyped throws or explicit Terra tracing until the macro can preserve typed error contracts without force-casts.",
+        line: 1,
+        column: 1
+      )
+    ],
+    macros: testMacros
+  )
+}
+
+@Test("Macro rejects typed throws with spaced syntax")
+func macroRejectsSpacedTypedThrows() {
   assertMacroExpansion(
     """
     @Traced(model: "gpt-4")
@@ -740,16 +761,41 @@ func macroPreservesSpacedTypedThrows() {
     """,
     expandedSource: """
     func generate(prompt: String) async throws (MyError) -> String {
-      do {
-        return try await Terra.infer("gpt-4", prompt: prompt).run { __terraTrace in
-          _ = __terraTrace
-          try await doGenerate(prompt)
-        }
-      } catch {
-        throw error as! MyError
-      }
+      try await doGenerate(prompt)
     }
     """,
+    diagnostics: [
+      DiagnosticSpec(
+        message: "@Traced does not support typed throws yet. Use untyped throws or explicit Terra tracing until the macro can preserve typed error contracts without force-casts.",
+        line: 1,
+        column: 1
+      )
+    ],
+    macros: testMacros
+  )
+}
+
+@Test("Macro rejects rethrows")
+func macroRejectsRethrows() {
+  assertMacroExpansion(
+    """
+    @Traced(model: "gpt-4")
+    func generate(_ body: () throws -> String) async rethrows -> String {
+      try body()
+    }
+    """,
+    expandedSource: """
+    func generate(_ body: () throws -> String) async rethrows -> String {
+      try body()
+    }
+    """,
+    diagnostics: [
+      DiagnosticSpec(
+        message: "@Traced does not support rethrows because the generated tracing closure is async and may throw independently.",
+        line: 1,
+        column: 1
+      )
+    ],
     macros: testMacros
   )
 }

@@ -125,6 +125,38 @@ struct TerraSessionTests {
     #expect(logger.warnings.contains(where: { $0.localizedCaseInsensitiveContains("Simulator") }))
   }
 
+  @Test("TerraSession memory sampler does not retain session after last reference drops")
+  func memorySamplerDoesNotRetainSession() async throws {
+    Terra.lockTestingIsolation()
+    defer { Terra.unlockTestingIsolation() }
+
+    let harness = SessionSpanHarness()
+    defer { harness.tearDown() }
+
+    var configuration = TerraSession.Configuration()
+    configuration.memorySamplingInterval = 0.01
+    configuration.autoStartRuntime = false
+
+    weak var weakSession: TerraSession?
+    var session: TerraSession? = TerraSession(
+      configuration: configuration,
+      dependencies: .init(
+        dashboardDiscovery: MockDashboardDiscovery(endpoint: nil),
+        logger: TestSessionLogger(),
+        isSimulator: false,
+        currentThermalState: { ProcessInfo.ThermalState.nominal },
+        memoryFootprint: { 1_048_576 }
+      )
+    )
+    weakSession = session
+
+    try await session?.start()
+    session = nil
+    try await Task.sleep(nanoseconds: 50_000_000)
+
+    #expect(weakSession == nil)
+  }
+
   @Test("TerraSession records thermal transitions, memory samples, and memory warnings on the session span")
   func sessionRecordsThermalAndMemoryEvents() async throws {
     Terra.lockTestingIsolation()

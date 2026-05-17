@@ -133,7 +133,7 @@ final class TerraZigSpanBuilder: SpanBuilder {
 
   @discardableResult
   func setAttribute(key: String, value: AttributeValue) -> Self {
-    attributes[key] = value
+    attributes[key] = Terra.privacySanitizedAttribute(key: key, value: value)
     return self
   }
 
@@ -409,9 +409,9 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
   // MARK: - Attributes
 
   func setAttribute(key: String, value: AttributeValue?) {
-    guard let value else { return }
+    guard let value, let sanitizedValue = Terra.privacySanitizedAttribute(key: key, value: value) else { return }
     withRecordingSpan {
-      setAttributeLocked(key: key, value: value)
+      setAttributeLocked(key: key, value: sanitizedValue)
     }
   }
 
@@ -448,7 +448,7 @@ final class TerraZigOTelSpan: Span, @unchecked Sendable {
 
   func setAttributes(_ attributes: [String: AttributeValue]) {
     withRecordingSpan {
-      for (key, value) in attributes {
+      for (key, value) in Terra.privacySanitizedAttributes(attributes) {
         setAttributeLocked(key: key, value: value)
       }
     }

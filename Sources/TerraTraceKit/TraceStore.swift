@@ -24,12 +24,17 @@ public actor TraceStore {
 
   public func ingest(_ spans: [SpanRecord]) -> [SpanRecord] {
     guard !spans.isEmpty else { return [] }
+    guard maxSpans > 0 else {
+      clearStorage()
+      return []
+    }
 
     var accepted: [SpanRecord] = []
     accepted.reserveCapacity(spans.count)
 
     var didChange = false
-    for span in spans {
+    for rawSpan in spans {
+      let span = TelemetryPrivacy.sanitizedSpanRecord(rawSpan)
       let key = SpanKey(traceID: span.traceID, spanID: span.spanID)
       if let existing = spansByKey[key] {
         let preferred = preferredSpan(existing: existing, candidate: span)
@@ -92,6 +97,15 @@ public actor TraceStore {
       traceOrder.removeFirst(traceOrderHead)
       traceOrderHead = 0
     }
+  }
+
+  private func clearStorage() {
+    spansByKey.removeAll()
+    spanKeysByTrace.removeAll()
+    traceOrder.removeAll()
+    traceOrderHead = 0
+    cachedSnapshot = nil
+    snapshotDirty = true
   }
 
   private func nextEvictableTraceID() -> TraceID? {
@@ -161,5 +175,5 @@ private func startTimeUnixNano(_ span: SpanRecord) -> UInt64 {
 }
 
 private func endTimeUnixNano(_ span: SpanRecord) -> UInt64 {
-  span.endTimeUnixNano
+  span.endTimeUnixNano == 0 ? span.startTimeUnixNano : span.endTimeUnixNano
 }

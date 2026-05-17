@@ -160,6 +160,16 @@ package actor TerraSession {
     self.notificationCenter = notificationCenter
   }
 
+  deinit {
+    memorySamplingTask?.cancel()
+    if let thermalObserver {
+      notificationCenter.removeObserver(thermalObserver)
+    }
+    if let memoryWarningObserver {
+      notificationCenter.removeObserver(memoryWarningObserver)
+    }
+  }
+
   package func start() async throws {
     guard !isStarted else { return }
 
@@ -451,10 +461,10 @@ package actor TerraSession {
   private func startMemorySamplingIfNeeded() {
     guard let interval = configuration.memorySamplingInterval, interval > 0 else { return }
     memorySamplingTask = Task { [weak self] in
-      guard let self else { return }
       while !Task.isCancelled {
         try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
         if Task.isCancelled { break }
+        guard let self else { break }
         await self.recordMemorySample(reason: .timer)
       }
     }

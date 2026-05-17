@@ -279,24 +279,24 @@ public struct OTLPRequestDecoder: Sendable {
 
     guard span.attributes.count <= limits.maxAttributesPerSpan else {
       throw OTLPRequestDecoderError.malformedData(
-        reason: "Span '\(span.name)' has \(span.attributes.count) attributes (limit \(limits.maxAttributesPerSpan))"
+        reason: "Span has \(span.attributes.count) attributes (limit \(limits.maxAttributesPerSpan))"
       )
     }
     guard span.events.count <= limits.maxEventsPerSpan else {
       throw OTLPRequestDecoderError.malformedData(
-        reason: "Span '\(span.name)' has \(span.events.count) events (limit \(limits.maxEventsPerSpan))"
+        reason: "Span has \(span.events.count) events (limit \(limits.maxEventsPerSpan))"
       )
     }
     guard span.links.count <= limits.maxLinksPerSpan else {
       throw OTLPRequestDecoderError.malformedData(
-        reason: "Span '\(span.name)' has \(span.links.count) links (limit \(limits.maxLinksPerSpan))"
+        reason: "Span has \(span.links.count) links (limit \(limits.maxLinksPerSpan))"
       )
     }
 
     var attributesDict = try attributesDictionary(
       from: span.attributes,
       limit: limits.maxAttributesPerSpan,
-      owner: "span '\(span.name)'"
+      owner: "span"
     )
 
     if let serviceName = resourceAttributes["service.name"] {
@@ -315,8 +315,8 @@ public struct OTLPRequestDecoder: Sendable {
     attributesDict["status.code"] = .string(status.rawValue)
 
     let attributes = Attributes(dictionary: attributesDict)
-    let events = try mapEvents(span.events, spanName: span.name)
-    let links = try mapLinks(span.links, spanName: span.name)
+    let events = try mapEvents(span.events)
+    let links = try mapLinks(span.links)
 
     return SpanRecord(
       traceID: traceID,
@@ -339,19 +339,18 @@ public struct OTLPRequestDecoder: Sendable {
   }
 
   private func mapEvents(
-    _ events: [Opentelemetry_Proto_Trace_V1_Span.Event],
-    spanName: String
+    _ events: [Opentelemetry_Proto_Trace_V1_Span.Event]
   ) throws -> [SpanEventRecord] {
     try events.map { event in
       guard event.attributes.count <= limits.maxAttributesPerEvent else {
         throw OTLPRequestDecoderError.malformedData(
-          reason: "Event '\(event.name)' on span '\(spanName)' has \(event.attributes.count) attributes (limit \(limits.maxAttributesPerEvent))"
+          reason: "Event on span has \(event.attributes.count) attributes (limit \(limits.maxAttributesPerEvent))"
         )
       }
       let attributes = try attributesDictionary(
         from: event.attributes,
         limit: limits.maxAttributesPerEvent,
-        owner: "event '\(event.name)'"
+        owner: "event"
       )
       return SpanEventRecord(
         name: event.name,
@@ -363,25 +362,24 @@ public struct OTLPRequestDecoder: Sendable {
   }
 
   private func mapLinks(
-    _ links: [Opentelemetry_Proto_Trace_V1_Span.Link],
-    spanName: String
+    _ links: [Opentelemetry_Proto_Trace_V1_Span.Link]
   ) throws -> [SpanLinkRecord] {
     try links.map { link in
       guard let traceID = TraceID(data: link.traceID) else {
-        throw OTLPRequestDecoderError.malformedData(reason: "Invalid link trace_id length on span '\(spanName)'")
+        throw OTLPRequestDecoderError.malformedData(reason: "Invalid link trace_id length")
       }
       guard let spanID = SpanID(data: link.spanID) else {
-        throw OTLPRequestDecoderError.malformedData(reason: "Invalid link span_id length on span '\(spanName)'")
+        throw OTLPRequestDecoderError.malformedData(reason: "Invalid link span_id length")
       }
       guard link.attributes.count <= limits.maxAttributesPerLink else {
         throw OTLPRequestDecoderError.malformedData(
-          reason: "Link on span '\(spanName)' has \(link.attributes.count) attributes (limit \(limits.maxAttributesPerLink))"
+          reason: "Link on span has \(link.attributes.count) attributes (limit \(limits.maxAttributesPerLink))"
         )
       }
       let attributes = try attributesDictionary(
         from: link.attributes,
         limit: limits.maxAttributesPerLink,
-        owner: "link on span '\(spanName)'"
+        owner: "link"
       )
       return SpanLinkRecord(
         traceID: traceID,
@@ -446,7 +444,7 @@ public struct OTLPRequestDecoder: Sendable {
       let value = try attributeValue(from: keyValue.value, depth: 0)
       guard attributeValueByteCount(value) <= limits.maxAttributeValueBytes else {
         throw OTLPRequestDecoderError.malformedData(
-          reason: "\(owner) attribute '\(key)' value exceeds \(limits.maxAttributeValueBytes) bytes"
+          reason: "\(owner) attribute value exceeds \(limits.maxAttributeValueBytes) bytes"
         )
       }
       result[key] = value

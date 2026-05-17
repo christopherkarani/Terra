@@ -82,6 +82,21 @@ typedef struct {
     uint64_t span_id;
 } terra_span_context_t;
 
+/* C-stable test drain record. This intentionally exposes only fixed-width
+ * fields; the production SpanRecord layout is private to the Zig backend. */
+typedef struct {
+    uint64_t trace_id_hi;
+    uint64_t trace_id_lo;
+    uint64_t span_id;
+    uint64_t parent_span_id;
+    char     name[128];
+    uint8_t  name_len;
+    uint8_t  kind;
+    uint8_t  status;
+    uint64_t start_time_ns;
+    uint64_t end_time_ns;
+} terra_test_span_record_t;
+
 /* ── Version ───────────────────────────────────────────────────────────── */
 
 typedef struct {
@@ -274,6 +289,9 @@ terra_span_t *terra_begin_streaming_span_ctx(terra_t *inst,
 
 /* ── Span mutation ─────────────────────────────────────────────────────── */
 
+/* Host integrations must not concurrently mutate or end the same terra_span_t
+ * from multiple threads unless they serialize access externally. */
+
 void terra_span_set_string(terra_span_t *span, const char *key, const char *value);
 void terra_span_set_int(terra_span_t *span, const char *key, int64_t value);
 void terra_span_set_double(terra_span_t *span, const char *key, double value);
@@ -340,7 +358,7 @@ void terra_record_token_count(terra_t *inst, int64_t input_tokens, int64_t outpu
  * Drain completed spans into out_buf. Returns number of spans written.
  * For testing only.
  */
-uint32_t terra_test_drain_spans(terra_t *inst, void *out_buf, uint32_t max);
+uint32_t terra_test_drain_spans(terra_t *inst, terra_test_span_record_t *out_buf, uint32_t max);
 
 /**
  * Reset instance state (clear spans, metrics). For testing only.

@@ -242,7 +242,7 @@ extension Terra {
     /// - Returns: The result of the body.
     /// - Throws: Any error thrown by `body`, with error state recorded on the span.
     @discardableResult
-    public func run<R>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
+    public func run<R: Sendable>(_ body: @escaping @Sendable () async throws -> R) async rethrows -> R {
       try await run { _ in
         try await body()
       }
@@ -260,7 +260,7 @@ extension Terra {
     /// - Returns: The result of the body, propagated unchanged.
     /// - Throws: Any error thrown by `body`, with error state recorded on the span.
     @discardableResult
-    public func run<R>(_ body: @escaping @Sendable (SpanHandle) async throws -> R) async rethrows -> R {
+    public func run<R: Sendable>(_ body: @escaping @Sendable (SpanHandle) async throws -> R) async rethrows -> R {
       let attributes = _mergedAttributes()
       let events = _metadataEvents()
       return try await _run(

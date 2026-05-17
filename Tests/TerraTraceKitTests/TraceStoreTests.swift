@@ -139,6 +139,63 @@ final class TraceStoreTests: XCTestCase {
     XCTAssertEqual(stored.attributes["gen_ai.request.model"], .string("gpt-test"))
     XCTAssertEqual(stored.events.count, 1)
   }
+
+  func testZeroMaxSpansRetainsNoSpans() async throws {
+    let traceID = try XCTUnwrap(TraceID(hex: OTLPTestFixtures.traceIDHex))
+    let spanID = try XCTUnwrap(SpanID(hex: OTLPTestFixtures.parentSpanIDHex))
+    let span = makeSpanRecord(traceID: traceID, spanID: spanID, name: "root", status: .ok, end: 20)
+
+    let store = TraceStore(maxSpans: 0)
+    let accepted = await store.ingest([span])
+    let snapshot = await store.snapshot(filter: nil)
+
+    XCTAssertTrue(accepted.isEmpty)
+    XCTAssertTrue(snapshot.allSpans.isEmpty)
+  }
+
+  func testSnapshotRedactsSensitiveSpanContentAtIngest() async throws {
+    let traceID = try XCTUnwrap(TraceID(hex: OTLPTestFixtures.traceIDHex))
+    let spanID = try XCTUnwrap(SpanID(hex: OTLPTestFixtures.parentSpanIDHex))
+    let secret = "private prompt content"
+    let span = SpanRecord(
+      traceID: traceID,
+      spanID: spanID,
+      parentSpanID: nil,
+      name: "Summarize private customer notes",
+      kind: .internal,
+      status: .error,
+      startTimeUnixNano: 10,
+      endTimeUnixNano: 20,
+      attributes: Attributes(dictionary: [
+        "gen_ai.prompt.content": .string(secret),
+        "gen_ai.request.model": .string("gpt-test"),
+      ]),
+      resource: Resource(attributes: Attributes(dictionary: [
+        "url.full": .string("https://api.example.com/private-token")
+      ])),
+      statusDescription: "failed while handling \(secret)",
+      events: [
+        SpanEventRecord(
+          name: "user entered \(secret)",
+          timeUnixNano: 12,
+          attributes: Attributes(dictionary: ["exception.message": .string(secret)])
+        )
+      ]
+    )
+
+    let store = TraceStore(maxSpans: 50)
+    _ = await store.ingest([span])
+    let snapshot = await store.snapshot(filter: nil)
+    let stored = try XCTUnwrap(snapshot.allSpans.first)
+
+    XCTAssertEqual(stored.name, TelemetryPrivacy.redactedValue)
+    XCTAssertEqual(stored.statusDescription, TelemetryPrivacy.redactedValue)
+    XCTAssertEqual(stored.attributes["gen_ai.prompt.content"], .string(TelemetryPrivacy.redactedValue))
+    XCTAssertEqual(stored.resource.attributes["url.full"], .string(TelemetryPrivacy.redactedValue))
+    XCTAssertEqual(stored.events.first?.name, TelemetryPrivacy.redactedValue)
+    XCTAssertEqual(stored.events.first?.attributes["exception.message"], .string(TelemetryPrivacy.redactedValue))
+    XCTAssertEqual(stored.attributes["gen_ai.request.model"], .string("gpt-test"))
+  }
 }
 
 private extension TraceStoreTests {

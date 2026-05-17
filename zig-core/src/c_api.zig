@@ -38,6 +38,19 @@ const CStorageDiscardOldestFn = ?*const fn (u32, ?*anyopaque) callconv(.c) void;
 const CStorageAvailableBytesFn = ?*const fn (?*anyopaque) callconv(.c) u64;
 const CMqttPublishFn = ?*const fn ([*:0]const u8, [*]const u8, u32, u8, ?*anyopaque) callconv(.c) c_int;
 const CUdpSendFn = ?*const fn ([*]const u8, u32, ?*anyopaque) callconv(.c) c_int;
+
+pub const TestSpanRecord = extern struct {
+    trace_id_hi: u64 = 0,
+    trace_id_lo: u64 = 0,
+    span_id: u64 = 0,
+    parent_span_id: u64 = 0,
+    name: [models.MAX_SPAN_NAME]u8 = [_]u8{0} ** models.MAX_SPAN_NAME,
+    name_len: u8 = 0,
+    kind: u8 = 0,
+    status: u8 = 0,
+    start_time_ns: u64 = 0,
+    end_time_ns: u64 = 0,
+};
 const CUartWriteFn = ?*const fn ([*]const u8, u32, ?*anyopaque) callconv(.c) c_int;
 
 const CTerraTransportVTable = extern struct {
@@ -538,10 +551,45 @@ pub export fn terra_get_version() callconv(.c) TerraVersion {
 
 // ── Test support ────────────────────────────────────────────────────────
 
-pub export fn terra_test_drain_spans(inst: ?*TerraInstance, out_buf: ?[*]SpanRecord, max: u32) callconv(.c) u32 {
+pub export fn terra_test_drain_spans(inst: ?*TerraInstance, out_buf: ?[*]TestSpanRecord, max: u32) callconv(.c) u32 {
     const i = inst orelse return 0;
     const buf = out_buf orelse return 0;
-    return i.drainSpans(buf[0..max]);
+    if (max == 0) return 0;
+
+    const capacity: usize = @intCast(max);
+    const allocator = std.heap.page_allocator;
+    const internal = allocator.alloc(SpanRecord, capacity) catch return 0;
+    defer allocator.free(internal);
+
+    const count = i.drainSpans(internal[0..capacity]);
+    const written: usize = @intCast(count);
+    for (internal[0..written], buf[0..written]) |source, *dest| {
+        copyTestSpanRecord(&source, dest);
+    }
+    return count;
+}
+
+fn drainInternalSpansForTest(inst: ?*TerraInstance, out_buf: []SpanRecord) u32 {
+    const i = inst orelse return 0;
+    return i.drainSpans(out_buf);
+}
+
+fn copyTestSpanRecord(source: *const SpanRecord, dest: *TestSpanRecord) void {
+    dest.* = .{};
+    dest.trace_id_hi = source.trace_id.hi;
+    dest.trace_id_lo = source.trace_id.lo;
+    dest.span_id = source.span_id.id;
+    dest.parent_span_id = source.parent_span_id.id;
+    dest.kind = @intFromEnum(source.kind);
+    dest.status = @intFromEnum(source.status);
+    dest.start_time_ns = source.start_time_ns;
+    dest.end_time_ns = source.end_time_ns;
+
+    const copy_len = @min(@as(usize, source.name_len), dest.name.len);
+    if (copy_len > 0) {
+        @memcpy(dest.name[0..copy_len], source.name[0..copy_len]);
+    }
+    dest.name_len = @intCast(copy_len);
 }
 
 pub export fn terra_test_reset(inst: ?*TerraInstance) callconv(.c) void {
@@ -703,7 +751,7 @@ test "C API span strings survive temporary caller buffers" {
     terra_span_end(inst, span);
 
     var buf: [4]SpanRecord = undefined;
-    const count = terra_test_drain_spans(inst, &buf, 4);
+    const count = drainInternalSpansForTest(inst, &buf);
     try std.testing.expectEqual(@as(u32, 1), count);
 
     try std.testing.expectEqualStrings("borrowed-model", findStringAttr(&buf[0], constants.keys.gen_ai.request_model).?);
@@ -736,9 +784,10 @@ test "terra_test_drain_spans and terra_test_reset" {
     const span = terra_begin_inference_span_ctx(inst, null, "model", false).?;
     terra_span_end(inst, span);
 
-    var buf: [4]SpanRecord = undefined;
+    var buf: [4]TestSpanRecord = undefined;
     const count = terra_test_drain_spans(inst, &buf, 4);
     try std.testing.expectEqual(@as(u32, 1), count);
+    try std.testing.expectEqualStrings("gen_ai.inference", buf[0].name[0..buf[0].name_len]);
 
     terra_test_reset(inst);
     const count2 = terra_test_drain_spans(inst, &buf, 4);
@@ -885,7 +934,7 @@ test "all 6 span types via C API" {
         terra_span_end(inst, maybe_s);
     }
 
-    var buf: [8]SpanRecord = undefined;
+    var buf: [8]TestSpanRecord = undefined;
     const count = terra_test_drain_spans(inst, &buf, 8);
     try std.testing.expectEqual(@as(u32, 6), count);
 }

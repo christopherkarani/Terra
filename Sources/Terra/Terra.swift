@@ -31,6 +31,24 @@ public enum Terra {
     String(reflecting: Swift.type(of: error))
   }
 
+  package static func privacySanitizedAttribute(key: String, value: AttributeValue) -> AttributeValue? {
+    guard shouldProtectUserSuppliedAttribute(key) else { return value }
+    guard case .string(let string) = value else { return value }
+
+    let privacy = Runtime.shared.privacy
+    guard privacy.shouldCapture(includeContent: false) else { return nil }
+    return redactedStringAttributeValue(original: string, using: privacy)
+  }
+
+  package static func privacySanitizedAttributes(
+    _ attributes: [String: AttributeValue]
+  ) -> [String: AttributeValue] {
+    attributes.reduce(into: [:]) { result, pair in
+      guard let value = privacySanitizedAttribute(key: pair.key, value: pair.value) else { return }
+      result[pair.key] = value
+    }
+  }
+
   // MARK: - Public API (Phase 2)
 
   @discardableResult
@@ -246,7 +264,7 @@ public enum Terra {
     let spanBuilder = tracer.spanBuilder(spanName: name)
       .setSpanKind(spanKind: kind)
 
-    for (key, value) in attributes {
+    for (key, value) in privacySanitizedAttributes(attributes) {
       spanBuilder.setAttribute(key: key, value: value)
     }
     spanBuilder.setAttribute(key: Keys.Terra.thermalState, value: .string(Runtime.thermalStateLabel()))
@@ -486,4 +504,56 @@ public enum Terra {
       return attributes
     }
   }
+
+  private static func redactedStringAttributeValue(
+    original: String,
+    using privacy: Privacy
+  ) -> AttributeValue? {
+    switch privacy.redaction {
+    case .drop:
+      return nil
+    case .lengthOnly:
+      return .string("[redacted: \(original.count) chars]")
+    case .hashHMACSHA256:
+      if Runtime.isHMACSHA256Available, let hash = Runtime.shared.hmacSHA256Hex(original) {
+        return .string("hmac-sha256:\(hash)")
+      }
+      if Runtime.isSHA256Available, let hash = Runtime.sha256Hex(original) {
+        return .string("sha256:\(hash)")
+      }
+      return .string("[redacted: \(original.count) chars]")
+    case .hashSHA256:
+      if Runtime.isSHA256Available, let hash = Runtime.sha256Hex(original) {
+        return .string("sha256:\(hash)")
+      }
+      return .string("[redacted: \(original.count) chars]")
+    }
+  }
+
+  private static func shouldProtectUserSuppliedAttribute(_ key: String) -> Bool {
+    if sensitiveUserSuppliedAttributeKeys.contains(key) { return true }
+
+    let normalized = key.lowercased()
+    let components = normalized.split { character in
+      character == "." || character == "_" || character == "-" || character == "/"
+    }
+    let tokens = Set(components.map(String.init))
+    return tokens.contains("secret")
+      || tokens.contains("password")
+      || tokens.contains("passwd")
+      || tokens.contains("token")
+      || tokens.contains("apikey")
+      || tokens.contains("api")
+        && tokens.contains("key")
+  }
+
+  private static let sensitiveUserSuppliedAttributeKeys: Set<String> = [
+    Keys.GenAI.promptContent,
+    "exception.message",
+    "http.url",
+    "url.full",
+    "terra.fm.tool.arguments",
+    "terra.fm.tool.result",
+    "terra.service.input_length",
+  ]
 }

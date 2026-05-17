@@ -33,7 +33,62 @@ enum TelemetryPrivacy {
   ]
 
   static func displayValue(forKey key: String, value: String) -> String {
-    sensitiveAttributeKeys.contains(key) ? redactedValue : value
+    shouldRedactAttributeKey(key) ? redactedValue : value
+  }
+
+  static func displaySpanName(_ name: String) -> String {
+    shouldRedactSpanName(name) ? redactedValue : name
+  }
+
+  static func sanitizedSpanRecord(_ span: SpanRecord) -> SpanRecord {
+    SpanRecord(
+      traceID: span.traceID,
+      spanID: span.spanID,
+      parentSpanID: span.parentSpanID,
+      name: displaySpanName(span.name),
+      kind: span.kind,
+      status: span.status,
+      startTimeUnixNano: span.startTimeUnixNano,
+      endTimeUnixNano: span.endTimeUnixNano,
+      attributes: sanitizedAttributes(span.attributes),
+      resource: Resource(attributes: sanitizedAttributes(span.resource.attributes)),
+      statusDescription: sanitizedStatusDescription(span.statusDescription),
+      events: span.events.map(sanitizedEvent),
+      links: span.links.map(sanitizedLink),
+      droppedAttributesCount: span.droppedAttributesCount,
+      droppedEventsCount: span.droppedEventsCount,
+      droppedLinksCount: span.droppedLinksCount
+    )
+  }
+
+  static func sanitizedAttributes(_ attributes: Attributes) -> Attributes {
+    Attributes(attributes.items.map { attribute in
+      guard shouldRedactAttributeKey(attribute.key) else { return attribute }
+      return Attribute(key: attribute.key, value: .string(redactedValue))
+    })
+  }
+
+  static func shouldRedactAttributeKey(_ key: String) -> Bool {
+    if sensitiveAttributeKeys.contains(key) { return true }
+    let normalized = key.lowercased()
+    let tokens = normalized.split { character in
+      character == "." || character == "_" || character == "-" || character == "/"
+    }.map(String.init)
+    return tokens.contains("secret")
+      || tokens.contains("password")
+      || tokens.contains("passwd")
+      || tokens.contains("token")
+      || tokens.contains("apikey")
+      || (tokens.contains("api") && tokens.contains("key"))
+  }
+
+  static func shouldRedactSpanName(_ name: String) -> Bool {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    if trimmed.contains("://") { return true }
+    if trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) != nil { return true }
+    if trimmed.count > 96 { return true }
+    return false
   }
 
   /// Parses a telemetry-schema document and returns the set of attribute keys
@@ -85,6 +140,30 @@ enum TelemetryPrivacy {
       return false
     }
     return true
+  }
+
+  private static func sanitizedStatusDescription(_ description: String?) -> String? {
+    guard let description else { return nil }
+    return shouldRedactStatusDescription(description) ? redactedValue : description
+  }
+
+  private static func sanitizedEvent(_ event: SpanEventRecord) -> SpanEventRecord {
+    SpanEventRecord(
+      name: shouldRedactEventName(event.name) ? redactedValue : event.name,
+      timeUnixNano: event.timeUnixNano,
+      attributes: sanitizedAttributes(event.attributes),
+      droppedAttributesCount: event.droppedAttributesCount
+    )
+  }
+
+  private static func sanitizedLink(_ link: SpanLinkRecord) -> SpanLinkRecord {
+    SpanLinkRecord(
+      traceID: link.traceID,
+      spanID: link.spanID,
+      traceState: "",
+      attributes: sanitizedAttributes(link.attributes),
+      droppedAttributesCount: link.droppedAttributesCount
+    )
   }
 
   // MARK: - Private helpers

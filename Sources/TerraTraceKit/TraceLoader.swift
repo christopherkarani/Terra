@@ -12,6 +12,8 @@ public struct TraceLoadResult {
 
 /// Loads traces from persisted files using a locator, reader, and decoder.
 public struct TraceLoader {
+  public static let defaultMaxFiles = 1_000
+
   public let locator: TraceFileLocator
   public let reader: TraceFileReader
   public let decoder: TraceDecoder
@@ -28,7 +30,7 @@ public struct TraceLoader {
   }
 
   /// Loads and groups spans into trace models, reporting per-file failures.
-  public func loadTracesWithFailures(maxFiles: Int? = nil) throws -> TraceLoadResult {
+  public func loadTracesWithFailures(maxFiles: Int? = TraceLoader.defaultMaxFiles) throws -> TraceLoadResult {
     let files = try locator.listTraceFiles()
     let filesToProcess: [TraceFileReference]
     if let maxFiles {

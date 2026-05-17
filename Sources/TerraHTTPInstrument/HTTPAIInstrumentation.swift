@@ -403,6 +403,7 @@ public enum HTTPAIInstrumentation {
         }
         components.user = nil
         components.password = nil
+        components.path = ""
         components.query = nil
         components.fragment = nil
         return components.string

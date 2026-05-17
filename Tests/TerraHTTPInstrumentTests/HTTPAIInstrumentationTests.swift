@@ -1,4 +1,6 @@
 import Foundation
+import OpenTelemetryApi
+import OpenTelemetrySdk
 import Testing
 @testable import TerraCore
 @testable import TerraHTTPInstrument
@@ -91,8 +93,15 @@ struct HTTPAIInstrumentationTests {
 
     #expect(
       HTTPAIInstrumentation.sanitizedURLString(url)
-        == "https://generativelanguage.googleapis.com/v1beta/models/gemini:generateContent"
+        == "https://generativelanguage.googleapis.com"
     )
+  }
+
+  @Test("Sanitized URL strips path secrets by default")
+  func sanitizedURLStripsPathSecrets() throws {
+    let url = try #require(URL(string: "https://api.example.com/v1/chat/tenant-secret/completions?token=secret"))
+
+    #expect(HTTPAIInstrumentation.sanitizedURLString(url) == "https://api.example.com")
   }
 
   // P0-4: shouldRecordPayload must be wired so URLSessionInstrumentation buffers
@@ -122,5 +131,28 @@ struct HTTPAIInstrumentationTests {
       """
     let data = try #require(body.data(using: .utf8))
     #expect(AIStreamingChunkParser.outputTokens(from: data) == 17)
+  }
+
+  @Test("Streaming observer evicts oldest orphan state")
+  func streamingObserverEvictsOldestOrphanState() throws {
+    let observer = HTTPAIStreamingObserver.shared
+    observer.reset()
+    defer { observer.reset() }
+
+    let provider = TracerProviderSdk()
+    let tracer = provider.get(instrumentationName: "terra-http-test")
+    let parsed = ParsedRequest(model: nil, maxTokens: nil, temperature: nil, stream: true, messages: [])
+    var firstSpan: (any Span)?
+
+    for index in 0...1_024 {
+      let span = tracer.spanBuilder(spanName: "stream-\(index)").startSpan()
+      if index == 0 { firstSpan = span }
+      var request = URLRequest(url: URL(string: "https://api.example.com/v1/chat/\(index)")!)
+      observer.attachProperties(to: &request, span: span, parsedRequest: parsed)
+      observer.register(request: request, span: span, parsedRequest: parsed)
+    }
+
+    let oldest = try #require(firstSpan)
+    #expect(observer.registeredRequest(forSpan: oldest) == nil)
   }
 }

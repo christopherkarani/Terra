@@ -54,13 +54,13 @@ final class ZigSpanCapture {
   /// Returns the number of spans drained. The actual span data is consumed
   /// by the Zig core's internal test drain mechanism.
   func drainSpanCount(maxSpans: UInt32 = 256) -> UInt32 {
-    // Allocate a buffer for the drain call.
-    // terra_test_drain_spans writes opaque span records; we use it
-    // to count how many spans completed.
-    let bufSize = Int(maxSpans) * 256  // conservative per-span estimate
-    let buf = UnsafeMutableRawPointer.allocate(byteCount: bufSize, alignment: 8)
-    defer { buf.deallocate() }
-    return terra_test_drain_spans(instance, buf, maxSpans)
+    guard maxSpans > 0 else { return terra_test_drain_spans(instance, nil, 0) }
+    let capacity = Int(maxSpans)
+    let records = UnsafeMutablePointer<terra_test_span_record_t>.allocate(capacity: capacity)
+    defer { records.deallocate() }
+    records.initialize(repeating: terra_test_span_record_t(), count: capacity)
+    defer { records.deinitialize(count: capacity) }
+    return terra_test_drain_spans(instance, records, maxSpans)
   }
 
   /// Returns true if the instance is currently in the RUNNING state.

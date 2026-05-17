@@ -113,12 +113,18 @@ pub const Span = struct {
     pub fn setStatus(self: *Span, code: StatusCode, description: ?[]const u8) void {
         if (self.ended) return;
         self.status = code;
-        if (description) |desc| {
-            const status_desc = if (self.canCaptureContent()) desc else "";
-            const copy_len = @min(status_desc.len, @as(usize, 256));
-            @memcpy(self.status_description_buf[0..copy_len], status_desc[0..copy_len]);
-            self.status_description_len = @intCast(copy_len);
+        self.status_description_len = 0;
+        self.status_description_buf[0] = 0;
+
+        const desc = description orelse return;
+        if (!self.canCaptureContent()) return;
+
+        const copy_len = @min(desc.len, self.status_description_buf.len - 1);
+        if (copy_len > 0) {
+            @memcpy(self.status_description_buf[0..copy_len], desc[0..copy_len]);
         }
+        self.status_description_len = @intCast(copy_len);
+        self.status_description_buf[copy_len] = 0;
     }
 
     // ── Events ──────────────────────────────────────────────────────────
@@ -398,6 +404,22 @@ test "Span setStatus with description" {
     capturing.setStatus(.err, "something went wrong");
     try std.testing.expectEqual(StatusCode.err, capturing.status);
     try std.testing.expectEqualStrings("something went wrong", capturing.status_description_buf[0..capturing.status_description_len]);
+}
+
+test "Span setStatus clamps long descriptions and clears nil descriptions" {
+    var clk = testing_clock{};
+    var capturing = Span.init("test", TraceID.generate(), SpanID.zero, testing_clock.read, clk.context(), .always, false);
+    const long_description = [_]u8{'x'} ** 300;
+
+    capturing.setStatus(.err, long_description[0..]);
+    try std.testing.expectEqual(StatusCode.err, capturing.status);
+    try std.testing.expectEqual(@as(u8, 255), capturing.status_description_len);
+    try std.testing.expectEqual(@as(u8, 0), capturing.status_description_buf[255]);
+
+    capturing.setStatus(.ok, null);
+    try std.testing.expectEqual(StatusCode.ok, capturing.status);
+    try std.testing.expectEqual(@as(u8, 0), capturing.status_description_len);
+    try std.testing.expectEqual(@as(u8, 0), capturing.status_description_buf[0]);
 }
 
 test "Span recordError 3-param" {
