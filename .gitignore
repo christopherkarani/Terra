@@ -28,9 +28,9 @@ tasks/
 Artifacts/
 Docs/plans/
 Docs/superpowers/
+.agents/
+.claude/
 .claude/plans/
-.claude/skills/**/__pycache__/
-.claude/skills/terra-instrument/
 .codex/
 .gemini/
 .tmp/
