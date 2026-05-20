@@ -218,3 +218,19 @@ private func snippet_cookbook_manualParent() async throws {
 
   _ = try await Terra.tool("search", callId: "manual-1").under(parent).run { "ok" }
 }
+
+// MARK: - website/src/app/page.tsx mirrors
+
+// SNIPPET: page.tsx#recipe
+private func snippet_website_recipe() async throws -> String {
+  let answer = try await Terra.workflow(name: "release.summary", id: "demo-1") { workflow in
+    workflow.event("request.received")
+    return try await workflow.infer("gpt-4o-mini", prompt: "Summarize the release") { span in
+      span.attribute("app.surface", "settings")
+      span.tokens(input: 42, output: 18)
+      span.responseModel("gpt-4o-mini")
+      return "stubbed-response"
+    }
+  }
+  return answer
+}

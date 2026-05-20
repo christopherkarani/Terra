@@ -217,8 +217,8 @@ public struct Profiling: OptionSet {
 
     // Presets
     public static let standard: Profiling = [.memory, .thermal]
-    public static let extended: Profiling = [.memory, .thermal, .metal, .power]
-    public static let all: Profiling      = [.memory, .thermal, .metal, .power, .espresso, .ane]
+    public static let extended: Profiling = [.memory, .thermal, .metal]
+    public static let all: Profiling      = [.memory, .thermal, .metal, .espresso]
 }
 ```
 

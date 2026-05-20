@@ -17,13 +17,17 @@ DOCS = [
 
 DOCC_DIR = ROOT / "Sources" / "TerraAutoInstrument" / "Terra.docc"
 EXAMPLES_DIR = ROOT / "Examples"
+WEBSITE_SRC_DIR = ROOT / "website" / "src"
 EXAMPLE_EXTENSIONS = {".md", ".swift"}
+WEBSITE_EXTENSIONS = {".tsx", ".ts", ".md", ".mdx"}
 
 BANNED_SWIFT_PATTERNS = [
     "Terra.trace(",
     "Terra.agentic(",
     "Terra.loop(",
     "TraceHandle",
+    ".attr(",
+    ".provider(",
     "Terra.ModelID(",
     "Terra.ToolCallID(",
     "callID:",
@@ -48,6 +52,12 @@ def public_paths() -> list[pathlib.Path]:
             path
             for path in sorted(EXAMPLES_DIR.rglob("*"))
             if path.is_file() and path.suffix in EXAMPLE_EXTENSIONS
+        )
+    if WEBSITE_SRC_DIR.exists():
+        paths.extend(
+            path
+            for path in sorted(WEBSITE_SRC_DIR.rglob("*"))
+            if path.is_file() and path.suffix in WEBSITE_EXTENSIONS
         )
     return paths
 

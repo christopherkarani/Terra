@@ -54,7 +54,7 @@ export default function LandingPage() {
             </a>
             <div className="flex items-center gap-3 px-6 py-4 rounded-xl bg-white/5 border border-white/10 mono text-sm group cursor-pointer hover:bg-white/10 transition-all">
               <span className="text-gray-500">$</span>
-              <span className="text-cyan-400 font-medium">swift package</span> add terra
+              <span className="text-cyan-400 font-medium">swift package</span> add-dependency https://github.com/christopherkarani/Terra.git
               <div className="w-4 h-4 text-gray-600 group-hover:text-cyan-400 transition-colors">
                 <svg fill="currentColor" viewBox="0 0 20 20"><path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"></path><path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"></path></svg>
               </div>
@@ -87,7 +87,7 @@ export default function LandingPage() {
           <div className="space-y-6">
             <h2 className="text-4xl font-black">Instrumentation in seconds.</h2>
             <p className="text-gray-500 leading-relaxed">
-              Start with one-line setup, inspect the API map with `Terra.help()`, then use `Terra.trace(...)` for most work, `Terra.loop(...)` for mutable transcripts, and `Terra.agentic(...)` for planner-style workflows.
+              Start with one-line setup, inspect the API map with `Terra.help()`, then use one `Terra.workflow(...)` root per request and add child `infer`, `stream`, `embed`, `tool`, `safety`, or `agent` spans under it.
             </p>
             <ul className="space-y-4">
               <li className="flex gap-3 text-sm text-gray-400">
@@ -126,12 +126,14 @@ export default function LandingPage() {
               title="Recipe.swift"
               code={`import Terra
 
-let answer = try await Terra.trace(name: "release.summary", id: "demo-1") { span in
-    span.event("infer.request")
-    span.attribute("app.surface", "settings")
-    span.tokens(input: 42, output: 18)
-    span.responseModel("gpt-4o-mini")
-    return "stubbed-response"
+let answer = try await Terra.workflow(name: "release.summary", id: "demo-1") { workflow in
+    workflow.event("request.received")
+    return try await workflow.infer("gpt-4o-mini", prompt: "Summarize the release") { span in
+        span.attribute("app.surface", "settings")
+        span.tokens(input: 42, output: 18)
+        span.responseModel("gpt-4o-mini")
+        return "stubbed-response"
+    }
 }`}
             />
           </div>

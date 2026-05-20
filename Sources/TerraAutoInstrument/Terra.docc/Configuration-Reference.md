@@ -182,8 +182,8 @@ public struct Profiling: OptionSet, Sendable, Hashable {
 
     // Tier presets
     public static let standard: Profiling = [.memory, .thermal]
-    public static let extended: Profiling = [.memory, .thermal, .metal, .power]
-    public static let all: Profiling      = [.memory, .thermal, .metal, .power, .espresso, .ane]
+    public static let extended: Profiling = [.memory, .thermal, .metal]
+    public static let all: Profiling      = [.memory, .thermal, .metal, .espresso]
 }
 ```
 
@@ -436,7 +436,9 @@ config.profiling = .all  // Includes espresso
 config.profiling = [.espresso]
 ```
 
-Captures GPU compute metrics via Espresso framework.
+Captures a bounded summary from the macOS Espresso log stream when available,
+including total GFLOPs, memory-bound operation count, compute-bound operation
+count, and average work-unit efficiency.
 
 ### ANE Hardware Profiling
 

@@ -182,8 +182,12 @@ try await Terra.start(.init(preset: .diagnostics))
 // Enables:
 // - TerraSystemProfiler (memory + thermal via .standard)
 // - TerraMetalProfiler (when .metal is set)
-// - ANE profiler hooks (when .ane is set)
+// - Espresso log capture on macOS (when .espresso is set)
 ```
+
+The `.power` and `.ane` profiling flags record configuration intent only in the
+umbrella target. Import `TerraPowerProfiler` or `TerraANEProfiler` and start the
+collector/session directly when those opt-in modules are needed.
 
 The `Configuration.Profiling` OptionSet lets you request specific profilers:
 
