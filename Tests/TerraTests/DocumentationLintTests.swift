@@ -27,6 +27,7 @@ func publicDocsStayOnCanonicalAPIs() throws {
     "Sources/TerraAutoInstrument/Terra.docc/TelemetryEngine-Injection.md",
     "Sources/TerraAutoInstrument/Terra.docc/Typed-IDs.md",
     "Examples/Terra Sample/RecipeSnippets.swift",
+    "website/src/app/page.tsx",
   ]
 
   let bannedPatterns = [

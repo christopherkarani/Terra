@@ -27,11 +27,19 @@ SCOPE=(
   Docs/cookbook.md
   Docs/integrations.md
   Docs/Profiler-Integration.md
+  Sources/TerraAutoInstrument/Terra.docc
   Examples
   website/src
 )
 
 PATTERNS=(
+  'Terra\.trace\('
+  'Terra\.agentic\('
+  'Terra\.loop\('
+  '\bTraceHandle\b'
+  '\.attr\('
+  '\.provider\('
+  '\.includeContent\('
   '\bCaptureIntent\b'
   '\bOperationKind\b'
   '\.execute\b'

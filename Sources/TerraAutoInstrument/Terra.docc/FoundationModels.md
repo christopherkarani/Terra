@@ -2,6 +2,10 @@
 
 `TerraTracedSession` uses string model identifiers and records inference spans through Terra.
 
+`TerraTracedSession` is available with Apple's FoundationModels framework
+(macOS 26.0+ and iOS 26.0+). On unsupported SDKs, Terra provides a compile-time
+fallback that throws `TerraFoundationModelsUnavailableError.unavailablePlatform`.
+
 ```swift
 let session = TerraTracedSession(modelIdentifier: "apple/foundation-model")
 let answer = try await session.respond(to: "Summarize this note")
