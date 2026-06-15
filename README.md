@@ -1,6 +1,6 @@
 # Terra
 
-**Observe your AI app. One line of Swift.**
+**Observe your AI app**
 
 Terra is a Swift-native telemetry SDK that traces AI workflows — inference calls, tool executions, streaming generations, embeddings, and safety checks — and sends them to OpenTelemetry. It includes a built-in local trace viewer, system profilers, and one-line auto-instrumentation for CoreML, MLX, and Foundation Models.
 
